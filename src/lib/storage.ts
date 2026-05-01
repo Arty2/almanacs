@@ -3,11 +3,13 @@ import { SCHEMA_VERSION } from './types';
 
 export const STORAGE_KEY = 'calendar-timeline:config:v1';
 
+export const GREEK_HOLIDAYS_URL = 'https://www.officeholidays.com/ics/greece';
+
 export function defaultConfig(): AppConfig {
   const demoFeed: CalendarFeed = {
-    id: 'static:/demo/greek-holidays.ics',
-    source: { kind: 'static', path: '/demo/greek-holidays.ics' },
-    name: 'Greek Public Holidays',
+    id: 'user:greek-bank-holidays',
+    source: { kind: 'user', url: GREEK_HOLIDAYS_URL },
+    name: 'Greek Bank Holidays',
     collapsed: false,
     order: 0,
   };

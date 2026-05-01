@@ -4,7 +4,6 @@ import type { FeedSource, ParsedEvent } from './types';
 
 export function feedIdFor(source: FeedSource): string {
   if (source.kind === 'secret') return 'secret:' + source.id;
-  if (source.kind === 'static') return 'static:' + source.path;
   return 'user:' + hashString(source.url);
 }
 
@@ -19,7 +18,6 @@ function hashString(s: string): string {
 
 function buildSourceUrl(source: FeedSource): string {
   if (source.kind === 'secret') return '/api/ics?id=' + encodeURIComponent(source.id);
-  if (source.kind === 'static') return source.path;
   return '/api/ics?url=' + encodeURIComponent(source.url);
 }
 

@@ -1,7 +1,6 @@
 export type FeedSource =
   | { kind: 'secret'; id: string }
-  | { kind: 'user'; url: string }
-  | { kind: 'static'; path: string };
+  | { kind: 'user'; url: string };
 
 export type CalendarFeed = {
   id: string;

@@ -2,7 +2,7 @@
 
 Horizontal-scrolling, multi-feed calendar viewer. Black-and-white, e-ink friendly. Reads any ICS feed (Google, iCloud, Outlook, Fastmail, Nextcloud, etc.).
 
-Ships with a baked-in **Greek public holidays** demo calendar so the app is useful immediately on first deploy.
+Ships with a default **Greek Bank Holidays** subscription (Office Holidays' public ICS feed at `https://www.officeholidays.com/ics/greece`) so a fresh deploy renders real events immediately.
 
 ## Deploy
 
@@ -14,7 +14,7 @@ Ships with a baked-in **Greek public holidays** demo calendar so the app is usef
    - For each id: `FEED_<ID>_URL` and `FEED_<ID>_NAME` (uppercase id).
 5. Deploy. Site is at your Vercel URL.
 
-The Greek holidays calendar is served as a static file at `/demo/greek-holidays.ics`, so no env vars are required for the demo to work.
+The Greek bank holidays feed is fetched through the bundled `/api/ics` proxy. No env vars are required for it to work.
 
 ## Use
 
@@ -35,8 +35,10 @@ User-added calendars live in localStorage on this device only. Use Export/Import
 ## Local development
 
     npm install
-    npm run dev          # frontend only (demo calendar works without proxy)
-    vercel dev           # frontend + proxy (needed for non-static feeds)
+    vercel dev           # frontend + proxy (the proxy is required for any feed,
+                         # including the default Greek bank holidays)
+    npm run dev          # frontend only — useful for UI work, but no events
+                         # will load without the proxy
 
 ## Tests
 
