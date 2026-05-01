@@ -1,5 +1,6 @@
-import type { AppConfig, ParsedEvent, Zoom } from './types';
+import type { AppConfig, DisplayEvent, ParsedEvent, Zoom } from './types';
 import { loadConfig } from './storage';
+import { applyRules } from './rules';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -13,7 +14,7 @@ export const search = $state<{ query: string; currentIndex: number }>({
 });
 
 export const ui = $state<{
-  modalEvent: ParsedEvent | null;
+  modalEvent: DisplayEvent | null;
   settingsOpen: boolean;
   loading: boolean;
   error: string | null;
@@ -23,3 +24,8 @@ export const ui = $state<{
   loading: false,
   error: null,
 });
+
+export function displayEventsFor(feedId: string): DisplayEvent[] {
+  const raw = events.byFeed[feedId] ?? [];
+  return applyRules(raw, config.rules);
+}

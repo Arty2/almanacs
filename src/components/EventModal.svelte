@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { ui } from '../lib/state.svelte';
+  import IconButton from './IconButton.svelte';
+  import { ui, config } from '../lib/state.svelte';
+  import { formatDateLong } from '../lib/format';
+  import { icons } from '../lib/icons';
 
   let dialog: HTMLDialogElement | undefined = $state();
 
@@ -13,31 +16,27 @@
     ui.modalEvent = null;
   }
 
-  function formatDate(d: Date, allDay: boolean): string {
-    if (allDay) {
-      return d.toLocaleDateString(undefined, {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        timeZone: 'UTC',
-      });
-    }
-    return d.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
+  function onClick(e: MouseEvent): void {
+    if (e.target === dialog) close();
+  }
+
+  function formatStart(d: Date, allDay: boolean): string {
+    if (allDay) return formatDateLong(d, config.locale);
+    return formatDateLong(d, config.locale) + ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
 </script>
 
-<dialog bind:this={dialog} onclose={close}>
+<dialog bind:this={dialog} onclose={close} onclick={onClick}>
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     <article>
       <header>
-        <h2>{ev.title}</h2>
-        <button onclick={close} aria-label="Close">✕</button>
+        <h2>{ev.displayTitle}</h2>
+        <IconButton icon={icons.close} label="Close" variant="ghost" onclick={close} />
       </header>
-      <p><time datetime={ev.start.toISOString()}>{formatDate(ev.start, ev.allDay)}</time></p>
-      {#if ev.location}<p><strong>Location:</strong> {ev.location}</p>{/if}
-      {#if ev.description}<p class="desc">{ev.description}</p>{/if}
+      <p><time datetime={ev.start.toISOString()}>{formatStart(ev.start, ev.allDay)}</time></p>
+      {#if ev.displayLocation}<p><strong>Location:</strong> {ev.displayLocation}</p>{/if}
+      {#if ev.displayDescription}<p class="desc">{ev.displayDescription}</p>{/if}
       {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
     </article>
   {/if}
@@ -45,15 +44,17 @@
 
 <style>
   dialog {
-    border: 2px solid var(--ink);
+    border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     padding: 0;
-    max-width: 600px;
-    width: 90vw;
+    width: min(600px, calc(100vw - 1rem));
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    box-sizing: border-box;
   }
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.4);
   }
   article {
     padding: 1em;
@@ -63,15 +64,18 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 1em;
-    border-bottom: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink-faint);
     padding-bottom: 0.5em;
     margin-bottom: 0.5em;
   }
   h2 {
     margin: 0;
-    font-size: 1.2em;
+    font-size: 1.15em;
   }
   .desc {
     white-space: pre-wrap;
+  }
+  time {
+    font-family: var(--mono);
   }
 </style>

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { dateToPx, pxToDate, assignLanes, PX_PER_DAY, MIN_PILL_PX } from './layout';
-import type { ParsedEvent } from './types';
+import type { DisplayEvent } from './types';
 
 const epoch = new Date('2026-01-01T00:00:00Z');
 
-function ev(uid: string, startIso: string, endIso: string): ParsedEvent {
+function ev(uid: string, startIso: string, endIso: string): DisplayEvent {
   return {
     uid,
     feedId: 'f',
@@ -15,6 +15,12 @@ function ev(uid: string, startIso: string, endIso: string): ParsedEvent {
     start: new Date(startIso),
     end: new Date(endIso),
     allDay: false,
+    displayTitle: uid,
+    displayDescription: '',
+    displayDescriptionSnippet: '',
+    displayLocation: '',
+    styleVariant: 'none',
+    hidden: false,
   };
 }
 

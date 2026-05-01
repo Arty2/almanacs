@@ -1,4 +1,4 @@
-import type { LaneEvent, ParsedEvent, Zoom } from './types';
+import type { DisplayEvent, LaneEvent, Zoom } from './types';
 import { MS_PER_DAY } from './time';
 
 export const PX_PER_DAY: Record<Zoom, number> = {
@@ -21,7 +21,7 @@ export function pxToDate(px: number, epoch: Date, pxPerDay: number): Date {
 }
 
 export function assignLanes(
-  events: ParsedEvent[],
+  events: DisplayEvent[],
   pxPerDay: number,
   epoch: Date,
   minPillPx: number = MIN_PILL_PX,
