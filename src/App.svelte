@@ -7,7 +7,7 @@
   import ErrorModal from './components/ErrorModal.svelte';
   import { config, events, ui, zoom, search, focus, displayEventsFor } from './lib/state.svelte';
   import { today } from './lib/today.svelte';
-  import { saveConfig } from './lib/storage';
+  import { saveConfig, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { fetchAndParseFeed } from './lib/ics';
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState } from './lib/url';
@@ -21,6 +21,27 @@
       futureMonths: config.futureMonths,
     }),
   );
+
+  const DEFAULT_FEED_URLS = new Set<string>([GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL]);
+  let healthCheckRan = false;
+
+  function flashToast(message: string, ms = 4000): void {
+    ui.toast = message;
+    setTimeout(() => {
+      if (ui.toast === message) ui.toast = null;
+    }, ms);
+  }
+
+  function checkDefaultFeedHealth(): void {
+    if (healthCheckRan) return;
+    healthCheckRan = true;
+    const failed = config.feeds.filter(
+      (f) => f.source.kind === 'user' && DEFAULT_FEED_URLS.has(f.source.url) && ui.feedErrors[f.id],
+    );
+    if (failed.length === 0) return;
+    const word = failed.length === 1 ? 'calendar' : 'calendars';
+    flashToast(`${failed.length} default ${word} failed to load — see Settings`);
+  }
 
   async function loadAllFeeds(): Promise<void> {
     ui.loading = true;
@@ -41,6 +62,7 @@
       );
     } finally {
       ui.loading = false;
+      checkDefaultFeedHealth();
     }
   }
 

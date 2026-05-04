@@ -10,7 +10,7 @@ export const PX_PER_DAY: Record<Zoom, number> = {
 
 export const MIN_PILL_PX = 80;
 export const MIN_VISUAL_PILL_PX = 8;
-export const LANE_HEIGHT = 40;
+export const LANE_HEIGHT = 52;
 export const ROW_PADDING_PX = 8;
 
 export function dateToPx(date: Date, epoch: Date, pxPerDay: number): number {

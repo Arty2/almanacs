@@ -57,60 +57,63 @@
   data-collapsed={feed.collapsed ? 'true' : null}
   data-kind={feed.kind}
 >
-  <IconButton icon={expandIcon} label={expandLabel} variant="ghost" onclick={toggle} size={18} />
-  {#if errorMessage}
-    <button
-      type="button"
-      class="warning-btn"
-      aria-label="Failed to load {feed.name}"
-      title={errorMessage}
-      onclick={showError}
-    >
-      <Icon name="warning" size={16} />
-    </button>
-  {/if}
-  {#if isHolidayFeed && !errorMessage}
-    <span class="holiday-mark" aria-hidden="true" title="Public holiday calendar">
-      <Icon name="calendar" size={14} />
-    </span>
-  {/if}
-  <input
-    type="text"
-    class="name"
-    value={feed.name}
-    onchange={rename}
-    aria-label="Calendar name"
-    spellcheck="false"
-  />
-  {#if debugFlag}
-    <span class="badge" data-mono data-debug>{visibleEvents.length}</span>
-  {/if}
+  <div class="lead">
+    <IconButton icon={expandIcon} label={expandLabel} variant="ghost" onclick={toggle} size={18} />
+    {#if errorMessage}
+      <button
+        type="button"
+        class="warning-btn"
+        aria-label="Failed to load {feed.name}"
+        title={errorMessage}
+        onclick={showError}
+      >
+        <Icon name="warning" size={16} />
+      </button>
+    {/if}
+    {#if isHolidayFeed && !errorMessage}
+      <span class="holiday-mark" aria-hidden="true" title="Public holiday calendar">
+        <Icon name="calendar" size={14} />
+      </span>
+    {/if}
+    <input
+      type="text"
+      class="name"
+      value={feed.name}
+      onchange={rename}
+      aria-label="Calendar name"
+      spellcheck="false"
+    />
+    {#if debugFlag}
+      <span class="badge" data-mono data-debug>{visibleEvents.length}</span>
+    {/if}
+  </div>
   <span class="spacer"></span>
-  <IconButton
-    icon="chevron-left"
-    label="Previous event"
-    variant="ghost"
-    size={18}
-    onclick={() => jumpRelative(-1)}
-  />
-  <IconButton
-    icon="chevron-right"
-    label="Next event"
-    variant="ghost"
-    size={18}
-    onclick={() => jumpRelative(1)}
-  />
+  <div class="actions">
+    <IconButton
+      icon="chevron-left"
+      label="Previous event"
+      variant="ghost"
+      size={18}
+      onclick={() => jumpRelative(-1)}
+    />
+    <IconButton
+      icon="chevron-right"
+      label="Next event"
+      variant="ghost"
+      size={18}
+      onclick={() => jumpRelative(1)}
+    />
+  </div>
 </header>
 
 <style>
   .row-header {
     position: sticky;
     left: 0;
-    top: 50px;
+    top: 80px;
     display: flex;
     align-items: center;
-    gap: 0.4em;
-    padding: 4px 8px;
+    padding: 4px 0;
     height: 36px;
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
@@ -127,8 +130,31 @@
   .row-header[data-kind='holidays'] .name {
     color: var(--ink-muted);
   }
+  .lead {
+    position: sticky;
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0 8px;
+    background: var(--paper);
+    z-index: 1;
+    min-width: 0;
+    max-width: calc(100vw - 110px);
+  }
+  .actions {
+    position: sticky;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0 8px;
+    background: var(--paper);
+    z-index: 1;
+    flex-shrink: 0;
+  }
   .name {
-    flex: 0 1 240px;
+    flex: 1 1 auto;
     min-width: 0;
     border: 1px solid transparent;
     background: transparent;
@@ -137,6 +163,7 @@
     font-size: 13px;
     font-weight: 600;
     height: 28px;
+    text-overflow: ellipsis;
   }
   .name:focus {
     outline: none;

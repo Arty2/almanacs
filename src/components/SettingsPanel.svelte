@@ -394,6 +394,11 @@
       </div>
       {#if importError}<p class="error">Import failed: {importError}</p>{/if}
     </section>
+
+    <footer class="settings-footer">
+      v{__APP_VERSION__} ·
+      <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/calendari</a>
+    </footer>
   </aside>
 </div>
 
@@ -417,6 +422,17 @@
     flex-direction: column;
     gap: 1.25em;
     box-sizing: border-box;
+  }
+  .settings-footer {
+    margin-top: auto;
+    padding: 12px 4px 4px;
+    border-top: 1px solid var(--ink);
+    font-size: 11px;
+    color: var(--ink-muted);
+    text-align: center;
+  }
+  .settings-footer a {
+    color: inherit;
   }
   .panel-header {
     display: flex;

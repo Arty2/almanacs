@@ -4,7 +4,7 @@ import { SCHEMA_VERSION } from './types';
 export const STORAGE_KEY = 'calendar-timeline:config';
 
 export const GREEK_HOLIDAYS_URL = 'https://www.officeholidays.com/ics/greece';
-export const USA_HOLIDAYS_URL = 'https://www.apple.com/calendar/ical/USHolidays.ics';
+export const USA_HOLIDAYS_URL = 'https://www.officeholidays.com/ics/usa';
 
 function resolveSystemTheme(): Theme {
   if (typeof matchMedia === 'undefined') return 'light';
@@ -50,6 +50,8 @@ function normalizeTheme(value: unknown): Theme {
   return resolveSystemTheme();
 }
 
+const APPLE_USA_HOLIDAYS_LEGACY_URL = 'https://www.apple.com/calendar/ical/USHolidays.ics';
+
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
   if (!raw || typeof raw !== 'object') return null;
   const f = raw as Record<string, unknown>;
@@ -58,7 +60,8 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   const source = f.source as Record<string, unknown>;
   let normalizedSource: CalendarFeed['source'] | null = null;
   if (source.kind === 'user' && typeof source.url === 'string') {
-    normalizedSource = { kind: 'user', url: source.url };
+    const url = source.url === APPLE_USA_HOLIDAYS_LEGACY_URL ? USA_HOLIDAYS_URL : source.url;
+    normalizedSource = { kind: 'user', url };
   } else if (source.kind === 'secret' && typeof source.id === 'string') {
     normalizedSource = { kind: 'secret', id: source.id };
   }

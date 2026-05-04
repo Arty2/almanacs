@@ -319,7 +319,7 @@
     z-index: 5;
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
-    height: 64px;
+    height: 80px;
     flex-shrink: 0;
   }
   .rows {
@@ -333,7 +333,7 @@
   }
   .today-line {
     position: absolute;
-    top: -64px;
+    top: -80px;
     bottom: 0;
     width: 0;
     margin: 0;

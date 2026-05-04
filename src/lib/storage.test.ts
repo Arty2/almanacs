@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { exportConfig, importConfig, defaultConfig } from './storage';
+import { exportConfig, importConfig, defaultConfig, USA_HOLIDAYS_URL } from './storage';
 import { SCHEMA_VERSION } from './types';
 
 beforeEach(() => {
@@ -63,6 +63,33 @@ describe('config import/export', () => {
     expect(restored.timeFormat).toBe('24h');
     expect(restored.pastMonths).toBe(12);
     expect(restored.futureMonths).toBe(24);
+  });
+
+  it('USA default feed no longer points at the blocked Apple ICS host', () => {
+    expect(USA_HOLIDAYS_URL).not.toMatch(/apple\.com/);
+    const cfg = defaultConfig();
+    const usa = cfg.feeds.find((f) => f.id === 'user:usa-bank-holidays');
+    expect(usa?.source.kind === 'user' && usa.source.url).toBe(USA_HOLIDAYS_URL);
+  });
+
+  it('migrates an existing config away from the blocked Apple USA URL', () => {
+    const stale = JSON.stringify({
+      schemaVersion: 3,
+      feeds: [
+        {
+          id: 'user:usa-bank-holidays',
+          source: { kind: 'user', url: 'https://www.apple.com/calendar/ical/USHolidays.ics' },
+          name: 'USA Bank Holidays',
+          collapsed: false,
+          order: 1,
+          kind: 'holidays',
+        },
+      ],
+      refreshIntervalMs: 60_000,
+    });
+    const restored = importConfig(stale);
+    const usa = restored.feeds[0]!;
+    expect(usa.source.kind === 'user' && usa.source.url).toBe(USA_HOLIDAYS_URL);
   });
 
   it("resolves theme: 'system' from a v2 config to a concrete light/dark", () => {

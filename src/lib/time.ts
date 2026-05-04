@@ -89,8 +89,8 @@ export function ticksBetween(from: Date, to: Date, granularity: Granularity): Da
 
 export type Tier = 'year' | 'quarter' | 'month' | 'week' | 'day';
 
-export const HEADER_TIERS: Record<Zoom, [Tier, Tier, Tier]> = {
-  month: ['year', 'month', 'day'],
+export const HEADER_TIERS: Record<Zoom, Tier[]> = {
+  month: ['year', 'month'],
   quarter: ['year', 'month', 'week'],
   'half-year': ['year', 'quarter', 'month'],
   year: ['year', 'quarter', 'month'],
