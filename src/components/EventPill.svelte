@@ -99,12 +99,13 @@
     onpointercancel={cancelPress}
     onpointermove={cancelPress}
     aria-label="Open event {event.displayTitle}"
+    title={event.displayTitle}
   >
     <h3>{event.displayTitle}</h3>
-    {#if config.cardShowLocation && event.displayLocation}
+    {#if config.cardShowLocation && event.displayLocation?.trim()}
       <p class="loc">{event.displayLocation}</p>
     {/if}
-    {#if config.cardShowDescription && event.displayDescriptionSnippet}
+    {#if config.cardShowDescription && event.displayDescriptionSnippet?.trim()}
       <p class="desc">{event.displayDescriptionSnippet}</p>
     {/if}
     <time data-mono datetime={event.start.toISOString()}>{dateLabel}</time>
@@ -117,12 +118,26 @@
 <style>
   article {
     position: absolute;
-    height: 36px;
+    height: 48px;
     border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    overflow: visible;
+    overflow: hidden;
     box-sizing: border-box;
+    z-index: 0;
+  }
+  article:hover,
+  article:focus-within {
+    z-index: 2;
+    overflow: visible;
+  }
+  article:hover button,
+  article:focus-within button {
+    background: var(--paper);
+    box-shadow: var(--shadow-1);
+    width: max-content;
+    min-width: 100%;
+    padding-right: 8px;
   }
   article[aria-current='true'] {
     outline: 2px solid var(--accent);
@@ -143,7 +158,7 @@
     text-align: left;
     cursor: pointer;
     font: inherit;
-    overflow: visible;
+    overflow: hidden;
   }
   h3 {
     margin: 0;
@@ -151,6 +166,8 @@
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   p {
     margin: 0;

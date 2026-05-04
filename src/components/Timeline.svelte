@@ -278,27 +278,29 @@
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
 >
-  <header id="time-header" style="width: {totalWidth}px">
-    <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} />
-  </header>
-  <div class="rows" style="width: {totalWidth}px;">
-    {#each orderedFeeds as feed, i (feed.id)}
-      <Row
-        {feed}
-        events={displayByFeed[feed.id] ?? []}
-        {rangeStart}
-        {pxPerDay}
-        bodyHeight={rowBodyHeights[feed.id] ?? LANE_HEIGHT + ROW_PADDING_PX * 2}
-        {matchUids}
-        {currentMatchUid}
-        {scrollEl}
-        {monthStartsPx}
-        {weekendStrips}
-        {dayTicksPx}
-        {holidayStrips}
-        rowIndex={i}
-      />
-    {/each}
+  <div class="scroll-content" style="width: {totalWidth}px;">
+    <header id="time-header">
+      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} />
+    </header>
+    <div class="rows">
+      {#each orderedFeeds as feed, i (feed.id)}
+        <Row
+          {feed}
+          events={displayByFeed[feed.id] ?? []}
+          {rangeStart}
+          {pxPerDay}
+          bodyHeight={rowBodyHeights[feed.id] ?? LANE_HEIGHT + ROW_PADDING_PX * 2}
+          {matchUids}
+          {currentMatchUid}
+          {scrollEl}
+          {monthStartsPx}
+          {weekendStrips}
+          {dayTicksPx}
+          {holidayStrips}
+          rowIndex={i}
+        />
+      {/each}
+    </div>
     <hr class="today-line" style="left: {todayPx}px" />
   </div>
 </main>
@@ -308,10 +310,13 @@
     overflow: auto;
     height: calc(100dvh - 50px);
     background: var(--paper);
-    display: flex;
-    flex-direction: column;
     overscroll-behavior: contain;
     touch-action: pan-x pan-y;
+  }
+  .scroll-content {
+    position: relative;
+    min-width: 100%;
+    min-height: 100%;
   }
   #time-header {
     position: sticky;
@@ -320,26 +325,22 @@
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
     height: 80px;
-    flex-shrink: 0;
   }
   .rows {
     position: relative;
     display: flex;
     flex-direction: column;
-    padding: 8px 0 16px 0;
-    flex: 1 0 auto;
-    width: max-content;
-    min-width: 100%;
+    padding-bottom: 16px;
   }
   .today-line {
     position: absolute;
-    top: -80px;
+    top: 0;
     bottom: 0;
     width: 0;
     margin: 0;
     border: none;
     border-left: 2px dotted var(--accent);
-    z-index: 3;
+    z-index: 6;
     pointer-events: none;
   }
   .today-line::before {

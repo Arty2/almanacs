@@ -44,7 +44,6 @@
     if (message) ui.errorModal = { feedName: feed.name, message };
   }
 
-  const expandIcon = $derived(feed.collapsed ? 'chevron-right' : 'chevron-down');
   const expandLabel = $derived(feed.collapsed ? 'Expand row' : 'Collapse row');
   const isHolidayFeed = $derived(feed.kind === 'holidays');
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
@@ -58,7 +57,9 @@
   data-kind={feed.kind}
 >
   <div class="lead">
-    <IconButton icon={expandIcon} label={expandLabel} variant="ghost" onclick={toggle} size={18} />
+    <span class="collapse-toggle" data-collapsed={feed.collapsed ? 'true' : null}>
+      <IconButton icon="chevron-down" label={expandLabel} variant="ghost" onclick={toggle} size={18} />
+    </span>
     {#if errorMessage}
       <button
         type="button"
@@ -110,14 +111,12 @@
   .row-header {
     position: sticky;
     left: 0;
-    top: 80px;
     display: flex;
     align-items: center;
     padding: 4px 0;
     height: 36px;
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
-    box-shadow: var(--shadow-1);
     z-index: 4;
     width: max-content;
     min-width: 100%;
@@ -125,7 +124,6 @@
   }
   .row-header[data-collapsed='true'] {
     border-bottom: none;
-    box-shadow: none;
   }
   .row-header[data-kind='holidays'] .name {
     color: var(--ink-muted);
@@ -152,6 +150,13 @@
     background: var(--paper);
     z-index: 1;
     flex-shrink: 0;
+  }
+  .collapse-toggle {
+    display: inline-flex;
+    transition: transform 120ms ease;
+  }
+  .collapse-toggle[data-collapsed='true'] {
+    transform: rotate(-90deg);
   }
   .name {
     flex: 1 1 auto;

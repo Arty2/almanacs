@@ -114,11 +114,11 @@
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
-    border: 1px solid var(--ink);
-    border-radius: 4px;
-    margin: 0 8px 8px 8px;
-    overflow: hidden;
+    border-top: 1px solid var(--ink);
     box-sizing: border-box;
+  }
+  .row:last-of-type {
+    border-bottom: 1px solid var(--ink);
   }
   .row[data-collapsed='true'] {
     background: var(--paper);
