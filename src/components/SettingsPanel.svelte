@@ -3,7 +3,7 @@
   import Icon from './Icon.svelte';
   import RulesEditor from './RulesEditor.svelte';
   import { config, ui } from '../lib/state.svelte';
-  import { exportConfig, importConfig, defaultConfig } from '../lib/storage';
+  import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
   import { formatTimezoneLabel } from '../lib/format';
   import type {
@@ -301,7 +301,7 @@
               aria-label={'Edit ' + feed.name}
             >{feed.name}</button>
             {#if feed.kind === 'holidays'}
-              <span class="kind-mark" title="Public holiday calendar">
+              <span class="kind-mark" title="Holidays Calendar">
                 <Icon name="calendar" size={14} />
               </span>
             {/if}
@@ -344,7 +344,7 @@
           <input id="form-name" type="text" bind:value={formName} placeholder="My calendar" />
         </div>
         <div class="field">
-          <label for="form-holiday">Public holiday calendar</label>
+          <label for="form-holiday">Holidays Calendar</label>
           <input id="form-holiday" type="checkbox" bind:checked={formIsHoliday} />
         </div>
         <div class="form-actions">
@@ -358,16 +358,16 @@
 
     <section>
       <h3>Refresh interval</h3>
-      <div class="field">
-        <label for="refresh-mins">Minutes</label>
-        <input
-          id="refresh-mins"
-          type="number"
-          min="1"
-          max="1440"
-          value={Math.round(config.refreshIntervalMs / 60000)}
-          onchange={(e) => (config.refreshIntervalMs = Number((e.currentTarget as HTMLInputElement).value) * 60000)}
-        />
+      <div class="segmented" role="radiogroup" aria-label="Refresh interval">
+        {#each REFRESH_INTERVAL_OPTIONS as ms (ms)}
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.refreshIntervalMs === ms}
+            onclick={() => (config.refreshIntervalMs = ms)}
+          >{Math.round(ms / 60000)}m</button>
+        {/each}
       </div>
     </section>
 
@@ -545,6 +545,27 @@
     background: var(--ink);
     color: var(--paper);
     border: 1px solid var(--ink);
+  }
+  .segmented {
+    display: inline-flex;
+  }
+  .segmented-btn {
+    height: 32px;
+    padding: 0 0.9em;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 12px;
+    min-width: 48px;
+  }
+  .segmented-btn + .segmented-btn {
+    border-left-width: 0;
+  }
+  .segmented-btn[aria-checked='true'] {
+    background: var(--ink);
+    color: var(--paper);
   }
   .config-actions {
     display: flex;

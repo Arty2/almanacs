@@ -1,0 +1,104 @@
+import type { AppConfig, CalendarFeed, FindReplaceRule, StyleVariant } from './types';
+import { feedIdFor } from './ics';
+
+export const SHARE_URL_LIMIT = 1900;
+export const SHARE_PARAM = 's';
+
+type SharedFeed = { u: string; n: string; h: 0 | 1 };
+type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
+type SharedPayload = { f: SharedFeed[]; r: SharedRule[] };
+
+const STYLE_VARIANTS: StyleVariant[] = [
+  'none', 'inverted-dashed', 'inverted-strike', 'hidden', 'muted', 'highlight',
+];
+
+function toBase64Url(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  const b64 = typeof btoa === 'function' ? btoa(bin) : Buffer.from(bytes).toString('base64');
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(s: string): Uint8Array {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+  const bin = typeof atob === 'function' ? atob(padded) : Buffer.from(padded, 'base64').toString('binary');
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+export function encodeShareState(config: AppConfig): string {
+  const payload: SharedPayload = {
+    f: config.feeds
+      .filter((f) => f.source.kind === 'user')
+      .sort((a, b) => a.order - b.order)
+      .map((f) => ({
+        u: (f.source as { kind: 'user'; url: string }).url,
+        n: f.name,
+        h: f.kind === 'holidays' ? 1 : 0,
+      })),
+    r: config.rules.map((r) => ({ i: r.id, f: r.find, r: r.replace, s: r.style })),
+  };
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  return toBase64Url(bytes);
+}
+
+export function decodeShareState(
+  payload: string,
+): { feeds: CalendarFeed[]; rules: FindReplaceRule[] } | null {
+  if (!payload || typeof payload !== 'string') return null;
+  try {
+    const bytes = fromBase64Url(payload);
+    const json = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(json) as Partial<SharedPayload>;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const rawFeeds = Array.isArray(parsed.f) ? parsed.f : [];
+    const rawRules = Array.isArray(parsed.r) ? parsed.r : [];
+    const feeds: CalendarFeed[] = [];
+    rawFeeds.forEach((f, i) => {
+      if (!f || typeof f !== 'object') return;
+      if (typeof f.u !== 'string' || typeof f.n !== 'string') return;
+      const source = { kind: 'user' as const, url: f.u };
+      feeds.push({
+        id: feedIdFor(source),
+        source,
+        name: f.n,
+        collapsed: false,
+        order: i,
+        kind: f.h === 1 ? 'holidays' : 'events',
+      });
+    });
+    const rules: FindReplaceRule[] = [];
+    rawRules.forEach((r) => {
+      if (!r || typeof r !== 'object') return;
+      if (typeof r.i !== 'string' || typeof r.f !== 'string' || typeof r.r !== 'string') return;
+      const style: StyleVariant = STYLE_VARIANTS.includes(r.s) ? r.s : 'none';
+      rules.push({ id: r.i, find: r.f, replace: r.r, style });
+    });
+    return { feeds, rules };
+  } catch {
+    return null;
+  }
+}
+
+export function buildShareUrl(config: AppConfig, base?: string): string {
+  const payload = encodeShareState(config);
+  const root = base ?? (typeof location !== 'undefined' ? location.origin + location.pathname : '');
+  return root + '?' + SHARE_PARAM + '=' + payload;
+}
+
+export function readShareParam(search: string): string | null {
+  const params = new URLSearchParams(search);
+  return params.get(SHARE_PARAM);
+}
+
+export function stripShareParam(): void {
+  if (typeof location === 'undefined' || typeof history === 'undefined') return;
+  const params = new URLSearchParams(location.search);
+  if (!params.has(SHARE_PARAM)) return;
+  params.delete(SHARE_PARAM);
+  const next = params.toString();
+  history.replaceState(null, '', location.pathname + (next ? '?' + next : '') + location.hash);
+}

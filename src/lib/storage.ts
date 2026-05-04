@@ -7,6 +7,22 @@ export const GREEK_HOLIDAYS_URL = 'https://www.officeholidays.com/ics/greece';
 export const USA_HOLIDAYS_URL =
   'https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics';
 
+export const REFRESH_INTERVAL_OPTIONS = [
+  30 * 60 * 1000,
+  60 * 60 * 1000,
+  120 * 60 * 1000,
+] as const;
+
+export function snapRefreshInterval(ms: number): number {
+  let best = REFRESH_INTERVAL_OPTIONS[0];
+  let bestDelta = Math.abs(ms - best);
+  for (const v of REFRESH_INTERVAL_OPTIONS) {
+    const d = Math.abs(ms - v);
+    if (d < bestDelta) { best = v; bestDelta = d; }
+  }
+  return best;
+}
+
 function resolveSystemTheme(): Theme {
   if (typeof matchMedia === 'undefined') return 'light';
   return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -31,7 +47,7 @@ export function defaultConfig(): AppConfig {
   };
   return {
     feeds: [greek, usa],
-    refreshIntervalMs: 15 * 60 * 1000,
+    refreshIntervalMs: 30 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
     theme: resolveSystemTheme(),
     locale: 'en',
@@ -88,8 +104,9 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     const normalized = normalizeFeed(f, i);
     if (normalized) feeds.push(normalized);
   });
-  const refreshIntervalMs =
-    typeof parsed.refreshIntervalMs === 'number' ? parsed.refreshIntervalMs : base.refreshIntervalMs;
+  const refreshIntervalMs = snapRefreshInterval(
+    typeof parsed.refreshIntervalMs === 'number' ? parsed.refreshIntervalMs : base.refreshIntervalMs,
+  );
   const num = (v: unknown, fallback: number): number =>
     typeof v === 'number' && Number.isFinite(v) ? v : fallback;
   return {

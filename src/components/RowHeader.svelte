@@ -90,7 +90,7 @@
       </button>
     {/if}
     {#if isHolidayFeed && !errorMessage}
-      <span class="holiday-mark" aria-hidden="true" title="Public holiday calendar">
+      <span class="holiday-mark" aria-hidden="true" title="Holidays Calendar">
         <Icon name="calendar" size={14} />
       </span>
     {/if}

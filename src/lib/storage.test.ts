@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { exportConfig, importConfig, defaultConfig, USA_HOLIDAYS_URL } from './storage';
+import {
+  exportConfig,
+  importConfig,
+  defaultConfig,
+  USA_HOLIDAYS_URL,
+  REFRESH_INTERVAL_OPTIONS,
+  snapRefreshInterval,
+} from './storage';
 import { SCHEMA_VERSION } from './types';
 
 beforeEach(() => {
@@ -51,7 +58,7 @@ describe('config import/export', () => {
     const restored = importConfig(v1);
     expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
     expect(restored.feeds.length).toBe(1);
-    expect(restored.refreshIntervalMs).toBe(60_000);
+    expect(restored.refreshIntervalMs).toBe(30 * 60_000);
     expect(['light', 'dark']).toContain(restored.theme);
     expect(restored.locale).toBe('en');
     expect(restored.dateFormat).toBe('YYYY-MM-DD');
@@ -93,6 +100,28 @@ describe('config import/export', () => {
     const restored = importConfig(stale);
     const usa = restored.feeds[0]!;
     expect(usa.source.kind === 'user' && usa.source.url).toBe(USA_HOLIDAYS_URL);
+  });
+
+  it('default refresh interval is 30 minutes', () => {
+    expect(defaultConfig().refreshIntervalMs).toBe(30 * 60_000);
+    expect(REFRESH_INTERVAL_OPTIONS).toEqual([30 * 60_000, 60 * 60_000, 120 * 60_000]);
+  });
+
+  it('snaps non-canonical refresh intervals to the nearest allowed value', () => {
+    expect(snapRefreshInterval(1 * 60_000)).toBe(30 * 60_000);
+    expect(snapRefreshInterval(45 * 60_000)).toBe(30 * 60_000);
+    expect(snapRefreshInterval(50 * 60_000)).toBe(60 * 60_000);
+    expect(snapRefreshInterval(95 * 60_000)).toBe(120 * 60_000);
+  });
+
+  it('migrates a stored 15-minute interval up to the canonical 30 minutes', () => {
+    const stale = JSON.stringify({
+      schemaVersion: 3,
+      feeds: [],
+      refreshIntervalMs: 15 * 60_000,
+    });
+    const restored = importConfig(stale);
+    expect(restored.refreshIntervalMs).toBe(30 * 60_000);
   });
 
   it("resolves theme: 'system' from a v2 config to a concrete light/dark", () => {

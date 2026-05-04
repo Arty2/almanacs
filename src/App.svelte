@@ -5,7 +5,9 @@
   import EventModal from './components/EventModal.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
   import ErrorModal from './components/ErrorModal.svelte';
+  import ShareImportModal from './components/ShareImportModal.svelte';
   import { config, events, ui, zoom, search, focus, displayEventsFor } from './lib/state.svelte';
+  import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
   import { saveConfig, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
   import { fetchAndParseFeed } from './lib/ics';
@@ -71,6 +73,18 @@
   if (initial.locale) config.locale = initial.locale;
   if (initial.dateFormat) config.dateFormat = initial.dateFormat;
   if (initial.theme) config.theme = initial.theme;
+
+  if (typeof location !== 'undefined') {
+    const shareParam = readShareParam(location.search);
+    if (shareParam) {
+      const decoded = decodeShareState(shareParam);
+      if (decoded) {
+        ui.shareImport = decoded;
+      } else {
+        stripShareParam();
+      }
+    }
+  }
 
   $effect(() => {
     void loadAllFeeds();
@@ -184,7 +198,10 @@
   }
 
   function escapeKey(): void {
-    if (ui.modalEvent) {
+    if (ui.shareImport) {
+      ui.shareImport = null;
+      stripShareParam();
+    } else if (ui.modalEvent) {
       ui.modalEvent = null;
     } else if (ui.errorModal) {
       ui.errorModal = null;
@@ -269,6 +286,7 @@
 <Timeline rangeStart={range.start} rangeEnd={range.end} today={today.value} />
 <EventModal />
 <ErrorModal />
+<ShareImportModal onRefresh={loadAllFeeds} />
 {#if ui.settingsOpen}
   <SettingsPanel onClose={() => (ui.settingsOpen = false)} onRefresh={loadAllFeeds} />
 {/if}

@@ -4,6 +4,7 @@
   import { zoom, search, ui, config } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
+  import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
   import type { Zoom } from '../lib/types';
 
   type Props = { onRefresh: () => Promise<void>; onZoom: (z: Zoom) => void };
@@ -51,6 +52,27 @@
   }
 
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
+
+  const shareUrl = $derived(buildShareUrl(config));
+  const shareDisabled = $derived(shareUrl.length > SHARE_URL_LIMIT);
+  const shareLabel = $derived(
+    shareDisabled
+      ? `Too many calendars/rules to share (${shareUrl.length} chars)`
+      : 'Copy share link',
+  );
+
+  async function handleShare(): Promise<void> {
+    if (shareDisabled) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      ui.toast = 'Share link copied';
+    } catch {
+      ui.toast = 'Copy failed';
+    }
+    setTimeout(() => {
+      if (ui.toast === 'Share link copied' || ui.toast === 'Copy failed') ui.toast = null;
+    }, 2000);
+  }
 </script>
 
 <header class="toolbar">
@@ -74,6 +96,13 @@
     label="Search events"
     pressed={search.open}
     onclick={toggleSearch}
+  />
+  <IconButton
+    icon="share"
+    label={shareLabel}
+    title={shareLabel}
+    disabled={shareDisabled}
+    onclick={() => void handleShare()}
   />
   <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
     <IconButton

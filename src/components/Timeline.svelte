@@ -282,6 +282,9 @@
     <header id="time-header">
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} />
     </header>
+    {#each holidayStrips as h, i (i)}
+      <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
+    {/each}
     <div class="rows">
       {#each orderedFeeds as feed, i (feed.id)}
         <Row
@@ -296,7 +299,6 @@
           {monthStartsPx}
           {weekendStrips}
           {dayTicksPx}
-          {holidayStrips}
           rowIndex={i}
         />
       {/each}
@@ -331,6 +333,21 @@
     display: flex;
     flex-direction: column;
     padding-bottom: 16px;
+  }
+  .holiday-band {
+    position: absolute;
+    top: 80px;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 4px,
+      var(--holiday-stripe) 4px,
+      var(--holiday-stripe) 5px
+    );
+    opacity: 0.6;
   }
   .today-line {
     position: absolute;

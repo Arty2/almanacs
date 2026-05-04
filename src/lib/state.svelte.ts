@@ -1,4 +1,4 @@
-import type { AppConfig, DisplayEvent, ParsedEvent, Zoom } from './types';
+import type { AppConfig, CalendarFeed, DisplayEvent, FindReplaceRule, ParsedEvent, Zoom } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
 
@@ -33,6 +33,7 @@ export const ui = $state<{
   errorModal: { feedName: string; message: string } | null;
   toast: string | null;
   feedErrors: Record<string, string>;
+  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[] } | null;
 }>({
   modalEvent: null,
   settingsOpen: false,
@@ -41,6 +42,7 @@ export const ui = $state<{
   errorModal: null,
   toast: null,
   feedErrors: {},
+  shareImport: null,
 });
 
 export function displayEventsFor(feedId: string): DisplayEvent[] {

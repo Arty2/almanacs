@@ -19,7 +19,6 @@
     monthStartsPx: number[];
     weekendStrips: { left: number; width: number }[];
     dayTicksPx: number[];
-    holidayStrips: { left: number; width: number }[];
     rowIndex: number;
   };
   const {
@@ -34,7 +33,6 @@
     monthStartsPx,
     weekendStrips,
     dayTicksPx,
-    holidayStrips,
     rowIndex,
   }: Props = $props();
 
@@ -69,9 +67,6 @@
     <div class="row-body" style="height: {bodyHeight}px;">
       {#each weekendStrips as w, i (i)}
         <i class="weekend-band" style="left: {w.left}px; width: {w.width}px"></i>
-      {/each}
-      {#each holidayStrips as h, i (i)}
-        <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
       {/each}
       {#each dayTicksPx as dx, i (i)}
         <i class="day-line" style="left: {dx}px"></i>
@@ -158,21 +153,6 @@
     background: var(--weekend-bg);
     pointer-events: none;
     z-index: 0;
-  }
-  .holiday-band {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-image: repeating-linear-gradient(
-      45deg,
-      transparent 0,
-      transparent 4px,
-      var(--holiday-stripe) 4px,
-      var(--holiday-stripe) 5px
-    );
-    opacity: 0.6;
   }
   .dot {
     position: absolute;
