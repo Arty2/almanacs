@@ -1,11 +1,21 @@
-import type { AppConfig, CalendarFeed, Theme } from './types';
-import { SCHEMA_VERSION } from './types';
+import type { AppConfig, CalendarColor, CalendarFeed, StyleVariant, Theme } from './types';
+import { CALENDAR_COLORS, SCHEMA_VERSION } from './types';
+
+const VALID_STYLES: StyleVariant[] = [
+  'none', 'inverted-dashed', 'inverted-strike', 'hidden', 'muted', 'highlight',
+];
 
 export const STORAGE_KEY = 'calendar-timeline:config';
 
-export const GREEK_HOLIDAYS_URL = 'https://www.officeholidays.com/ics/greece';
+export const GREEK_HOLIDAYS_URL =
+  'https://calendar.google.com/calendar/ical/en.greek%23holiday%40group.v.calendar.google.com/public/basic.ics';
 export const USA_HOLIDAYS_URL =
   'https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics';
+
+const GREEK_HOLIDAYS_LEGACY_URLS = new Set<string>([
+  'https://www.officeholidays.com/ics/greece',
+  'https://www.officeholidays.com/ics-clean/greece',
+]);
 
 export const REFRESH_INTERVAL_OPTIONS = [
   30 * 60 * 1000,
@@ -80,12 +90,22 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   const source = f.source as Record<string, unknown>;
   let normalizedSource: CalendarFeed['source'] | null = null;
   if (source.kind === 'user' && typeof source.url === 'string') {
-    const url = USA_HOLIDAYS_LEGACY_URLS.has(source.url) ? USA_HOLIDAYS_URL : source.url;
+    let url = source.url;
+    if (USA_HOLIDAYS_LEGACY_URLS.has(url)) url = USA_HOLIDAYS_URL;
+    else if (GREEK_HOLIDAYS_LEGACY_URLS.has(url)) url = GREEK_HOLIDAYS_URL;
     normalizedSource = { kind: 'user', url };
   } else if (source.kind === 'secret' && typeof source.id === 'string') {
     normalizedSource = { kind: 'secret', id: source.id };
   }
   if (!normalizedSource) return null;
+  const color: CalendarColor | undefined =
+    typeof f.color === 'string' && (CALENDAR_COLORS as string[]).includes(f.color)
+      ? (f.color as CalendarColor)
+      : undefined;
+  const style: StyleVariant | undefined =
+    typeof f.style === 'string' && (VALID_STYLES as string[]).includes(f.style)
+      ? (f.style as StyleVariant)
+      : undefined;
   return {
     id: f.id,
     source: normalizedSource,
@@ -93,6 +113,8 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     collapsed: f.collapsed === true,
     order: typeof f.order === 'number' ? f.order : fallbackOrder,
     kind: f.kind === 'holidays' ? 'holidays' : 'events',
+    ...(color ? { color } : {}),
+    ...(style ? { style } : {}),
   };
 }
 
@@ -161,7 +183,7 @@ export function importConfig(json: string): AppConfig {
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid config');
   if (!Array.isArray(parsed.feeds)) throw new Error('Invalid feeds');
   const version = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 0;
-  if (version !== SCHEMA_VERSION && version !== 1 && version !== 2) {
+  if (version !== SCHEMA_VERSION && version !== 1 && version !== 2 && version !== 3) {
     throw new Error('Unsupported schema version: ' + parsed.schemaVersion);
   }
   return migrate(parsed as Record<string, unknown>);

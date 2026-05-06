@@ -1,8 +1,9 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { config, ui, focus } from '../lib/state.svelte';
+  import { config, ui, focus, events } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
+  import { formatUtcOffset } from '../lib/format';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
 
   type Props = {
@@ -22,9 +23,20 @@
     if (target) target.collapsed = !target.collapsed;
   }
 
-  function rename(e: Event): void {
-    const target = config.feeds.find((f) => f.id === feed.id);
-    if (target) target.name = (e.currentTarget as HTMLInputElement).value;
+  function openInSettings(): void {
+    ui.settingsScrollToFeedId = feed.id;
+    ui.settingsAutoEditFeedId = feed.id;
+    ui.settingsOpen = true;
+  }
+
+  let titleEl: HTMLButtonElement | undefined = $state();
+
+  function scrollRowIntoView(): void {
+    if (!scrollEl || !titleEl) return;
+    const headerEl = titleEl.closest<HTMLElement>('.row-header');
+    if (!headerEl) return;
+    const top = headerEl.offsetTop - 80;
+    scrollEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   }
 
   function jumpRelative(direction: -1 | 1): void {
@@ -65,6 +77,8 @@
   const expandLabel = $derived(feed.collapsed ? 'Expand row' : 'Collapse row');
   const isHolidayFeed = $derived(feed.kind === 'holidays');
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
+  const feedTz = $derived(events.tzByFeed[feed.id] ?? null);
+  const tzLabel = $derived(feedTz ? formatUtcOffset(feedTz) : '');
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
 </script>
@@ -73,6 +87,7 @@
   class="row-header"
   data-collapsed={feed.collapsed ? 'true' : null}
   data-kind={feed.kind}
+  data-feed-id={feed.id}
 >
   <div class="lead">
     <span class="collapse-toggle" data-collapsed={feed.collapsed ? 'true' : null}>
@@ -91,17 +106,23 @@
     {/if}
     {#if isHolidayFeed && !errorMessage}
       <span class="holiday-mark" aria-hidden="true" title="Holidays Calendar">
-        <Icon name="calendar" size={14} />
+        <Icon name="calendar-strike" size={14} />
       </span>
     {/if}
-    <input
-      type="text"
-      class="name"
-      value={feed.name}
-      onchange={rename}
-      aria-label="Calendar name"
-      spellcheck="false"
-    />
+    <button
+      bind:this={titleEl}
+      type="button"
+      class="name-btn"
+      onclick={scrollRowIntoView}
+      ondblclick={openInSettings}
+      aria-label="Scroll to {feed.name} (double-click to edit)"
+      title="Click to scroll · double-click to edit"
+    >
+      <span class="name-text">{feed.name}</span>
+      {#if tzLabel}
+        <span class="tz-label" data-mono>({tzLabel})</span>
+      {/if}
+    </button>
     {#if debugFlag}
       <span class="badge" data-mono data-debug>{visibleEvents.length}</span>
     {/if}
@@ -129,6 +150,7 @@
   .row-header {
     position: sticky;
     left: 0;
+    top: 80px;
     display: flex;
     align-items: center;
     padding: 4px 0;
@@ -143,7 +165,7 @@
   .row-header[data-collapsed='true'] {
     border-bottom: none;
   }
-  .row-header[data-kind='holidays'] .name {
+  .row-header[data-kind='holidays'] .name-text {
     color: var(--ink-muted);
   }
   .lead {
@@ -176,24 +198,37 @@
   .collapse-toggle[data-collapsed='true'] {
     transform: rotate(-90deg);
   }
-  .name {
+  .name-btn {
     flex: 1 1 auto;
     min-width: 0;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4em;
     border: 1px solid transparent;
     background: transparent;
     color: inherit;
     padding: 4px 6px;
+    height: 28px;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .name-btn:hover {
+    border-color: var(--ink-faint);
+  }
+  .name-text {
     font-size: 13px;
     font-weight: 600;
-    height: 28px;
+    overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .name:focus {
-    outline: none;
-    border-color: var(--ink);
-  }
-  .name:hover {
-    border-color: var(--ink);
+  .tz-label {
+    font-size: 11px;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .badge {
     font-size: 11px;

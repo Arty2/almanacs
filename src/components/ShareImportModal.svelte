@@ -1,6 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config } from '../lib/state.svelte';
+  import { ui, config, zoom } from '../lib/state.svelte';
   import { stripShareParam } from '../lib/share';
 
   type Props = { onRefresh: () => Promise<void> };
@@ -31,6 +31,15 @@
     return config.feeds.reduce((m, f) => Math.max(m, f.order), -1) + 1;
   }
 
+  function applyView(): void {
+    const v = importing?.view;
+    if (!v) return;
+    if (v.zoom) zoom.value = v.zoom;
+    if (v.locale) config.locale = v.locale;
+    if (v.dateFormat) config.dateFormat = v.dateFormat;
+    if (v.theme) config.theme = v.theme;
+  }
+
   function applyMerge(): void {
     if (!importing) return;
     let order = nextOrder();
@@ -44,6 +53,7 @@
       if (existingRuleIds.has(rule.id)) continue;
       config.rules.push(rule);
     }
+    applyView();
     close();
     void onRefresh();
   }
@@ -52,6 +62,7 @@
     if (!importing) return;
     config.feeds = importing.feeds.map((f, i) => ({ ...f, order: i }));
     config.rules = [...importing.rules];
+    applyView();
     close();
     void onRefresh();
   }

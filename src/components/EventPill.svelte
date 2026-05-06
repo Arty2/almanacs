@@ -2,7 +2,7 @@
   import { ui, config, focus } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
-  import type { LaneEvent } from '../lib/types';
+  import type { CalendarColor, LaneEvent, StyleVariant } from '../lib/types';
 
   type Props = {
     event: LaneEvent;
@@ -11,8 +11,19 @@
     isPast: boolean;
     isFocused: boolean;
     isHolidayFeed: boolean;
+    feedColor?: CalendarColor;
+    feedStyle?: StyleVariant;
   };
-  const { event, isMatch, isCurrent, isPast, isFocused, isHolidayFeed }: Props = $props();
+  const {
+    event,
+    isMatch,
+    isCurrent,
+    isPast,
+    isFocused,
+    isHolidayFeed,
+    feedColor,
+    feedStyle,
+  }: Props = $props();
 
   function open(): void {
     ui.modalEvent = event;
@@ -30,8 +41,16 @@
           formatTime(event.end, config.timeFormat, config.timezone),
   );
 
+  const tooltip = $derived.by(() => {
+    const parts: string[] = [event.displayTitle, dateLabel];
+    if (timeLabel) parts.push(timeLabel);
+    if (event.displayLocation) parts.push(event.displayLocation);
+    return parts.join(' · ');
+  });
+
   const styleAttr = $derived.by(() => {
     if (event.styleVariant !== 'none') return event.styleVariant;
+    if (feedStyle) return feedStyle;
     if (isHolidayFeed) return 'inverted-dashed';
     return null;
   });
@@ -86,6 +105,7 @@
   data-match={isMatch ? 'true' : null}
   data-past={isPast ? 'true' : null}
   data-style={styleAttr}
+  data-cal-color={feedColor ?? null}
   data-focus={isFocused ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style="left: {event.leftPx}px; width: {event.widthPx}px; top: {event.lane * LANE_HEIGHT + ROW_PADDING_PX}px;"
@@ -99,27 +119,20 @@
     onpointercancel={cancelPress}
     onpointermove={cancelPress}
     aria-label="Open event {event.displayTitle}"
-    title={event.displayTitle}
+    title={tooltip}
   >
     <h3>{event.displayTitle}</h3>
-    {#if event.displayLocation?.trim()}
-      <p class="loc">{event.displayLocation}</p>
-    {/if}
-    <time data-mono datetime={event.start.toISOString()}>{dateLabel}</time>
-    {#if timeLabel}
-      <time data-mono class="time" datetime={event.start.toISOString()}>{timeLabel}</time>
-    {/if}
   </button>
 </article>
 
 <style>
   article {
     position: absolute;
-    height: 48px;
+    height: 28px;
     border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    overflow: visible;
+    overflow: hidden;
     box-sizing: border-box;
     z-index: 0;
   }
@@ -136,37 +149,22 @@
     display: block;
     width: 100%;
     height: 100%;
-    padding: 2px 6px;
+    padding: 4px 8px;
     background: transparent;
     color: inherit;
     border: none;
     text-align: left;
     cursor: pointer;
     font: inherit;
-    overflow: visible;
+    overflow: hidden;
   }
   h3 {
     margin: 0;
     font-size: 12px;
     font-weight: 600;
-    line-height: 1.2;
+    line-height: 1.4;
     white-space: nowrap;
-  }
-  p {
-    margin: 0;
-    font-size: 10px;
-    line-height: 1.2;
-    white-space: nowrap;
-  }
-  time {
-    display: block;
-    font-size: 10px;
-    line-height: 1.2;
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .time {
-    color: var(--ink);
-    opacity: 0.85;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 </style>

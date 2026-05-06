@@ -82,6 +82,8 @@
           isPast={e.end.getTime() < todayMs}
           isFocused={isFocusedRow && focus.eventIndex === i}
           isHolidayFeed={isHolidayFeed}
+          feedColor={feed.color}
+          feedStyle={feed.style}
         />
       {/each}
     </div>

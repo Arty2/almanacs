@@ -51,6 +51,14 @@
     search.includesPast = !search.includesPast;
   }
 
+  const atStart = $derived(matchCount > 0 && search.currentIndex === 0);
+  const atEnd = $derived(matchCount > 0 && search.currentIndex === matchCount - 1);
+
+  const prevIcon = $derived(atStart ? 'skip-to-start' : 'chevron-left');
+  const nextIcon = $derived(atEnd ? 'skip-to-end' : 'chevron-right');
+  const prevLabel = $derived(atStart ? 'Wrap to last match' : 'Previous match');
+  const nextLabel = $derived(atEnd ? 'Wrap to first match' : 'Next match');
+
   $effect(() => {
     return () => {
       if (idleTimer) clearTimeout(idleTimer);
@@ -59,13 +67,7 @@
 </script>
 
 <div class="search-toolbar" role="search">
-  <IconButton
-    icon="clock"
-    label={search.includesPast ? 'Disable past-event search' : 'Include past events'}
-    pressed={search.includesPast}
-    variant="ghost"
-    onclick={toggleClock}
-  />
+  <IconButton icon="close" label="Close search" variant="ghost" onclick={onClose} />
   <div class="search-input-wrap">
     <input
       type="search"
@@ -91,21 +93,27 @@
     {matchCount === 0 ? '0' : `${search.currentIndex + 1} / ${matchCount}`}
   </span>
   <IconButton
-    icon="chevron-left"
-    label="Previous match"
+    icon="clock-rewind"
+    label={search.includesPast ? 'Disable past-event search' : 'Include past events'}
+    pressed={search.includesPast}
+    variant="ghost"
+    onclick={toggleClock}
+  />
+  <span class="nav-spacer"></span>
+  <IconButton
+    icon={prevIcon}
+    label={prevLabel}
     variant="ghost"
     onclick={onPrev}
     disabled={matchCount === 0}
   />
   <IconButton
-    icon="chevron-right"
-    label="Next match"
+    icon={nextIcon}
+    label={nextLabel}
     variant="ghost"
     onclick={onNext}
     disabled={matchCount === 0}
   />
-  <span class="spacer"></span>
-  <IconButton icon="close" label="Close search" onclick={onClose} />
 </div>
 
 <style>
@@ -128,7 +136,7 @@
   }
   .search-input-wrap {
     position: relative;
-    flex: 1 1 220px;
+    flex: 0 1 280px;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -173,7 +181,7 @@
     padding: 0 0.4em;
     flex-shrink: 0;
   }
-  .spacer {
+  .nav-spacer {
     flex: 1;
   }
   @media (max-width: 640px) {

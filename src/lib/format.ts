@@ -169,6 +169,10 @@ export function formatTime(d: Date, format: TimeFormat, tz: Timezone): string {
   return new Intl.DateTimeFormat(tag, options).format(d).replace(/\s+/g, ' ').trim();
 }
 
+export function formatUtcOffset(tz: string, at: Date = new Date()): string {
+  return offsetForTimezone(tz, at);
+}
+
 function offsetForTimezone(tz: string, at: Date = new Date()): string {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {

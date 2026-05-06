@@ -4,7 +4,6 @@
   import { zoom, search, ui, config } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
   import type { Zoom } from '../lib/types';
 
   type Props = { onRefresh: () => Promise<void>; onZoom: (z: Zoom) => void };
@@ -53,25 +52,38 @@
 
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 
-  const shareUrl = $derived(buildShareUrl(config));
-  const shareDisabled = $derived(shareUrl.length > SHARE_URL_LIMIT);
-  const shareLabel = $derived(
-    shareDisabled
-      ? `Too many calendars/rules to share (${shareUrl.length} chars)`
-      : 'Copy share link',
-  );
+  const LONGPRESS_MS = 500;
+  let pressTimer: ReturnType<typeof setTimeout> | null = null;
+  let longPressFired = false;
 
-  async function handleShare(): Promise<void> {
-    if (shareDisabled) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      ui.toast = 'Share link copied';
-    } catch {
-      ui.toast = 'Copy failed';
+  function startSettingsPress(e: PointerEvent): void {
+    longPressFired = false;
+    if (pressTimer) clearTimeout(pressTimer);
+    const target = e.currentTarget as HTMLElement;
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      longPressFired = true;
+      config.theme = config.theme === 'dark' ? 'light' : 'dark';
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(10);
+      }
+      target.blur();
+    }, LONGPRESS_MS);
+  }
+
+  function cancelSettingsPress(): void {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
     }
-    setTimeout(() => {
-      if (ui.toast === 'Share link copied' || ui.toast === 'Copy failed') ui.toast = null;
-    }, 2000);
+  }
+
+  function handleSettingsClick(): void {
+    if (longPressFired) {
+      longPressFired = false;
+      return;
+    }
+    ui.settingsOpen = !ui.settingsOpen;
   }
 </script>
 
@@ -97,13 +109,6 @@
     pressed={search.open}
     onclick={toggleSearch}
   />
-  <IconButton
-    icon="share"
-    label={shareLabel}
-    title={shareLabel}
-    disabled={shareDisabled}
-    onclick={() => void handleShare()}
-  />
   <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
     <IconButton
       icon="refresh"
@@ -112,12 +117,22 @@
       onclick={() => void handleRefresh()}
     />
   </span>
-  <IconButton
-    icon="settings"
-    label="Settings"
-    pressed={ui.settingsOpen}
-    onclick={() => (ui.settingsOpen = !ui.settingsOpen)}
-  />
+  <span
+    class="settings-wrap"
+    role="presentation"
+    onpointerdown={startSettingsPress}
+    onpointerup={cancelSettingsPress}
+    onpointercancel={cancelSettingsPress}
+    onpointerleave={cancelSettingsPress}
+  >
+    <IconButton
+      icon="settings"
+      label="Settings (long-press to flip theme)"
+      title="Settings (long-press to flip theme)"
+      pressed={ui.settingsOpen}
+      onclick={handleSettingsClick}
+    />
+  </span>
 </header>
 
 <style>
@@ -176,11 +191,14 @@
   .spacer {
     flex: 1;
   }
-  .refresh-wrap {
+  .refresh-wrap,
+  .settings-wrap {
     display: inline-flex;
   }
-  .refresh-wrap[data-spinning='true'] :global(.icon-button) :global(svg) {
+  .refresh-wrap[data-spinning='true'] :global(.icon-button) :global(svg),
+  .refresh-wrap[data-spinning='true'] :global(.icon-button) :global(.icon) {
     animation: cal-spin 800ms linear infinite;
+    transform-origin: 50% 50%;
   }
   @keyframes cal-spin {
     from { transform: rotate(0); }

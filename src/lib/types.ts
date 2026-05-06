@@ -4,6 +4,18 @@ export type FeedSource =
 
 export type FeedKind = 'events' | 'holidays';
 
+export type CalendarColor =
+  | 'peach'
+  | 'amber'
+  | 'mint'
+  | 'teal'
+  | 'sky'
+  | 'lavender';
+
+export const CALENDAR_COLORS: CalendarColor[] = [
+  'peach', 'amber', 'mint', 'teal', 'sky', 'lavender',
+];
+
 export type CalendarFeed = {
   id: string;
   source: FeedSource;
@@ -11,6 +23,8 @@ export type CalendarFeed = {
   collapsed: boolean;
   order: number;
   kind: FeedKind;
+  color?: CalendarColor;
+  style?: StyleVariant;
 };
 
 export type ParsedEvent = {
@@ -84,4 +98,4 @@ export type AppConfig = {
   futureMonths: number;
 };
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;

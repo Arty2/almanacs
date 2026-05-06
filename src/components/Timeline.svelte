@@ -347,6 +347,7 @@
       var(--holiday-stripe) 4px,
       var(--holiday-stripe) 5px
     );
+    background-attachment: fixed;
     opacity: 0.6;
   }
   .today-line {

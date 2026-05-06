@@ -3,6 +3,7 @@ import {
   exportConfig,
   importConfig,
   defaultConfig,
+  GREEK_HOLIDAYS_URL,
   USA_HOLIDAYS_URL,
   REFRESH_INTERVAL_OPTIONS,
   snapRefreshInterval,
@@ -100,6 +101,34 @@ describe('config import/export', () => {
     const restored = importConfig(stale);
     const usa = restored.feeds[0]!;
     expect(usa.source.kind === 'user' && usa.source.url).toBe(USA_HOLIDAYS_URL);
+  });
+
+  it('default Greek feed points at Google ICS, not officeholidays', () => {
+    expect(GREEK_HOLIDAYS_URL).toMatch(/calendar\.google\.com/);
+    expect(GREEK_HOLIDAYS_URL).not.toMatch(/officeholidays/);
+    const cfg = defaultConfig();
+    const greek = cfg.feeds.find((f) => f.id === 'user:greek-bank-holidays');
+    expect(greek?.source.kind === 'user' && greek.source.url).toBe(GREEK_HOLIDAYS_URL);
+  });
+
+  it('migrates a stale officeholidays Greek URL to the new Google ICS', () => {
+    const stale = JSON.stringify({
+      schemaVersion: 3,
+      feeds: [
+        {
+          id: 'user:greek-bank-holidays',
+          source: { kind: 'user', url: 'https://www.officeholidays.com/ics/greece' },
+          name: 'Greek Bank Holidays',
+          collapsed: false,
+          order: 0,
+          kind: 'holidays',
+        },
+      ],
+      refreshIntervalMs: 60_000,
+    });
+    const restored = importConfig(stale);
+    const greek = restored.feeds[0]!;
+    expect(greek.source.kind === 'user' && greek.source.url).toBe(GREEK_HOLIDAYS_URL);
   });
 
   it('default refresh interval is 30 minutes', () => {

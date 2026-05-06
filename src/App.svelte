@@ -53,7 +53,12 @@
         config.feeds.map(async (feed) => {
           try {
             const parsed = await fetchAndParseFeed(feed.source, range.start, range.end);
-            events.byFeed[feed.id] = parsed;
+            events.byFeed[feed.id] = parsed.events;
+            if (parsed.timezone) events.tzByFeed[feed.id] = parsed.timezone;
+            else delete events.tzByFeed[feed.id];
+            for (const [uid, raw] of Object.entries(parsed.rawByUid)) {
+              events.rawByUid[uid] = raw;
+            }
             delete ui.feedErrors[feed.id];
           } catch (err) {
             console.error('Failed to load feed', feed.id, err);

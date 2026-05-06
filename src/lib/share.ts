@@ -1,16 +1,32 @@
-import type { AppConfig, CalendarFeed, FindReplaceRule, StyleVariant } from './types';
+import type {
+  AppConfig,
+  CalendarFeed,
+  DateFormat,
+  FindReplaceRule,
+  Locale,
+  StyleVariant,
+  Theme,
+  Zoom,
+} from './types';
 import { feedIdFor } from './ics';
 
-export const SHARE_URL_LIMIT = 1900;
+export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
 
 type SharedFeed = { u: string; n: string; h: 0 | 1 };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
-type SharedPayload = { f: SharedFeed[]; r: SharedRule[] };
+type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
+type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView };
 
 const STYLE_VARIANTS: StyleVariant[] = [
   'none', 'inverted-dashed', 'inverted-strike', 'hidden', 'muted', 'highlight',
 ];
+const ZOOMS: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
+const LOCALES: Locale[] = ['en', 'el'];
+const DATE_FORMATS: DateFormat[] = ['YYYY-MM-DD', 'DD MMM YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY'];
+const THEMES: Theme[] = ['light', 'dark'];
+
+export type SharedView_t = { zoom?: Zoom; locale?: Locale; dateFormat?: DateFormat; theme?: Theme };
 
 function toBase64Url(bytes: Uint8Array): string {
   let bin = '';
@@ -28,7 +44,7 @@ function fromBase64Url(s: string): Uint8Array {
   return out;
 }
 
-export function encodeShareState(config: AppConfig): string {
+export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
   const payload: SharedPayload = {
     f: config.feeds
       .filter((f) => f.source.kind === 'user')
@@ -40,6 +56,12 @@ export function encodeShareState(config: AppConfig): string {
       })),
     r: config.rules.map((r) => ({ i: r.id, f: r.find, r: r.replace, s: r.style })),
   };
+  const view: SharedView = {};
+  if (zoom) view.z = zoom;
+  if (config.locale) view.l = config.locale;
+  if (config.dateFormat) view.d = config.dateFormat;
+  if (config.theme) view.t = config.theme;
+  if (Object.keys(view).length > 0) payload.v = view;
   const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
   return toBase64Url(bytes);
@@ -47,7 +69,7 @@ export function encodeShareState(config: AppConfig): string {
 
 export function decodeShareState(
   payload: string,
-): { feeds: CalendarFeed[]; rules: FindReplaceRule[] } | null {
+): { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: SharedView_t | null } | null {
   if (!payload || typeof payload !== 'string') return null;
   try {
     const bytes = fromBase64Url(payload);
@@ -77,14 +99,24 @@ export function decodeShareState(
       const style: StyleVariant = STYLE_VARIANTS.includes(r.s) ? r.s : 'none';
       rules.push({ id: r.i, find: r.f, replace: r.r, style });
     });
-    return { feeds, rules };
+    let view: SharedView_t | null = null;
+    if (parsed.v && typeof parsed.v === 'object') {
+      const v: SharedView_t = {};
+      const raw = parsed.v;
+      if (raw.z && ZOOMS.includes(raw.z)) v.zoom = raw.z;
+      if (raw.l && LOCALES.includes(raw.l)) v.locale = raw.l;
+      if (raw.d && DATE_FORMATS.includes(raw.d)) v.dateFormat = raw.d;
+      if (raw.t && THEMES.includes(raw.t)) v.theme = raw.t;
+      if (Object.keys(v).length > 0) view = v;
+    }
+    return { feeds, rules, view };
   } catch {
     return null;
   }
 }
 
-export function buildShareUrl(config: AppConfig, base?: string): string {
-  const payload = encodeShareState(config);
+export function buildShareUrl(config: AppConfig, zoom?: Zoom, base?: string): string {
+  const payload = encodeShareState(config, zoom);
   const root = base ?? (typeof location !== 'undefined' ? location.origin + location.pathname : '');
   return root + '?' + SHARE_PARAM + '=' + payload;
 }

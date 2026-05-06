@@ -35,6 +35,39 @@ describe('share encode/decode', () => {
     expect(decoded!.rules[0]!.style).toBe('highlight');
   });
 
+  it('round-trips view state when zoom is provided', () => {
+    const cfg = configWith({
+      locale: 'el',
+      dateFormat: 'DD/MM/YYYY',
+      theme: 'dark',
+    });
+    const payload = encodeShareState(cfg, '2-year');
+    const decoded = decodeShareState(payload);
+    expect(decoded!.view).not.toBeNull();
+    expect(decoded!.view!.zoom).toBe('2-year');
+    expect(decoded!.view!.locale).toBe('el');
+    expect(decoded!.view!.dateFormat).toBe('DD/MM/YYYY');
+    expect(decoded!.view!.theme).toBe('dark');
+  });
+
+  it('returns view from config even without zoom', () => {
+    const cfg = configWith({ locale: 'en', dateFormat: 'YYYY-MM-DD', theme: 'light' });
+    const payload = encodeShareState(cfg);
+    const decoded = decodeShareState(payload);
+    expect(decoded!.view).not.toBeNull();
+    expect(decoded!.view!.zoom).toBeUndefined();
+    expect(decoded!.view!.locale).toBe('en');
+  });
+
+  it('ignores invalid view fields', () => {
+    const corrupt = btoa(JSON.stringify({ f: [], r: [], v: { z: 'bogus', l: 'xx', d: 'BAD', t: 'green' } }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const decoded = decodeShareState(corrupt);
+    expect(decoded!.view).toBeNull();
+  });
+
   it('skips secret feeds (only user feeds shareable)', () => {
     const cfg = configWith({
       feeds: [
@@ -55,7 +88,7 @@ describe('share encode/decode', () => {
   });
 
   it('default config share URL stays well under the limit', () => {
-    const url = buildShareUrl(defaultConfig(), 'https://heracl.es/calendari');
+    const url = buildShareUrl(defaultConfig(), 'month', 'https://heracl.es/calendari');
     expect(url.length).toBeLessThan(SHARE_URL_LIMIT);
   });
 

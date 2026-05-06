@@ -2,17 +2,21 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import RulesEditor from './RulesEditor.svelte';
-  import { config, ui } from '../lib/state.svelte';
+  import { config, ui, zoom, events } from '../lib/state.svelte';
   import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
-  import { formatTimezoneLabel } from '../lib/format';
-  import type {
-    CalendarFeed,
-    DateFormat,
-    Locale,
-    Theme,
-    Timezone,
-    TimeFormat,
+  import { formatTimezoneLabel, formatUtcOffset } from '../lib/format';
+  import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
+  import {
+    CALENDAR_COLORS,
+    type CalendarColor,
+    type CalendarFeed,
+    type DateFormat,
+    type Locale,
+    type StyleVariant,
+    type Theme,
+    type Timezone,
+    type TimeFormat,
   } from '../lib/types';
 
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
@@ -24,6 +28,7 @@
   let formIsHoliday = $state(false);
   let importError: string | null = $state(null);
   let fileInput: HTMLInputElement | undefined = $state();
+  let listContainer: HTMLUListElement | undefined = $state();
 
   const editingFeed = $derived(
     editingFeedId ? config.feeds.find((f) => f.id === editingFeedId) ?? null : null,
@@ -42,6 +47,30 @@
     formName = feed.name;
     formIsHoliday = feed.kind === 'holidays';
   }
+
+  $effect(() => {
+    const targetId = ui.settingsAutoEditFeedId;
+    if (!targetId) return;
+    const feed = config.feeds.find((f) => f.id === targetId);
+    if (feed) startEdit(feed);
+    ui.settingsAutoEditFeedId = null;
+  });
+
+  $effect(() => {
+    const targetId = ui.settingsScrollToFeedId;
+    if (!targetId || !listContainer) return;
+    queueMicrotask(() => {
+      const item = listContainer?.querySelector<HTMLElement>(
+        `[data-feed-card="${CSS.escape(targetId)}"]`,
+      );
+      if (item) {
+        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        item.classList.add('flash');
+        setTimeout(() => item.classList.remove('flash'), 1200);
+      }
+      ui.settingsScrollToFeedId = null;
+    });
+  });
 
   function submitForm(e: Event): void {
     e.preventDefault();
@@ -92,6 +121,21 @@
     const tmp = a.order;
     a.order = b.order;
     b.order = tmp;
+  }
+
+  function setFeedColor(feed: CalendarFeed, color: CalendarColor | null): void {
+    const target = config.feeds.find((f) => f.id === feed.id);
+    if (!target) return;
+    if (color) target.color = color;
+    else delete target.color;
+  }
+
+  function setFeedStyle(feed: CalendarFeed, e: Event): void {
+    const value = (e.currentTarget as HTMLSelectElement).value as StyleVariant | '';
+    const target = config.feeds.find((f) => f.id === feed.id);
+    if (!target) return;
+    if (value) target.style = value;
+    else delete target.style;
   }
 
   function applyImported(next: ReturnType<typeof importConfig>): void {
@@ -145,6 +189,28 @@
     }
   }
 
+  const shareUrl = $derived(buildShareUrl(config, zoom.value));
+  const shareDisabled = $derived(shareUrl.length > SHARE_URL_LIMIT);
+  const shareLabel = $derived(
+    shareDisabled
+      ? `Too long to share (${shareUrl.length} chars)`
+      : 'Copy share link',
+  );
+
+  async function shareLink(): Promise<void> {
+    if (shareDisabled) return;
+    importError = null;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      ui.toast = 'Share link copied';
+      setTimeout(() => {
+        if (ui.toast === 'Share link copied') ui.toast = null;
+      }, 2000);
+    } catch (err) {
+      importError = (err as Error).message;
+    }
+  }
+
   function triggerImport(): void {
     fileInput?.click();
   }
@@ -193,6 +259,13 @@
     { id: '24h', label: '24-hour' },
     { id: '12h', label: '12-hour (AM/PM)' },
   ];
+  const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
+    { id: '', label: 'Default' },
+    { id: 'muted', label: 'Muted' },
+    { id: 'highlight', label: 'Highlight' },
+    { id: 'inverted-dashed', label: 'Inverted (dashed)' },
+    { id: 'inverted-strike', label: 'Inverted (strike)' },
+  ];
 
   function onBackdropClick(e: MouseEvent): void {
     if (e.target === e.currentTarget) onClose();
@@ -201,6 +274,11 @@
   function showFeedError(feed: CalendarFeed): void {
     const message = ui.feedErrors[feed.id];
     if (message) ui.errorModal = { feedName: feed.name, message };
+  }
+
+  function feedTzLabel(feed: CalendarFeed): string {
+    const tz = events.tzByFeed[feed.id];
+    return tz ? formatUtcOffset(tz) : '';
   }
 </script>
 
@@ -216,6 +294,7 @@
       <IconButton icon="close" label="Close settings" variant="ghost" onclick={onClose} />
     </header>
 
+    <div class="panel-body">
     <section>
       <h3>Appearance</h3>
       <div class="field">
@@ -291,34 +370,80 @@
 
     <section>
       <h3>Calendars</h3>
-      <ul class="feeds">
+      <ul class="feeds" bind:this={listContainer}>
         {#each [...config.feeds].sort((a, b) => a.order - b.order) as feed (feed.id)}
-          <li data-active={editingFeedId === feed.id ? 'true' : null}>
-            <button
-              type="button"
-              class="feed-name-btn"
-              onclick={() => startEdit(feed)}
-              aria-label={'Edit ' + feed.name}
-            >{feed.name}</button>
-            {#if feed.kind === 'holidays'}
-              <span class="kind-mark" title="Holidays Calendar">
-                <Icon name="calendar" size={14} />
-              </span>
-            {/if}
-            {#if ui.feedErrors[feed.id]}
+          <li
+            data-feed-card={feed.id}
+            data-active={editingFeedId === feed.id ? 'true' : null}
+          >
+            <div class="feed-row">
               <button
                 type="button"
-                class="warn-btn"
-                aria-label={'Failed to load ' + feed.name}
-                onclick={() => showFeedError(feed)}
+                class="feed-name-btn"
+                onclick={() => startEdit(feed)}
+                aria-label={'Edit ' + feed.name}
               >
-                <Icon name="warning" size={14} />
+                <span class="feed-name-text">{feed.name}</span>
+                {#if feedTzLabel(feed)}
+                  <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
+                {/if}
               </button>
-            {/if}
-            <IconButton icon="arrow-up" label="Move up" variant="ghost" size={16} onclick={() => moveFeed(feed.id, -1)} />
-            <IconButton icon="arrow-down" label="Move down" variant="ghost" size={16} onclick={() => moveFeed(feed.id, 1)} />
-            {#if feed.source.kind === 'user'}
-              <IconButton icon="trash" label="Remove" variant="ghost" size={16} onclick={() => removeFeed(feed.id)} />
+              {#if feed.kind === 'holidays'}
+                <span class="kind-mark" title="Holidays Calendar">
+                  <Icon name="calendar-strike" size={14} />
+                </span>
+              {/if}
+              {#if ui.feedErrors[feed.id]}
+                <button
+                  type="button"
+                  class="warn-btn"
+                  aria-label={'Failed to load ' + feed.name}
+                  onclick={() => showFeedError(feed)}
+                >
+                  <Icon name="warning" size={14} />
+                </button>
+              {/if}
+              <IconButton icon="arrow-up" label="Move up" variant="ghost" size={16} onclick={() => moveFeed(feed.id, -1)} />
+              <IconButton icon="arrow-down" label="Move down" variant="ghost" size={16} onclick={() => moveFeed(feed.id, 1)} />
+              {#if feed.source.kind === 'user'}
+                <IconButton icon="trash" label="Remove" variant="ghost" size={16} onclick={() => removeFeed(feed.id)} />
+              {/if}
+            </div>
+            {#if editingFeedId === feed.id}
+              <div class="feed-style">
+                <div class="swatch-row" role="radiogroup" aria-label="Calendar color">
+                  <button
+                    type="button"
+                    class="swatch swatch-none"
+                    aria-pressed={!feed.color}
+                    aria-label="No color"
+                    onclick={() => setFeedColor(feed, null)}
+                  ></button>
+                  {#each CALENDAR_COLORS as c (c)}
+                    <button
+                      type="button"
+                      class="swatch"
+                      data-color={c}
+                      aria-pressed={feed.color === c}
+                      aria-label={'Color: ' + c}
+                      onclick={() => setFeedColor(feed, c)}
+                    ></button>
+                  {/each}
+                </div>
+                <div class="field compact">
+                  <label for="feed-style-{feed.id}">Style</label>
+                  <select
+                    id="feed-style-{feed.id}"
+                    value={feed.style ?? ''}
+                    onchange={(e) => setFeedStyle(feed, e)}
+                  >
+                    {#each calendarStyleOptions as s (s.id)}
+                      <option value={s.id}>{s.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <p class="hint">Find &amp; replace rules override these.</p>
+              </div>
             {/if}
           </li>
         {/each}
@@ -378,6 +503,12 @@
         <button type="button" onclick={triggerImport}>Import…</button>
         <button type="button" onclick={() => void copyConfig()}>Copy</button>
         <button type="button" onclick={() => void pasteConfig()}>Paste</button>
+        <button
+          type="button"
+          onclick={() => void shareLink()}
+          disabled={shareDisabled}
+          title={shareLabel}
+        >Share</button>
         <button type="button" class="danger" onclick={resetAndClear}>Reset &amp; Clear</button>
         <input
           bind:this={fileInput}
@@ -394,6 +525,7 @@
       v{__APP_VERSION__} ·
       <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/calendari</a>
     </footer>
+    </div>
   </aside>
 </div>
 
@@ -411,6 +543,13 @@
     height: 100dvh;
     background: var(--paper);
     border-left: 1px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .panel-body {
+    flex: 1 1 auto;
     overflow-y: auto;
     padding: 1em 1em 2em;
     display: flex;
@@ -430,12 +569,15 @@
     color: inherit;
   }
   .panel-header {
+    flex: 0 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--ink);
-    padding-bottom: 0.5em;
+    padding: 0.5em 1em;
     margin: 0;
+    background: var(--paper);
+    z-index: 1;
   }
   h2 {
     margin: 0;
@@ -463,6 +605,9 @@
     align-items: center;
     gap: 0.6em;
   }
+  .field.compact {
+    grid-template-columns: 60px 1fr;
+  }
   .field label {
     font-size: 13px;
     color: var(--ink);
@@ -486,11 +631,8 @@
     border-radius: 4px;
   }
   .feeds li {
-    display: flex;
-    align-items: center;
-    gap: 0.3em;
-    padding: 6px 8px;
     border-bottom: 1px solid var(--ink);
+    transition: background 200ms ease;
   }
   .feeds li:last-child {
     border-bottom: none;
@@ -498,12 +640,24 @@
   .feeds li[data-active='true'] {
     background: var(--paper-2);
   }
+  .feeds :global(li.flash) {
+    background: var(--paper-2);
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .feed-row {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 6px 8px;
+  }
   .feed-name-btn {
     flex: 1;
     min-width: 0;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4em;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-size: 13px;
     text-align: left;
     background: transparent;
@@ -514,6 +668,57 @@
   }
   .feed-name-btn:hover {
     border-color: var(--ink);
+  }
+  .feed-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 0 1 auto;
+  }
+  .feed-tz {
+    font-size: 11px;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+  }
+  .feed-style {
+    padding: 6px 8px 10px 8px;
+    border-top: 1px dashed var(--ink-faint);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  .swatch-row {
+    display: flex;
+    gap: 0.4em;
+    flex-wrap: wrap;
+  }
+  .swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    border: 1px solid var(--ink-faint);
+    background: var(--paper-2);
+    cursor: pointer;
+    padding: 0;
+  }
+  .swatch[data-color='peach'] { background: var(--cal-peach-bg); border-color: var(--cal-peach-border); }
+  .swatch[data-color='amber'] { background: var(--cal-amber-bg); border-color: var(--cal-amber-border); }
+  .swatch[data-color='mint'] { background: var(--cal-mint-bg); border-color: var(--cal-mint-border); }
+  .swatch[data-color='teal'] { background: var(--cal-teal-bg); border-color: var(--cal-teal-border); }
+  .swatch[data-color='sky'] { background: var(--cal-sky-bg); border-color: var(--cal-sky-border); }
+  .swatch[data-color='lavender'] { background: var(--cal-lavender-bg); border-color: var(--cal-lavender-border); }
+  .swatch-none {
+    background: transparent;
+    background-image: linear-gradient(45deg, transparent 47%, var(--ink-faint) 47%, var(--ink-faint) 53%, transparent 53%);
+  }
+  .swatch[aria-pressed='true'] {
+    outline: 2px solid var(--ink);
+    outline-offset: 1px;
+  }
+  .hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--ink-muted);
   }
   .kind-mark {
     color: var(--ink-muted);

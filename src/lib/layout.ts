@@ -12,8 +12,8 @@ export const PX_PER_DAY: Record<Zoom, number> = {
 
 export const MIN_PILL_PX = 80;
 export const MIN_VISUAL_PILL_PX = 8;
-export const LANE_HEIGHT = 52;
-export const ROW_PADDING_PX = 8;
+export const LANE_HEIGHT = 32;
+export const ROW_PADDING_PX = 6;
 
 export function dateToPx(date: Date, epoch: Date, pxPerDay: number): number {
   return ((date.getTime() - epoch.getTime()) / MS_PER_DAY) * pxPerDay;
@@ -22,6 +22,8 @@ export function dateToPx(date: Date, epoch: Date, pxPerDay: number): number {
 export function pxToDate(px: number, epoch: Date, pxPerDay: number): Date {
   return new Date(epoch.getTime() + (px / pxPerDay) * MS_PER_DAY);
 }
+
+export const MID_COLUMN_MIN_PX_PER_DAY = 30;
 
 export function assignLanes(
   events: DisplayEvent[],
@@ -33,9 +35,12 @@ export function assignLanes(
   const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
   const laneEnds: number[] = [];
   const laneEvents: LaneEvent[] = [];
+  const useFractional = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
   for (const event of sorted) {
-    const dayStart = startOfDay(event.start);
-    const leftPx = dateToPx(dayStart, epoch, pxPerDay);
+    const fractional = useFractional && !event.allDay;
+    const leftPx = fractional
+      ? dateToPx(event.start, epoch, pxPerDay)
+      : dateToPx(startOfDay(event.start), epoch, pxPerDay);
     const days = durationDays(event.start, event.end, event.allDay);
     const visualWidth = Math.max(days * pxPerDay, MIN_VISUAL_PILL_PX);
     const collisionWidth = Math.max(visualWidth, collisionMinPx);
