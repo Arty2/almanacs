@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config, events } from '../lib/state.svelte';
-  import { formatDateLong } from '../lib/format';
+  import { ui, config, events, pushLog } from '../lib/state.svelte';
+  import { formatDateLong, formatRange, formatTime } from '../lib/format';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showRaw = $state(false);
@@ -25,22 +25,44 @@
 
   function formatStart(d: Date, allDay: boolean): string {
     if (allDay) return formatDateLong(d, config.locale);
-    return formatDateLong(d, config.locale) + ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return (
+      formatDateLong(d, config.locale) +
+      ' · ' +
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    );
   }
 
-  async function copyRaw(raw: string): Promise<void> {
+  async function copyText(text: string, kind: 'data' | 'details'): Promise<void> {
     try {
-      await navigator.clipboard.writeText(raw);
-      ui.toast = 'Raw event copied';
-      setTimeout(() => {
-        if (ui.toast === 'Raw event copied') ui.toast = null;
-      }, 2000);
+      await navigator.clipboard.writeText(text);
+      pushLog(kind === 'data' ? 'Copied raw event data' : 'Copied event details');
     } catch {
-      ui.toast = 'Copy failed';
-      setTimeout(() => {
-        if (ui.toast === 'Copy failed') ui.toast = null;
-      }, 2000);
+      pushLog('Copy failed', 'error');
     }
+  }
+
+  function buildDetails(ev: NonNullable<typeof ui.modalEvent>): string {
+    const lines: string[] = [ev.displayTitle];
+    lines.push(
+      formatRange(ev.start, ev.end, config.dateFormat, config.locale, ev.allDay),
+    );
+    if (!ev.allDay) {
+      lines.push(
+        formatTime(ev.start, config.timeFormat, config.timezone) +
+          ' – ' +
+          formatTime(ev.end, config.timeFormat, config.timezone),
+      );
+    }
+    if (ev.displayLocation) lines.push(ev.displayLocation);
+    if (ev.displayDescription) {
+      lines.push('');
+      lines.push(ev.displayDescription);
+    }
+    if (ev.url) {
+      lines.push('');
+      lines.push(ev.url);
+    }
+    return lines.join('\n');
   }
 </script>
 
@@ -56,7 +78,6 @@
       {#if showRaw && raw}
         <div class="raw-block">
           <pre><code>{raw}</code></pre>
-          <button type="button" class="copy-btn" onclick={() => void copyRaw(raw)}>Copy raw</button>
         </div>
       {:else}
         <p><time datetime={ev.start.toISOString()}>{formatStart(ev.start, ev.allDay)}</time></p>
@@ -64,18 +85,35 @@
         {#if ev.displayDescription}<p class="desc">{ev.displayDescription}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      {#if raw}
-        <footer class="modal-footer">
-          <button
-            type="button"
-            class="raw-toggle"
-            aria-pressed={showRaw}
-            onclick={() => (showRaw = !showRaw)}
-            title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-            aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-          >{'{}'}</button>
-        </footer>
-      {/if}
+      <footer class="modal-footer">
+        <div class="copy-slot">
+          {#if showRaw && raw}
+            <button type="button" class="action-btn" onclick={() => void copyText(raw, 'data')}>
+              Copy data
+            </button>
+          {:else}
+            <button
+              type="button"
+              class="action-btn"
+              onclick={() => void copyText(buildDetails(ev), 'details')}
+            >
+              Copy details
+            </button>
+          {/if}
+        </div>
+        <div class="source-slot">
+          {#if raw}
+            <button
+              type="button"
+              class="raw-toggle"
+              aria-pressed={showRaw}
+              onclick={() => (showRaw = !showRaw)}
+              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+            >{'{}'}</button>
+          {/if}
+        </div>
+      </footer>
     </article>
   {/if}
 </dialog>
@@ -118,9 +156,28 @@
   }
   .modal-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5em;
     margin-top: 0.75em;
     padding-top: 0.5em;
+  }
+  .copy-slot,
+  .source-slot {
+    display: inline-flex;
+    align-items: center;
+  }
+  .action-btn {
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .action-btn:hover {
+    background: var(--paper-2);
   }
   .raw-toggle {
     font-family: var(--mono);
@@ -159,15 +216,5 @@
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-all;
-  }
-  .copy-btn {
-    align-self: flex-start;
-    height: 28px;
-    padding: 0 12px;
-    border: 1px solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
-    cursor: pointer;
-    font-size: 12px;
   }
 </style>

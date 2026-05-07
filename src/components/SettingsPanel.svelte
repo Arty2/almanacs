@@ -2,10 +2,12 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import RulesEditor from './RulesEditor.svelte';
-  import { config, ui, zoom, events } from '../lib/state.svelte';
+  import { config, ui, zoom, events, pushLog } from '../lib/state.svelte';
+  import { online } from '../lib/online.svelte';
   import { clock } from '../lib/clock.svelte';
   import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
+  import { makeRule } from '../lib/rules';
   import {
     formatTimezoneLabel,
     formatUtcOffset,
@@ -30,6 +32,7 @@
 
   const ADD_NEW_ID = '__add-new__';
   let editingFeedId: string | null = $state(null);
+  let editingRuleId: string | null = $state(null);
   let formUrl = $state('');
   let formName = $state('');
   let formIsHoliday = $state(false);
@@ -51,6 +54,12 @@
     formName = '';
     formIsHoliday = false;
     formError = null;
+  }
+
+  function addRule(): void {
+    const rule = makeRule();
+    config.rules = [...config.rules, rule];
+    editingRuleId = rule.id;
   }
 
   function startEdit(feed: CalendarFeed): void {
@@ -193,10 +202,7 @@
     importError = null;
     try {
       await navigator.clipboard.writeText(exportConfig(config));
-      ui.toast = 'Config copied';
-      setTimeout(() => {
-        if (ui.toast === 'Config copied') ui.toast = null;
-      }, 2000);
+      pushLog('Config copied');
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -227,10 +233,7 @@
     importError = null;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      ui.toast = 'Share link copied';
-      setTimeout(() => {
-        if (ui.toast === 'Share link copied') ui.toast = null;
-      }, 2000);
+      pushLog('Share link copied');
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -406,9 +409,21 @@
     </section>
 
     <section>
-      <h3>Find &amp; replace</h3>
-      <p class="hint section-hint">Rules below override per-calendar styles.</p>
-      <RulesEditor />
+      <div class="section-head">
+        <h3>Find &amp; replace</h3>
+        <button
+          type="button"
+          class="add-btn"
+          onclick={addRule}
+        >
+          <Icon name="plus" size={14} />
+          <span>Add rule</span>
+        </button>
+      </div>
+      <RulesEditor
+        editingRuleId={editingRuleId}
+        onEditingChange={(id) => (editingRuleId = id)}
+      />
     </section>
 
     <section>
@@ -418,6 +433,8 @@
           type="button"
           class="add-btn"
           aria-pressed={addingNew}
+          disabled={!online.value && !addingNew}
+          title={!online.value ? 'Offline — cannot validate new calendar' : undefined}
           onclick={() => (addingNew ? clearForm() : startAdd())}
         >
           <Icon name="plus" size={14} />
@@ -794,6 +811,11 @@
   .add-btn[aria-pressed='true'] {
     background: var(--ink);
     color: var(--paper);
+  }
+  .add-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-style: dashed;
   }
   .tz-now {
     display: inline-flex;

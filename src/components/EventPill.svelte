@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ui, config, focus } from '../lib/state.svelte';
+  import { ui, config, focus, pushLog } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
   import { longPress } from '../lib/haptics';
@@ -75,18 +75,8 @@
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       void navigator.clipboard
         .writeText(text)
-        .then(() => {
-          ui.toast = 'Copied';
-          setTimeout(() => {
-            if (ui.toast === 'Copied') ui.toast = null;
-          }, 2000);
-        })
-        .catch(() => {
-          ui.toast = 'Copy failed';
-          setTimeout(() => {
-            if (ui.toast === 'Copy failed') ui.toast = null;
-          }, 2000);
-        });
+        .then(() => pushLog('Copied event details'))
+        .catch(() => pushLog('Copy failed', 'error'));
     }
   }
 

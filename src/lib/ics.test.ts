@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseIcs, feedIdFor } from './ics';
+import { durationDays } from './format';
 
 const ICS = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -56,6 +57,76 @@ describe('parseIcs', () => {
     for (let i = 1; i < events.length; i++) {
       expect(events[i]!.start.getTime()).toBeGreaterThanOrEqual(events[i - 1]!.start.getTime());
     }
+  });
+});
+
+function christmasIcs(body: string): string {
+  return `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//test//EN
+BEGIN:VEVENT
+UID:xmas@test
+SUMMARY:Christmas Day
+${body}
+END:VEVENT
+END:VCALENDAR
+`;
+}
+
+describe('Christmas single-day all-day event', () => {
+  const range = [new Date('2026-01-01T00:00:00Z'), new Date('2026-12-31T23:59:59Z')] as const;
+
+  it('canonical DTSTART/DTEND VALUE=DATE (next-day exclusive) → 1 day', () => {
+    const events = parseIcs(
+      christmasIcs('DTSTART;VALUE=DATE:20261225\nDTEND;VALUE=DATE:20261226'),
+      'feed',
+      range[0],
+      range[1],
+    );
+    expect(events.length).toBe(1);
+    const ev = events[0]!;
+    expect(ev.allDay).toBe(true);
+    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+  });
+
+  it('DTSTART only (no DTEND) → parser fallback yields 1 day', () => {
+    const events = parseIcs(
+      christmasIcs('DTSTART;VALUE=DATE:20261225'),
+      'feed',
+      range[0],
+      range[1],
+    );
+    expect(events.length).toBe(1);
+    const ev = events[0]!;
+    expect(ev.allDay).toBe(true);
+    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+  });
+
+  it('DTSTART + DURATION:P1D → 1 day', () => {
+    const events = parseIcs(
+      christmasIcs('DTSTART;VALUE=DATE:20261225\nDURATION:P1D'),
+      'feed',
+      range[0],
+      range[1],
+    );
+    expect(events.length).toBe(1);
+    const ev = events[0]!;
+    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
+  });
+
+  it('recurring yearly Christmas via RRULE → each occurrence 1 day', () => {
+    const events = parseIcs(
+      christmasIcs(
+        'DTSTART;VALUE=DATE:20201225\nDTEND;VALUE=DATE:20201226\nRRULE:FREQ=YEARLY;COUNT=10',
+      ),
+      'feed',
+      range[0],
+      range[1],
+    );
+    expect(events.length).toBe(1);
+    const ev = events[0]!;
+    expect(ev.start.getUTCFullYear()).toBe(2026);
+    expect(durationDays(ev.start, ev.end, ev.allDay)).toBe(1);
   });
 });
 

@@ -6,7 +6,8 @@
   import SettingsPanel from './components/SettingsPanel.svelte';
   import ErrorModal from './components/ErrorModal.svelte';
   import ShareImportModal from './components/ShareImportModal.svelte';
-  import { config, events, ui, zoom, search, focus, displayEventsFor } from './lib/state.svelte';
+  import StatusBar from './components/StatusBar.svelte';
+  import { config, events, ui, zoom, search, focus, displayEventsFor, pushLog } from './lib/state.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
   import { saveConfig, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -28,13 +29,6 @@
   const DEFAULT_FEED_URLS = new Set<string>([GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL]);
   let healthCheckRan = false;
 
-  function flashToast(message: string, ms = 4000): void {
-    ui.toast = message;
-    setTimeout(() => {
-      if (ui.toast === message) ui.toast = null;
-    }, ms);
-  }
-
   function checkDefaultFeedHealth(): void {
     if (healthCheckRan) return;
     healthCheckRan = true;
@@ -43,7 +37,7 @@
     );
     if (failed.length === 0) return;
     const word = failed.length === 1 ? 'calendar' : 'calendars';
-    flashToast(`${failed.length} default ${word} failed to load — see Settings`);
+    pushLog(`${failed.length} default ${word} failed to load — see Settings`, 'warn');
   }
 
   async function loadAllFeeds(): Promise<void> {
@@ -322,23 +316,4 @@
 {#if ui.settingsOpen}
   <SettingsPanel onClose={() => (ui.settingsOpen = false)} onRefresh={loadAllFeeds} />
 {/if}
-{#if ui.toast}
-  <output class="toast">{ui.toast}</output>
-{/if}
-
-<style>
-  .toast {
-    position: fixed;
-    left: 50%;
-    bottom: 1.5em;
-    transform: translateX(-50%);
-    padding: 0.4em 0.9em;
-    border: 1px solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
-    font-size: 12px;
-    z-index: 40;
-    pointer-events: none;
-    box-shadow: var(--shadow-1);
-  }
-</style>
+<StatusBar />
