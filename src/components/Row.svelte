@@ -69,7 +69,7 @@
     ui.modalEvent = ev;
   }
 
-  const isHolidayFeed = $derived(feed.kind === 'holidays');
+  const isHolidayFeed = $derived(feed.category === 'holidays');
   const isFocusedRow = $derived(focus.rowIndex === rowIndex);
 </script>
 

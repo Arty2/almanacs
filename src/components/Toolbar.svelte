@@ -54,6 +54,10 @@
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
   }
 
+  function clearTempMarker(): void {
+    window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
+  }
+
   function toggleSearch(): void {
     search.open = !search.open;
     if (search.open) {
@@ -103,7 +107,14 @@
 </script>
 
 <header class="toolbar">
-  <button class="title" type="button" onclick={jumpToToday} aria-label="Jump to today" title="Jump to today">
+  <button
+    class="title"
+    type="button"
+    onclick={jumpToToday}
+    ondblclick={clearTempMarker}
+    aria-label="Jump to today (double-click to clear marker)"
+    title="Jump to today"
+  >
     <Icon name="today" size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
     <span class="title-now" data-mono aria-hidden="true">

@@ -2,18 +2,20 @@ import type {
   AppConfig,
   CalendarFeed,
   DateFormat,
+  FeedCategory,
   FindReplaceRule,
   Locale,
   StyleVariant,
   Theme,
   Zoom,
 } from './types';
+import { FEED_CATEGORIES } from './types';
 import { feedIdFor } from './ics';
 
 export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
 
-type SharedFeed = { u: string; n: string; h: 0 | 1 };
+type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView };
@@ -52,7 +54,8 @@ export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
       .map((f) => ({
         u: (f.source as { kind: 'user'; url: string }).url,
         n: f.name,
-        h: f.kind === 'holidays' ? 1 : 0,
+        h: f.category === 'holidays' ? 1 : 0,
+        ...(f.category && f.category !== 'none' && f.category !== 'holidays' ? { c: f.category } : {}),
       })),
     r: config.rules.map((r) => ({ i: r.id, f: r.find, r: r.replace, s: r.style })),
   };
@@ -83,13 +86,20 @@ export function decodeShareState(
       if (!f || typeof f !== 'object') return;
       if (typeof f.u !== 'string' || typeof f.n !== 'string') return;
       const source = { kind: 'user' as const, url: f.u };
+      let category: FeedCategory;
+      if (typeof f.c === 'string' && (FEED_CATEGORIES as string[]).includes(f.c)) {
+        category = f.c as FeedCategory;
+      } else {
+        category = f.h === 1 ? 'holidays' : 'none';
+      }
       feeds.push({
         id: feedIdFor(source),
         source,
         name: f.n,
         collapsed: false,
         order: i,
-        kind: f.h === 1 ? 'holidays' : 'events',
+        kind: category === 'holidays' ? 'holidays' : 'events',
+        category,
       });
     });
     const rules: FindReplaceRule[] = [];

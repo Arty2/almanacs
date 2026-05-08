@@ -1,5 +1,5 @@
-import type { AppConfig, CalendarColor, CalendarFeed, StyleVariant, Theme } from './types';
-import { CALENDAR_COLORS, SCHEMA_VERSION } from './types';
+import type { AppConfig, CalendarColor, CalendarFeed, FeedCategory, StyleVariant, Theme } from './types';
+import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION } from './types';
 
 const VALID_STYLES: StyleVariant[] = [
   'none', 'inverted-dashed', 'inverted-strike', 'hidden', 'muted', 'highlight',
@@ -20,7 +20,7 @@ const GREEK_HOLIDAYS_LEGACY_URLS = new Set<string>([
 export const REFRESH_INTERVAL_OPTIONS = [
   30 * 60 * 1000,
   60 * 60 * 1000,
-  120 * 60 * 1000,
+  240 * 60 * 1000,
 ] as const;
 
 export function snapRefreshInterval(ms: number): number {
@@ -46,6 +46,7 @@ export function defaultConfig(): AppConfig {
     collapsed: false,
     order: 0,
     kind: 'holidays',
+    category: 'holidays',
   };
   const usa: CalendarFeed = {
     id: 'user:usa-bank-holidays',
@@ -54,10 +55,11 @@ export function defaultConfig(): AppConfig {
     collapsed: false,
     order: 1,
     kind: 'holidays',
+    category: 'holidays',
   };
   return {
     feeds: [greek, usa],
-    refreshIntervalMs: 30 * 60 * 1000,
+    refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
     theme: resolveSystemTheme(),
     locale: 'en',
@@ -106,13 +108,21 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     typeof f.style === 'string' && (VALID_STYLES as string[]).includes(f.style)
       ? (f.style as StyleVariant)
       : undefined;
+  const kind: 'events' | 'holidays' = f.kind === 'holidays' ? 'holidays' : 'events';
+  let category: FeedCategory;
+  if (typeof f.category === 'string' && (FEED_CATEGORIES as string[]).includes(f.category)) {
+    category = f.category as FeedCategory;
+  } else {
+    category = kind === 'holidays' ? 'holidays' : 'none';
+  }
   return {
     id: f.id,
     source: normalizedSource,
     name: f.name,
     collapsed: f.collapsed === true,
     order: typeof f.order === 'number' ? f.order : fallbackOrder,
-    kind: f.kind === 'holidays' ? 'holidays' : 'events',
+    kind: category === 'holidays' ? 'holidays' : 'events',
+    category,
     ...(color ? { color } : {}),
     ...(style ? { style } : {}),
   };
@@ -183,7 +193,7 @@ export function importConfig(json: string): AppConfig {
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid config');
   if (!Array.isArray(parsed.feeds)) throw new Error('Invalid feeds');
   const version = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 0;
-  if (version !== SCHEMA_VERSION && version !== 1 && version !== 2 && version !== 3) {
+  if (version !== SCHEMA_VERSION && version !== 1 && version !== 2 && version !== 3 && version !== 4) {
     throw new Error('Unsupported schema version: ' + parsed.schemaVersion);
   }
   return migrate(parsed as Record<string, unknown>);

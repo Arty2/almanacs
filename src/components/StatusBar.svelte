@@ -47,7 +47,15 @@
       return;
     }
     const startedExpanded = dragStartHeight > COLLAPSED_HEIGHT + 2;
+    const startedCollapsed = !startedExpanded;
     const draggedDown = e.clientY > dragStartY;
+    const draggedUp = e.clientY < dragStartY - 30;
+    if (startedCollapsed && draggedUp) {
+      height = maxHeight();
+      lastExpandedHeight = height;
+      ui.statusExpanded = true;
+      return;
+    }
     if (startedExpanded && draggedDown) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;

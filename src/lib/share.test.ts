@@ -16,8 +16,8 @@ describe('share encode/decode', () => {
   it('round-trips user feeds + rules', () => {
     const cfg = configWith({
       feeds: [
-        { id: 'a', source: { kind: 'user', url: 'https://example.com/cal.ics' }, name: 'Work', collapsed: false, order: 0, kind: 'events' },
-        { id: 'b', source: { kind: 'user', url: 'https://example.com/h.ics' }, name: 'Holidays', collapsed: false, order: 1, kind: 'holidays' },
+        { id: 'a', source: { kind: 'user', url: 'https://example.com/cal.ics' }, name: 'Work', collapsed: false, order: 0, kind: 'events', category: 'none' },
+        { id: 'b', source: { kind: 'user', url: 'https://example.com/h.ics' }, name: 'Holidays', collapsed: false, order: 1, kind: 'holidays', category: 'holidays' },
       ],
       rules: [
         { id: 'r1', find: 'foo', replace: 'bar', style: 'highlight' },
@@ -71,8 +71,8 @@ describe('share encode/decode', () => {
   it('skips secret feeds (only user feeds shareable)', () => {
     const cfg = configWith({
       feeds: [
-        { id: 's', source: { kind: 'secret', id: 'xx' }, name: 'Secret', collapsed: false, order: 0, kind: 'events' },
-        { id: 'u', source: { kind: 'user', url: 'https://x.com/a.ics' }, name: 'Mine', collapsed: false, order: 1, kind: 'events' },
+        { id: 's', source: { kind: 'secret', id: 'xx' }, name: 'Secret', collapsed: false, order: 0, kind: 'events', category: 'none' },
+        { id: 'u', source: { kind: 'user', url: 'https://x.com/a.ics' }, name: 'Mine', collapsed: false, order: 1, kind: 'events', category: 'none' },
       ],
     });
     const payload = encodeShareState(cfg);

@@ -131,7 +131,7 @@
     border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    overflow: hidden;
+    overflow: visible;
     box-sizing: border-box;
     z-index: 0;
   }
@@ -155,7 +155,7 @@
     text-align: left;
     cursor: pointer;
     font: inherit;
-    overflow: hidden;
+    overflow: visible;
   }
   h3 {
     margin: 0;
@@ -163,7 +163,9 @@
     font-weight: 600;
     line-height: 1.4;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 0.5px var(--paper);
+    text-shadow: 0 0 1px var(--paper);
   }
 </style>

@@ -4,6 +4,12 @@ export type FeedSource =
 
 export type FeedKind = 'events' | 'holidays';
 
+export type FeedCategory = 'none' | 'holidays' | 'travel-international' | 'travel-local';
+
+export const FEED_CATEGORIES: FeedCategory[] = [
+  'none', 'holidays', 'travel-international', 'travel-local',
+];
+
 export type CalendarColor =
   | 'peach'
   | 'amber'
@@ -23,6 +29,7 @@ export type CalendarFeed = {
   collapsed: boolean;
   order: number;
   kind: FeedKind;
+  category: FeedCategory;
   color?: CalendarColor;
   style?: StyleVariant;
 };
@@ -98,4 +105,4 @@ export type AppConfig = {
   futureMonths: number;
 };
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;

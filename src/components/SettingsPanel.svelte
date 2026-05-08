@@ -20,6 +20,7 @@
     type CalendarColor,
     type CalendarFeed,
     type DateFormat,
+    type FeedCategory,
     type Locale,
     type StyleVariant,
     type Theme,
@@ -35,7 +36,7 @@
   let editingRuleId: string | null = $state(null);
   let formUrl = $state('');
   let formName = $state('');
-  let formIsHoliday = $state(false);
+  let formCategory: FeedCategory = $state('none');
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
   let fileInput: HTMLInputElement | undefined = $state();
@@ -52,7 +53,7 @@
     editingFeedId = null;
     formUrl = '';
     formName = '';
-    formIsHoliday = false;
+    formCategory = 'none';
     formError = null;
   }
 
@@ -66,7 +67,7 @@
     editingFeedId = feed.id;
     formUrl = feed.source.kind === 'user' ? feed.source.url : '';
     formName = feed.name;
-    formIsHoliday = feed.kind === 'holidays';
+    formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
     formError = null;
   }
 
@@ -74,7 +75,7 @@
     editingFeedId = ADD_NEW_ID;
     formUrl = '';
     formName = '';
-    formIsHoliday = false;
+    formCategory = 'none';
     formError = null;
   }
 
@@ -109,7 +110,8 @@
       const target = config.feeds.find((f) => f.id === editingFeed.id);
       if (!target) return;
       target.name = formName.trim() || target.name;
-      target.kind = formIsHoliday ? 'holidays' : 'events';
+      target.category = formCategory;
+      target.kind = formCategory === 'holidays' ? 'holidays' : 'events';
       if (target.source.kind === 'user' && formUrl.trim()) {
         target.source = { kind: 'user', url: formUrl.trim() };
       }
@@ -133,7 +135,8 @@
       name: formName.trim() || formUrl.trim(),
       collapsed: false,
       order: config.feeds.length,
-      kind: formIsHoliday ? 'holidays' : 'events',
+      kind: formCategory === 'holidays' ? 'holidays' : 'events',
+      category: formCategory,
     };
     config.feeds.push(feed);
     clearForm();
@@ -290,9 +293,14 @@
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
     { id: 'muted', label: 'Muted' },
-    { id: 'highlight', label: 'Highlight' },
     { id: 'inverted-dashed', label: 'Inverted (dashed)' },
     { id: 'inverted-strike', label: 'Inverted (strike)' },
+  ];
+  const categoryOptions: { id: FeedCategory; label: string }[] = [
+    { id: 'none', label: 'None' },
+    { id: 'holidays', label: 'Holidays' },
+    { id: 'travel-international', label: 'Travel (International)' },
+    { id: 'travel-local', label: 'Travel (Local)' },
   ];
 
   function onBackdropClick(e: MouseEvent): void {
@@ -309,6 +317,20 @@
     if (!tz) return '';
     const offset = formatUtcOffset(tz);
     return offset || '';
+  }
+
+  function categoryIconName(c: FeedCategory): string | null {
+    if (c === 'holidays') return 'category-holiday';
+    if (c === 'travel-international') return 'category-airplane';
+    if (c === 'travel-local') return 'category-bus';
+    return null;
+  }
+
+  function categoryLabelText(c: FeedCategory): string {
+    if (c === 'holidays') return 'Holidays';
+    if (c === 'travel-international') return 'Travel (International)';
+    if (c === 'travel-local') return 'Travel (Local)';
+    return '';
   }
 
   function feedStaleSince(feed: CalendarFeed): string {
@@ -463,8 +485,12 @@
                 <input id="new-form-name" type="text" bind:value={formName} placeholder="My calendar" />
               </div>
               <div class="field">
-                <label for="new-form-holiday">Holidays Calendar</label>
-                <input id="new-form-holiday" type="checkbox" bind:checked={formIsHoliday} />
+                <label for="new-form-category">Category</label>
+                <select id="new-form-category" bind:value={formCategory}>
+                  {#each categoryOptions as c (c.id)}
+                    <option value={c.id}>{c.label}</option>
+                  {/each}
+                </select>
               </div>
               <div class="form-actions">
                 <button type="button" onclick={clearForm}>Cancel</button>
@@ -492,9 +518,9 @@
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
               </button>
-              {#if feed.kind === 'holidays'}
-                <span class="kind-mark" title="Holidays Calendar">
-                  <Icon name="calendar-strike" size={14} />
+              {#if categoryIconName(feed.category)}
+                <span class="kind-mark" title={categoryLabelText(feed.category)}>
+                  <Icon name={categoryIconName(feed.category)!} size={14} />
                 </span>
               {/if}
               {#if ui.feedErrors[feed.id]}
@@ -558,8 +584,12 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="form-holiday-{feed.id}">Holidays Calendar</label>
-                  <input id="form-holiday-{feed.id}" type="checkbox" bind:checked={formIsHoliday} />
+                  <label for="form-category-{feed.id}">Category</label>
+                  <select id="form-category-{feed.id}" bind:value={formCategory}>
+                    {#each categoryOptions as c (c.id)}
+                      <option value={c.id}>{c.label}</option>
+                    {/each}
+                  </select>
                 </div>
                 <div class="form-actions">
                   <button type="button" onclick={clearForm}>Cancel</button>
@@ -576,13 +606,14 @@
       <h3>Refresh interval</h3>
       <div class="segmented" role="radiogroup" aria-label="Refresh interval">
         {#each REFRESH_INTERVAL_OPTIONS as ms (ms)}
+          {@const minutes = Math.round(ms / 60000)}
           <button
             type="button"
             class="segmented-btn"
             role="radio"
             aria-checked={config.refreshIntervalMs === ms}
             onclick={() => (config.refreshIntervalMs = ms)}
-          >{Math.round(ms / 60000)}m</button>
+          >{minutes >= 60 ? minutes / 60 + 'h' : minutes + 'm'}</button>
         {/each}
       </div>
     </section>
@@ -600,7 +631,7 @@
           disabled={shareDisabled}
           title={shareLabel}
         >Share</button>
-        <button type="button" class="danger" onclick={resetAndClear}>Reset &amp; Clear</button>
+        <button type="button" class="danger" onclick={resetAndClear}>Reset</button>
         <input
           bind:this={fileInput}
           type="file"
@@ -865,9 +896,12 @@
     border: 1px solid var(--ink);
   }
   .segmented {
-    display: inline-flex;
+    display: flex;
+    width: 100%;
   }
   .segmented-btn {
+    flex: 1 1 0;
+    min-width: 0;
     height: 32px;
     padding: 0 0.9em;
     border: 1px solid var(--ink);
@@ -876,7 +910,6 @@
     cursor: pointer;
     font-family: var(--mono);
     font-size: 12px;
-    min-width: 48px;
   }
   .segmented-btn + .segmented-btn {
     border-left-width: 0;
@@ -886,15 +919,17 @@
     color: var(--paper);
   }
   .config-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.4em;
-    flex-wrap: wrap;
   }
   .config-actions button {
+    width: 100%;
     height: 32px;
     padding: 0 12px;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);

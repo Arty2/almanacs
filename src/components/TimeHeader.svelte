@@ -1,5 +1,6 @@
 <script lang="ts">
   import { zoom, config } from '../lib/state.svelte';
+  import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
   import { HEADER_TIERS, ticksBetween, formatTier, tierToGranularity } from '../lib/time';
   import { formatMonth, formatDayInitial, formatDate, isWeekend } from '../lib/format';
@@ -10,8 +11,18 @@
     rangeEnd: Date;
     pxPerDay: number;
     scrollEl: HTMLElement | undefined;
+    holidayDayKeys?: Set<string>;
   };
-  const { rangeStart, rangeEnd, pxPerDay }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, holidayDayKeys }: Props = $props();
+
+  function dayKey(d: Date): string {
+    return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+  }
+
+  function setTempMarker(d: Date): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('cal:set-temp-marker', { detail: { date: d } }));
+  }
 
   type Band = { date: Date; left: number; width: number; label: string };
   type TierData = { tier: Tier; bands: Band[] };
@@ -59,32 +70,39 @@
   }
 </script>
 
-<div class="tiers">
+<div class="tiers" data-zoom={zoom.value}>
   {#each tiers as t (t.tier)}
     <div class="tier" data-tier={t.tier}>
       {#each t.bands as b (b.date.toISOString())}
-        <div
+        <button
+          type="button"
           class="band"
+          data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
+          onclick={() => setTempMarker(b.date)}
         >
           <time datetime={b.date.toISOString()} class="label">{b.label}</time>
-        </div>
+        </button>
       {/each}
     </div>
   {/each}
   {#if showDayLetters}
     <div class="tier" data-tier="day-letters">
       {#each dayBands as b (b.date.toISOString())}
-        <div
+        <button
+          type="button"
           class="band day-letter-band"
           data-weekend={isWeekend(b.date) ? 'true' : null}
+          data-holiday={holidayDayKeys?.has(dayKey(b.date)) ? 'true' : null}
+          data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
+          onclick={() => setTempMarker(b.date)}
         >
           <time datetime={b.date.toISOString()} class="day-letter">{b.label}</time>
           <span class="day-num">{b.date.getUTCDate()}</span>
-        </div>
+        </button>
       {/each}
     </div>
   {/if}
@@ -111,10 +129,33 @@
     top: 0;
     height: 100%;
     border-left: 1px solid var(--ink);
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+    background: transparent;
+    padding: 0;
     box-sizing: border-box;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    cursor: pointer;
   }
   .band[data-weekend='true'] {
     background: var(--weekend-bg);
+  }
+  .band[data-past='true'] .label,
+  .band[data-past='true'] .day-letter,
+  .band[data-past='true'] .day-num {
+    color: var(--ink-muted);
+  }
+  [data-zoom='month'] .day-letter-band[data-holiday='true'] {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 4px,
+      var(--holiday-stripe) 4px,
+      var(--holiday-stripe) 5px
+    );
   }
   .label {
     position: sticky;

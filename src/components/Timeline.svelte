@@ -1,7 +1,7 @@
 <script lang="ts">
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
-  import { zoom, search, config, focus, displayEventsFor } from '../lib/state.svelte';
+  import { zoom, search, config, focus, ui, displayEventsFor } from '../lib/state.svelte';
   import { PX_PER_DAY, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend } from '../lib/format';
@@ -92,7 +92,7 @@
   const holidayDayKeys = $derived.by(() => {
     const out = new Set<string>();
     for (const feed of config.feeds) {
-      if (feed.kind !== 'holidays') continue;
+      if (feed.category !== 'holidays') continue;
       const arr = visibleByFeed[feed.id] ?? [];
       for (const ev of arr) {
         const start = ev.start;
@@ -217,6 +217,26 @@
     return () => window.removeEventListener('cal:scroll-to-date', handler as EventListener);
   });
 
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (e: Event): void => {
+      const detail = (e as CustomEvent<{ date: Date }>).detail;
+      if (!detail) return;
+      ui.tempMarkerMs = detail.date.getTime();
+    };
+    window.addEventListener('cal:set-temp-marker', handler as EventListener);
+    return () => window.removeEventListener('cal:set-temp-marker', handler as EventListener);
+  });
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (): void => {
+      ui.tempMarkerMs = null;
+    };
+    window.addEventListener('cal:clear-temp-marker', handler);
+    return () => window.removeEventListener('cal:clear-temp-marker', handler);
+  });
+
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
   function setZoomPreservingCenter(next: Zoom): void {
@@ -291,7 +311,7 @@
 >
   <div class="scroll-content" style="width: {totalWidth}px;">
     <header id="time-header">
-      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} />
+      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} />
     </header>
     {#each holidayStrips as h, i (i)}
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
@@ -315,6 +335,13 @@
       {/each}
     </div>
     <hr class="today-line" style="left: {todayPx}px" />
+    {#if ui.tempMarkerMs != null}
+      <hr
+        class="temp-line"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px"
+        aria-hidden="true"
+      />
+    {/if}
   </div>
 </main>
 
@@ -368,7 +395,7 @@
     width: 0;
     margin: 0;
     border: none;
-    border-left: 2px dotted var(--accent);
+    border-left: 1px dashed var(--accent);
     z-index: 6;
     pointer-events: none;
   }
@@ -382,5 +409,16 @@
     height: 10px;
     border-radius: 50%;
     background: var(--accent);
+  }
+  .temp-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    margin: 0;
+    border: none;
+    border-left: 1px dotted var(--accent);
+    z-index: 6;
+    pointer-events: none;
   }
 </style>

@@ -131,19 +131,20 @@ describe('config import/export', () => {
     expect(greek.source.kind === 'user' && greek.source.url).toBe(GREEK_HOLIDAYS_URL);
   });
 
-  it('default refresh interval is 30 minutes', () => {
-    expect(defaultConfig().refreshIntervalMs).toBe(30 * 60_000);
-    expect(REFRESH_INTERVAL_OPTIONS).toEqual([30 * 60_000, 60 * 60_000, 120 * 60_000]);
+  it('default refresh interval is 1 hour', () => {
+    expect(defaultConfig().refreshIntervalMs).toBe(60 * 60_000);
+    expect(REFRESH_INTERVAL_OPTIONS).toEqual([30 * 60_000, 60 * 60_000, 240 * 60_000]);
   });
 
   it('snaps non-canonical refresh intervals to the nearest allowed value', () => {
     expect(snapRefreshInterval(1 * 60_000)).toBe(30 * 60_000);
     expect(snapRefreshInterval(45 * 60_000)).toBe(30 * 60_000);
     expect(snapRefreshInterval(50 * 60_000)).toBe(60 * 60_000);
-    expect(snapRefreshInterval(95 * 60_000)).toBe(120 * 60_000);
+    expect(snapRefreshInterval(95 * 60_000)).toBe(60 * 60_000);
+    expect(snapRefreshInterval(200 * 60_000)).toBe(240 * 60_000);
   });
 
-  it('migrates a stored 15-minute interval up to the canonical 30 minutes', () => {
+  it('migrates a stored 15-minute interval up to the nearest canonical interval', () => {
     const stale = JSON.stringify({
       schemaVersion: 3,
       feeds: [],
@@ -151,6 +152,16 @@ describe('config import/export', () => {
     });
     const restored = importConfig(stale);
     expect(restored.refreshIntervalMs).toBe(30 * 60_000);
+  });
+
+  it('migrates a stored 120-minute interval to the new 4-hour canonical', () => {
+    const stale = JSON.stringify({
+      schemaVersion: 4,
+      feeds: [],
+      refreshIntervalMs: 120 * 60_000,
+    });
+    const restored = importConfig(stale);
+    expect([60 * 60_000, 240 * 60_000]).toContain(restored.refreshIntervalMs);
   });
 
   it("resolves theme: 'system' from a v2 config to a concrete light/dark", () => {

@@ -67,6 +67,7 @@ export const ui = $state<{
   feedErrors: Record<string, string>;
   shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: ShareImportView | null } | null;
   rawEventUid: string | null;
+  tempMarkerMs: number | null;
 }>({
   modalEvent: null,
   settingsOpen: false,
@@ -80,6 +81,7 @@ export const ui = $state<{
   feedErrors: {},
   shareImport: null,
   rawEventUid: null,
+  tempMarkerMs: null,
 });
 
 const MAX_LOG_ENTRIES = 50;

@@ -2,6 +2,11 @@
   import IconButton from './IconButton.svelte';
   import { ui, config, events, pushLog } from '../lib/state.svelte';
   import { formatDateLong, formatRange, formatTime } from '../lib/format';
+  import {
+    buildGoogleAddUrl,
+    buildIcsDownload,
+    buildOutlookAddUrl,
+  } from '../lib/calendar-links';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showRaw = $state(false);
@@ -39,6 +44,17 @@
     } catch {
       pushLog('Copy failed', 'error');
     }
+  }
+
+  function downloadIcs(ev: NonNullable<typeof ui.modalEvent>): void {
+    const { dataUrl, filename } = buildIcsDownload(ev);
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    pushLog('Downloaded ' + filename);
   }
 
   function buildDetails(ev: NonNullable<typeof ui.modalEvent>): string {
@@ -114,6 +130,25 @@
           {/if}
         </div>
       </footer>
+      <div class="modal-add-row">
+        <a
+          class="action-btn"
+          href={buildOutlookAddUrl(ev)}
+          target="_blank"
+          rel="noopener noreferrer"
+        >M365</a>
+        <a
+          class="action-btn"
+          href={buildGoogleAddUrl(ev)}
+          target="_blank"
+          rel="noopener noreferrer"
+        >GCal</a>
+        <button
+          type="button"
+          class="action-btn"
+          onclick={() => downloadIcs(ev)}
+        >iCal</button>
+      </div>
     </article>
   {/if}
 </dialog>
@@ -175,9 +210,22 @@
     color: var(--ink);
     cursor: pointer;
     font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
   }
   .action-btn:hover {
     background: var(--paper-2);
+  }
+  .modal-add-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4em;
+    margin-top: 0.5em;
+  }
+  .modal-add-row .action-btn {
+    width: 100%;
   }
   .raw-toggle {
     font-family: var(--mono);

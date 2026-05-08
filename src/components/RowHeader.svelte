@@ -89,7 +89,22 @@
   }
 
   const expandLabel = $derived(feed.collapsed ? 'Expand row' : 'Collapse row');
-  const isHolidayFeed = $derived(feed.kind === 'holidays');
+  const categoryIconName = $derived.by<string | null>(() => {
+    switch (feed.category) {
+      case 'holidays': return 'category-holiday';
+      case 'travel-international': return 'category-airplane';
+      case 'travel-local': return 'category-bus';
+      default: return null;
+    }
+  });
+  const categoryLabel = $derived.by<string>(() => {
+    switch (feed.category) {
+      case 'holidays': return 'Holidays';
+      case 'travel-international': return 'Travel (International)';
+      case 'travel-local': return 'Travel (Local)';
+      default: return '';
+    }
+  });
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
   const feedTz = $derived(events.tzByFeed[feed.id] ?? null);
   const rawTzLabel = $derived(feedTz ? formatUtcOffset(feedTz) : '');
@@ -115,6 +130,7 @@
   class="row-header"
   data-collapsed={feed.collapsed ? 'true' : null}
   data-kind={feed.kind}
+  data-category={feed.category}
   data-feed-id={feed.id}
 >
   <div class="lead">
@@ -135,11 +151,6 @@
           <span class="stale-text" data-mono>stale since {staleSinceLabel}</span>
         {/if}
       </button>
-    {/if}
-    {#if isHolidayFeed && !errorMessage}
-      <span class="holiday-mark" aria-hidden="true" title="Holidays Calendar">
-        <Icon name="calendar-strike" size={14} />
-      </span>
     {/if}
     <button
       bind:this={titleEl}
@@ -179,6 +190,11 @@
       size={18}
       onclick={() => jumpRelative(1)}
     />
+    {#if categoryIconName}
+      <span class="category-mark" aria-hidden="true" title={categoryLabel}>
+        <Icon name={categoryIconName} size={14} />
+      </span>
+    {/if}
   </div>
 </header>
 
@@ -199,9 +215,9 @@
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    border-bottom: none;
+    border-bottom: 1px dashed var(--ink-faint);
   }
-  .row-header[data-kind='holidays'] .name-text {
+  .row-header[data-category='holidays'] .name-text {
     color: var(--ink-muted);
   }
   .lead {
@@ -243,8 +259,8 @@
     border: 1px solid transparent;
     background: transparent;
     color: inherit;
-    padding: 4px 6px;
-    height: 28px;
+    padding: 6px 8px;
+    height: 32px;
     font: inherit;
     text-align: left;
     cursor: pointer;
@@ -254,7 +270,7 @@
     border-color: var(--ink-faint);
   }
   .name-text {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -280,7 +296,7 @@
     border-radius: 999px;
     flex-shrink: 0;
   }
-  .holiday-mark {
+  .category-mark {
     display: inline-flex;
     align-items: center;
     color: var(--ink-muted);

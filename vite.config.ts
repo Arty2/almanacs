@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/*.svg'],
       manifest: {
-        name: 'Calendar Timeline',
-        short_name: 'Calendar',
-        description: 'ICS feed timeline with offline support',
+        name: '/calendari',
+        short_name: 'calendari',
+        description: 'A timeline view for your iCal feeds.',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
