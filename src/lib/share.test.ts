@@ -103,4 +103,23 @@ describe('share encode/decode', () => {
     expect(decoded!.feeds).toEqual([]);
     expect(decoded!.rules).toEqual([]);
   });
+
+  it('round-trips a per-feed timezone override', () => {
+    const cfg = configWith({
+      feeds: [
+        {
+          id: 'a',
+          source: { kind: 'user', url: 'https://example.com/cal.ics' },
+          name: 'Work',
+          collapsed: false,
+          order: 0,
+          kind: 'events',
+          category: 'none',
+          timezone: 'America/Los_Angeles',
+        },
+      ],
+    });
+    const decoded = decodeShareState(encodeShareState(cfg));
+    expect(decoded!.feeds[0]!.timezone).toBe('America/Los_Angeles');
+  });
 });

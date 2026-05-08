@@ -15,7 +15,7 @@ import { feedIdFor } from './ics';
 export const SHARE_URL_LIMIT = 2000;
 export const SHARE_PARAM = 's';
 
-type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory };
+type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tz?: string };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
 type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView };
@@ -56,6 +56,7 @@ export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
         n: f.name,
         h: f.category === 'holidays' ? 1 : 0,
         ...(f.category && f.category !== 'none' && f.category !== 'holidays' ? { c: f.category } : {}),
+        ...(f.timezone ? { tz: f.timezone } : {}),
       })),
     r: config.rules.map((r) => ({ i: r.id, f: r.find, r: r.replace, s: r.style })),
   };
@@ -92,6 +93,8 @@ export function decodeShareState(
       } else {
         category = f.h === 1 ? 'holidays' : 'none';
       }
+      const timezone =
+        typeof f.tz === 'string' && f.tz.trim().length > 0 ? f.tz.trim() : undefined;
       feeds.push({
         id: feedIdFor(source),
         source,
@@ -100,6 +103,7 @@ export function decodeShareState(
         order: i,
         kind: category === 'holidays' ? 'holidays' : 'events',
         category,
+        ...(timezone ? { timezone } : {}),
       });
     });
     const rules: FindReplaceRule[] = [];

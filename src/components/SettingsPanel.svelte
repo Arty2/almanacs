@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import RulesEditor from './RulesEditor.svelte';
-  import { config, ui, zoom, events, pushLog } from '../lib/state.svelte';
+  import { config, ui, zoom, events, effectiveFeedTz, pushLog } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { clock } from '../lib/clock.svelte';
   import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
@@ -13,6 +13,7 @@
     formatUtcOffset,
     formatCurrentTzLabel,
     isDaylight,
+    TZ_OVERRIDE_OPTIONS,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
   import {
@@ -37,6 +38,7 @@
   let formUrl = $state('');
   let formName = $state('');
   let formCategory: FeedCategory = $state('none');
+  let formTimezone = $state('');
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
   let fileInput: HTMLInputElement | undefined = $state();
@@ -54,6 +56,7 @@
     formUrl = '';
     formName = '';
     formCategory = 'none';
+    formTimezone = '';
     formError = null;
   }
 
@@ -68,6 +71,7 @@
     formUrl = feed.source.kind === 'user' ? feed.source.url : '';
     formName = feed.name;
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
+    formTimezone = feed.timezone ?? '';
     formError = null;
   }
 
@@ -76,6 +80,7 @@
     formUrl = '';
     formName = '';
     formCategory = 'none';
+    formTimezone = '';
     formError = null;
   }
 
@@ -112,6 +117,8 @@
       target.name = formName.trim() || target.name;
       target.category = formCategory;
       target.kind = formCategory === 'holidays' ? 'holidays' : 'events';
+      if (formTimezone) target.timezone = formTimezone;
+      else delete target.timezone;
       if (target.source.kind === 'user' && formUrl.trim()) {
         target.source = { kind: 'user', url: formUrl.trim() };
       }
@@ -137,6 +144,7 @@
       order: config.feeds.length,
       kind: formCategory === 'holidays' ? 'holidays' : 'events',
       category: formCategory,
+      ...(formTimezone ? { timezone: formTimezone } : {}),
     };
     config.feeds.push(feed);
     clearForm();
@@ -313,7 +321,7 @@
   }
 
   function feedTzLabel(feed: CalendarFeed): string {
-    const tz = events.tzByFeed[feed.id];
+    const tz = effectiveFeedTz(feed.id);
     if (!tz) return '';
     const offset = formatUtcOffset(tz);
     return offset || '';
@@ -492,6 +500,15 @@
                   {/each}
                 </select>
               </div>
+              <div class="field">
+                <label for="new-form-tz">Time zone</label>
+                <select id="new-form-tz" bind:value={formTimezone}>
+                  <option value="">Autodetected</option>
+                  {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
+                    <option value={tz}>{tz} ({formatUtcOffset(tz)})</option>
+                  {/each}
+                </select>
+              </div>
               <div class="form-actions">
                 <button type="button" onclick={clearForm}>Cancel</button>
                 <button type="submit" class="primary">Add</button>
@@ -588,6 +605,18 @@
                   <select id="form-category-{feed.id}" bind:value={formCategory}>
                     {#each categoryOptions as c (c.id)}
                       <option value={c.id}>{c.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="form-tz-{feed.id}">Time zone</label>
+                  <select id="form-tz-{feed.id}" bind:value={formTimezone}>
+                    <option value=""
+                      >Autodetected{events.tzByFeed[feed.id]
+                        ? ' (' + events.tzByFeed[feed.id] + ')'
+                        : ''}</option>
+                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
+                      <option value={tz}>{tz} ({formatUtcOffset(tz)})</option>
                     {/each}
                   </select>
                 </div>
@@ -883,17 +912,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.6em;
-  }
-  .form-actions {
-    display: flex;
-    gap: 0.4em;
-    justify-content: flex-end;
-  }
-  .primary {
-    padding: 6px 12px;
-    background: var(--ink);
-    color: var(--paper);
-    border: 1px solid var(--ink);
   }
   .segmented {
     display: flex;

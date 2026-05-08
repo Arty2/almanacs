@@ -104,3 +104,9 @@ export function displayEventsFor(feedId: string): DisplayEvent[] {
   const raw = events.byFeed[feedId] ?? [];
   return applyRules(raw, config.rules);
 }
+
+export function effectiveFeedTz(feedId: string): string | null {
+  const feed = config.feeds.find((f) => f.id === feedId);
+  if (feed?.timezone && feed.timezone.length > 0) return feed.timezone;
+  return events.tzByFeed[feedId] ?? null;
+}

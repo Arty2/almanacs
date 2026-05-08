@@ -199,6 +199,25 @@ article[data-cal-color="lavender"] { background: var(--cal-lavender-bg) !importa
   filter: invert(1);
 }
 
+.form-actions {
+  display: flex;
+  gap: 0.5em;
+  justify-content: flex-end;
+}
+.form-actions > button {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+}
+.form-actions > button.primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
 /* Capitalise interactive control labels for visual consistency. Calendar
    pills, file/calendar names, search input, log entries, and timestamps
    keep their casing because they reflect user-supplied or formatted data. */

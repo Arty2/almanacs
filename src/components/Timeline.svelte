@@ -7,6 +7,7 @@
   import { isWeekend } from '../lib/format';
   import { buildIndex, search as runSearch } from '../lib/search';
   import { pinchZoom } from '../lib/pinch';
+  import { wheelZoom } from '../lib/wheel-zoom';
   import { today } from '../lib/today.svelte';
   import type { DisplayEvent, Zoom } from '../lib/types';
 
@@ -275,6 +276,15 @@
   $effect(() => {
     if (!scrollEl) return;
     const handle = pinchZoom(scrollEl, {
+      onZoomIn: () => shiftZoom(-1),
+      onZoomOut: () => shiftZoom(1),
+    });
+    return () => handle.destroy();
+  });
+
+  $effect(() => {
+    if (!scrollEl) return;
+    const handle = wheelZoom(scrollEl, {
       onZoomIn: () => shiftZoom(-1),
       onZoomOut: () => shiftZoom(1),
     });

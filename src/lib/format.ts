@@ -221,6 +221,24 @@ export function formatCurrentTzLabel(tz: Timezone): string {
   return offset ? city + ' · ' + offset : city;
 }
 
+export const TZ_OVERRIDE_OPTIONS = [
+  'UTC',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Madrid',
+  'Europe/Athens',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Asia/Kolkata',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+] as const;
+
 export function isDaylight(tz: Timezone, at: Date = new Date()): boolean {
   const ianaTz = tz === 'local' ? resolveLocalTz() : tz;
   try {
@@ -232,9 +250,9 @@ export function isDaylight(tz: Timezone, at: Date = new Date()): boolean {
     const raw = parts.find((p) => p.type === 'hour')?.value ?? '';
     const hour = parseInt(raw, 10);
     if (Number.isNaN(hour)) return true;
-    return hour >= 6 && hour < 18;
+    return hour >= 8 && hour < 20;
   } catch {
     const hour = at.getHours();
-    return hour >= 6 && hour < 18;
+    return hour >= 8 && hour < 20;
   }
 }

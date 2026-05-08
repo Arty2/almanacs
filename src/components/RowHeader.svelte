@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { config, ui, focus, events } from '../lib/state.svelte';
+  import { config, ui, focus, events, effectiveFeedTz } from '../lib/state.svelte';
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatUtcOffset, isDaylight } from '../lib/format';
@@ -106,7 +106,7 @@
     }
   });
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
-  const feedTz = $derived(events.tzByFeed[feed.id] ?? null);
+  const feedTz = $derived(effectiveFeedTz(feed.id));
   const rawTzLabel = $derived(feedTz ? formatUtcOffset(feedTz) : '');
   const tzLabel = $derived(rawTzLabel || '');
   const feedClockTime = $derived(

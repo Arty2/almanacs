@@ -164,6 +164,13 @@ describe('config import/export', () => {
     expect([60 * 60_000, 240 * 60_000]).toContain(restored.refreshIntervalMs);
   });
 
+  it('round-trips a per-feed timezone override through export/import', () => {
+    const cfg = defaultConfig();
+    cfg.feeds[0]!.timezone = 'America/Los_Angeles';
+    const restored = importConfig(exportConfig(cfg));
+    expect(restored.feeds[0]!.timezone).toBe('America/Los_Angeles');
+  });
+
   it("resolves theme: 'system' from a v2 config to a concrete light/dark", () => {
     const v2 = JSON.stringify({
       schemaVersion: 2,

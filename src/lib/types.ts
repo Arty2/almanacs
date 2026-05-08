@@ -32,6 +32,7 @@ export type CalendarFeed = {
   category: FeedCategory;
   color?: CalendarColor;
   style?: StyleVariant;
+  timezone?: string;
 };
 
 export type ParsedEvent = {
@@ -105,4 +106,4 @@ export type AppConfig = {
   futureMonths: number;
 };
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;

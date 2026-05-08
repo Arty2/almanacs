@@ -5,6 +5,7 @@ import {
   formatDayInitial,
   formatRange,
   formatTime,
+  isDaylight,
   isWeekend,
   durationDays,
 } from './format';
@@ -118,5 +119,17 @@ describe('formatTime', () => {
   it('renders 12h with AM/PM marker', () => {
     const t = new Date('2026-05-04T20:15:00Z');
     expect(formatTime(t, '12h', 'UTC')).toMatch(/^08:15 ?PM$/i);
+  });
+});
+
+describe('isDaylight', () => {
+  it('flips to day at 08:00 UTC', () => {
+    expect(isDaylight('UTC', new Date('2026-05-08T07:59:00Z'))).toBe(false);
+    expect(isDaylight('UTC', new Date('2026-05-08T08:00:00Z'))).toBe(true);
+  });
+
+  it('flips to night at 20:00 UTC', () => {
+    expect(isDaylight('UTC', new Date('2026-05-08T19:59:00Z'))).toBe(true);
+    expect(isDaylight('UTC', new Date('2026-05-08T20:00:00Z'))).toBe(false);
   });
 });

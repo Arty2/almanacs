@@ -115,6 +115,10 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
   } else {
     category = kind === 'holidays' ? 'holidays' : 'none';
   }
+  const timezone =
+    typeof f.timezone === 'string' && f.timezone.trim().length > 0
+      ? f.timezone.trim()
+      : undefined;
   return {
     id: f.id,
     source: normalizedSource,
@@ -125,6 +129,7 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     category,
     ...(color ? { color } : {}),
     ...(style ? { style } : {}),
+    ...(timezone ? { timezone } : {}),
   };
 }
 
@@ -193,7 +198,14 @@ export function importConfig(json: string): AppConfig {
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid config');
   if (!Array.isArray(parsed.feeds)) throw new Error('Invalid feeds');
   const version = typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 0;
-  if (version !== SCHEMA_VERSION && version !== 1 && version !== 2 && version !== 3 && version !== 4) {
+  if (
+    version !== SCHEMA_VERSION &&
+    version !== 1 &&
+    version !== 2 &&
+    version !== 3 &&
+    version !== 4 &&
+    version !== 5
+  ) {
     throw new Error('Unsupported schema version: ' + parsed.schemaVersion);
   }
   return migrate(parsed as Record<string, unknown>);
