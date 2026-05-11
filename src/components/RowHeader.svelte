@@ -218,7 +218,7 @@
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    border-bottom: 1px dashed var(--ink-faint);
+    border-bottom: 1px dashed var(--ink);
   }
   .row-header[data-category='holidays'] .name-text,
   .row-header[data-category='observances'] .name-text,

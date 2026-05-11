@@ -73,7 +73,7 @@
   const isFocusedRow = $derived(focus.rowIndex === rowIndex);
 </script>
 
-<section class="row" data-feed-id={feed.id} data-collapsed={feed.collapsed ? 'true' : null}>
+<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
   <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
@@ -150,10 +150,30 @@
     box-sizing: border-box;
     background: var(--paper);
   }
+  .row[data-category='observances'] .row-body {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 9px,
+      var(--holiday-stripe) 9px,
+      var(--holiday-stripe) 10px
+    );
+    background-attachment: fixed;
+  }
   .row-collapsed {
     position: relative;
-    height: 16px;
+    height: 36px;
     background: var(--paper);
+  }
+  .row[data-category='observances'] .row-collapsed {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 9px,
+      var(--holiday-stripe) 9px,
+      var(--holiday-stripe) 10px
+    );
+    background-attachment: fixed;
   }
   .grid-line {
     position: absolute;

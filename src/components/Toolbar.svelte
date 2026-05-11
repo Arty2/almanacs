@@ -211,6 +211,9 @@
   @media (max-width: 900px) {
     .title-now-tz { display: none; }
   }
+  @media (orientation: portrait) and (max-width: 640px) {
+    .title-now { display: none; }
+  }
   nav {
     display: inline-flex;
     gap: 0;

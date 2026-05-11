@@ -42,10 +42,33 @@
   }
   type TierData = { tier: Tier; bands: Band[] };
 
+  let isPortraitMobile = $state(false);
+  let isLandscapeMobile = $state(false);
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const mqP = window.matchMedia('(orientation: portrait) and (max-width: 640px)');
+    const mqL = window.matchMedia('(orientation: landscape) and (max-width: 900px)');
+    const upd = (): void => {
+      isPortraitMobile = mqP.matches;
+      isLandscapeMobile = mqL.matches;
+    };
+    upd();
+    mqP.addEventListener('change', upd);
+    mqL.addEventListener('change', upd);
+    return () => {
+      mqP.removeEventListener('change', upd);
+      mqL.removeEventListener('change', upd);
+    };
+  });
+
   function labelFor(d: Date, tier: Tier): string {
     if (tier === 'month') {
-      const length = zoom.value === '2-year' ? 'short' : 'long';
-      return formatMonth(d, config.locale, length);
+      const forceShort =
+        zoom.value === '2-year' ||
+        (isPortraitMobile && (zoom.value === 'half-year' || zoom.value === 'year')) ||
+        (isLandscapeMobile && zoom.value === 'year');
+      return formatMonth(d, config.locale, forceShort ? 'short' : 'long');
     }
     return formatTier(d, tier);
   }
@@ -189,13 +212,33 @@
     z-index: 1;
   }
   [data-zoom='month'] .day-letter-band[data-observance='true'] {
+    position: absolute;
+  }
+  [data-zoom='month'] .day-letter-band[data-observance='true']::before {
+    content: '';
+    position: absolute;
+    inset: 0;
     background-image: repeating-linear-gradient(
       45deg,
       transparent 0,
-      transparent 8px,
-      var(--holiday-stripe) 8px,
+      transparent 9px,
+      var(--holiday-stripe) 9px,
       var(--holiday-stripe) 10px
     );
+    background-attachment: fixed;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 0;
+  }
+  [data-zoom='month'] .day-letter-band[data-observance='true'] .day-letter,
+  [data-zoom='month'] .day-letter-band[data-observance='true'] .day-num {
+    position: relative;
+    z-index: 1;
+  }
+  [data-tier='week'] .band,
+  .day-letter-band {
+    padding-left: 2px;
+    padding-right: 2px;
   }
   .label {
     position: sticky;

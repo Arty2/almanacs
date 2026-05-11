@@ -260,6 +260,44 @@
     return () => window.removeEventListener('cal:clear-temp-marker', handler);
   });
 
+  let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
+
+  function tempPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    tempDrag = { startX: e.clientX, moved: false, pid: e.pointerId };
+    e.stopPropagation();
+  }
+
+  function tempPointerMove(e: PointerEvent): void {
+    if (!tempDrag || tempDrag.pid !== e.pointerId || !scrollEl) return;
+    const dx = e.clientX - tempDrag.startX;
+    if (!tempDrag.moved) {
+      if (Math.abs(dx) < 4) return;
+      tempDrag.moved = true;
+    }
+    const rect = scrollEl.getBoundingClientRect();
+    const xInTimeline = e.clientX - rect.left + scrollEl.scrollLeft;
+    const newDate = pxToDate(xInTimeline, rangeStart, pxPerDay);
+    ui.tempMarkerMs = Date.UTC(
+      newDate.getUTCFullYear(),
+      newDate.getUTCMonth(),
+      newDate.getUTCDate(),
+    );
+  }
+
+  function tempPointerUp(e: PointerEvent): void {
+    if (!tempDrag || tempDrag.pid !== e.pointerId) return;
+    const moved = tempDrag.moved;
+    tempDrag = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer capture may already be released */
+    }
+    if (!moved) ui.tempMarkerMs = null;
+  }
+
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
   function setZoomPreservingCenter(next: Zoom): void {
@@ -372,8 +410,11 @@
         type="button"
         class="temp-line"
         style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {Math.max(2, pxPerDay)}px"
-        aria-label="Clear temporary marker"
-        onclick={() => window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'))}
+        aria-label="Drag to move or tap to clear temporary marker"
+        onpointerdown={tempPointerDown}
+        onpointermove={tempPointerMove}
+        onpointerup={tempPointerUp}
+        onpointercancel={tempPointerUp}
       ></button>
     {/if}
   </div>
@@ -454,7 +495,8 @@
     background: var(--accent);
     opacity: 0.4;
     z-index: 5;
-    cursor: pointer;
+    cursor: ew-resize;
+    touch-action: none;
   }
   .temp-line:hover,
   .temp-line:focus-visible {
