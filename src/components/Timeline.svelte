@@ -12,6 +12,8 @@
   import { clock } from '../lib/clock.svelte';
   import type { DisplayEvent, Zoom } from '../lib/types';
 
+  const RIGHT_PAD_PX = 280;
+
   type Props = { rangeStart: Date; rangeEnd: Date; today: Date };
   const { rangeStart, rangeEnd, today: todayDate }: Props = $props();
 
@@ -339,7 +341,7 @@
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
 >
-  <div class="scroll-content" style="width: {totalWidth}px;">
+  <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
     <header id="time-header">
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} {observanceDayKeys} />
     </header>
@@ -442,7 +444,7 @@
     border-radius: 50%;
     background: var(--accent);
   }
-  .temp-line {
+  .temp-marker {
     position: absolute;
     top: 0;
     bottom: 0;

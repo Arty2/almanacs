@@ -104,6 +104,9 @@
     </div>
   {:else}
     <div class="row-collapsed">
+      {#each dayTicksPx as dx, i (i)}
+        <i class="day-line" style="left: {dx}px"></i>
+      {/each}
       {#each monthStartsPx as mx, i (i)}
         <i class="grid-line" style="left: {mx}px"></i>
       {/each}
@@ -112,8 +115,9 @@
           type="button"
           class="dot"
           data-highlight={isHighlightedDot(d.ev, i) ? 'true' : null}
+          data-focused={isFocusedRow && focus.eventIndex === i ? 'true' : null}
           data-match={matchUids.has(d.ev.uid) ? 'true' : null}
-          style="left: {d.px}px"
+          style="left: {d.px + pxPerDay / 2}px"
           aria-label={dotLabel(d.ev)}
           title={dotLabel(d.ev)}
           onclick={() => {
