@@ -160,12 +160,11 @@
   {#each tiers as t (t.tier)}
     <div class="tier" data-tier={t.tier}>
       {#each t.bands as b (b.date.toISOString())}
-        {@const gap = t.tier === 'week' ? 4 : 0}
         <button
           type="button"
           class="band"
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
-          style="left: {b.left + gap / 2}px; width: {Math.max(0, b.width - gap)}px"
+          style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
         >
@@ -184,7 +183,7 @@
             type="button"
             class="temp-date-label"
             data-mono
-            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay - 4) + 4}px"
+            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay) + 4}px"
             aria-label="Drag to move temporary marker"
             onpointerdown={labelPointerDown}
             onpointermove={labelPointerMove}
@@ -205,7 +204,7 @@
           data-holiday={holidayDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-observance={observanceDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
-          style="left: {b.left + 2}px; width: {Math.max(0, b.width - 4)}px"
+          style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
         >

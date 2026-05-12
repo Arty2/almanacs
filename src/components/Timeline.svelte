@@ -79,12 +79,11 @@
     );
   });
 
-  // In month zoom the day-letter header has a 4 px L+R gutter
-  // (+2 / -4). Per-day bands underneath (weekends, holidays,
-  // observances, temp marker) inherit the same gap so they line up
-  // visually with the day column rather than bleeding under the
-  // gap between cells.
-  const dayGap = $derived(zoom.value === 'month' ? 4 : 0);
+  // Day cells / week cells render at full column width with inner
+  // CSS padding for the day-letter / week label. Per-day bands
+  // (weekends, holidays, observances, temp marker) fill the same
+  // column so the cell background reads as one continuous block.
+  const dayGap = 0;
 
   const weekendStrips = $derived.by(() => {
     const out: { left: number; width: number }[] = [];
