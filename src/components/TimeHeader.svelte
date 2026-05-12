@@ -128,11 +128,12 @@
   {#each tiers as t (t.tier)}
     <div class="tier" data-tier={t.tier}>
       {#each t.bands as b (b.date.toISOString())}
+        {@const gap = t.tier === 'week' ? 2 : 0}
         <button
           type="button"
           class="band"
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
-          style="left: {b.left}px; width: {b.width}px"
+          style="left: {b.left + gap / 2}px; width: {Math.max(0, b.width - gap)}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
         >
@@ -167,7 +168,7 @@
           data-holiday={holidayDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-observance={observanceDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
-          style="left: {b.left}px; width: {b.width}px"
+          style="left: {b.left + 1}px; width: {Math.max(0, b.width - 2)}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
         >
@@ -208,7 +209,7 @@
     padding: 0 4px;
     font-size: 11px;
     line-height: 1;
-    color: var(--ink);
+    color: var(--accent);
     background: var(--paper);
     white-space: nowrap;
     pointer-events: none;
@@ -222,6 +223,9 @@
   }
   .tier:last-child {
     border-bottom: none;
+  }
+  [data-tier='year'] {
+    flex: 0 0 27px;
   }
   .band {
     position: absolute;

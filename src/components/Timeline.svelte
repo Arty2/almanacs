@@ -466,6 +466,16 @@
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
     <header id="time-header">
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} {observanceDayKeys} />
+      {#if ui.tempMarkerMs != null}
+        <div class="toggle-marker-wrap">
+          <IconButton
+            icon="arrows-horizontal"
+            label="Toggle between today and temporary marker"
+            size={14}
+            onclick={toggleTodayTempMarker}
+          />
+        </div>
+      {/if}
     </header>
     {#each holidayStrips as h, i (i)}
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
@@ -501,13 +511,6 @@
         onpointerup={tempPointerUp}
         onpointercancel={tempPointerUp}
       ></button>
-      <div class="toggle-marker-wrap">
-        <IconButton
-          icon="arrows-horizontal"
-          label="Toggle between today and temporary marker"
-          onclick={toggleTodayTempMarker}
-        />
-      </div>
     {/if}
   </div>
 </main>
@@ -596,12 +599,14 @@
   }
   .toggle-marker-wrap {
     position: absolute;
-    top: 88px;
-    left: calc(var(--scroll-left, 0px) + var(--viewport-w, 100%) - 44px);
+    top: 2px;
+    left: calc(var(--scroll-left, 0px) + var(--viewport-w, 100%) - 28px);
     z-index: 7;
     pointer-events: auto;
   }
   .toggle-marker-wrap :global(.icon-button) {
+    width: 22px;
+    height: 22px;
     background: var(--paper);
   }
 </style>

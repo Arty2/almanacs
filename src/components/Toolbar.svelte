@@ -46,8 +46,40 @@
     { id: 'quarter', label: '3M' },
     { id: 'half-year', label: '6M' },
     { id: 'year', label: '1Y' },
-    { id: '2-year', label: '2Y' },
   ];
+
+  const yearActive = $derived(zoom.value === 'year' || zoom.value === '2-year');
+  const yearLabel = $derived(zoom.value === '2-year' ? '2Y' : '1Y');
+
+  let yearPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let yearLongFired = false;
+
+  function startYearPress(): void {
+    yearLongFired = false;
+    if (yearPressTimer) clearTimeout(yearPressTimer);
+    yearPressTimer = setTimeout(() => {
+      yearPressTimer = null;
+      yearLongFired = true;
+      longPress();
+      onZoom(zoom.value === '2-year' ? 'year' : '2-year');
+    }, LONGPRESS_MS);
+  }
+
+  function cancelYearPress(): void {
+    if (yearPressTimer) {
+      clearTimeout(yearPressTimer);
+      yearPressTimer = null;
+    }
+  }
+
+  function handleYearClick(): void {
+    if (yearLongFired) {
+      yearLongFired = false;
+      return;
+    }
+    tap();
+    onZoom('year');
+  }
 
   function jumpToToday(): void {
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
@@ -115,12 +147,26 @@
   </button>
   <nav aria-label="Zoom">
     {#each zooms as z (z.id)}
-      <button
-        class="zoom-btn"
-        type="button"
-        aria-pressed={zoom.value === z.id}
-        onclick={() => { tap(); onZoom(z.id); }}
-      >{z.label}</button>
+      {#if z.id === 'year'}
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-pressed={yearActive}
+          title="1Y · long-press for 2Y"
+          onclick={handleYearClick}
+          onpointerdown={startYearPress}
+          onpointerup={cancelYearPress}
+          onpointercancel={cancelYearPress}
+          onpointerleave={cancelYearPress}
+        >{yearLabel}</button>
+      {:else}
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-pressed={zoom.value === z.id}
+          onclick={() => { tap(); onZoom(z.id); }}
+        >{z.label}</button>
+      {/if}
     {/each}
   </nav>
   <span class="spacer"></span>

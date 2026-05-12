@@ -236,40 +236,42 @@
     {/if}
   </div>
   <span class="spacer"></span>
-  <div class="actions">
-    <span
-      class="nav-wrap"
-      role="presentation"
-      onpointerdown={() => startNavPress(-1)}
-      onpointerup={cancelNavPress}
-      onpointercancel={cancelNavPress}
-      onpointerleave={cancelNavPress}
-    >
-      <IconButton
-        icon={prevIcon}
-        label={prevLabel}
-        variant="ghost"
-        size={18}
-        onclick={() => handleNavClick(-1)}
-      />
-    </span>
-    <span
-      class="nav-wrap"
-      role="presentation"
-      onpointerdown={() => startNavPress(1)}
-      onpointerup={cancelNavPress}
-      onpointercancel={cancelNavPress}
-      onpointerleave={cancelNavPress}
-    >
-      <IconButton
-        icon={nextIcon}
-        label={nextLabel}
-        variant="ghost"
-        size={18}
-        onclick={() => handleNavClick(1)}
-      />
-    </span>
-  </div>
+  {#if !feed.collapsed}
+    <div class="actions">
+      <span
+        class="nav-wrap"
+        role="presentation"
+        onpointerdown={() => startNavPress(-1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+      >
+        <IconButton
+          icon={prevIcon}
+          label={prevLabel}
+          variant="ghost"
+          size={16}
+          onclick={() => handleNavClick(-1)}
+        />
+      </span>
+      <span
+        class="nav-wrap"
+        role="presentation"
+        onpointerdown={() => startNavPress(1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+      >
+        <IconButton
+          icon={nextIcon}
+          label={nextLabel}
+          variant="ghost"
+          size={16}
+          onclick={() => handleNavClick(1)}
+        />
+      </span>
+    </div>
+  {/if}
 </header>
 
 <style>
@@ -321,6 +323,10 @@
   }
   .nav-wrap {
     display: inline-flex;
+  }
+  .actions :global(.icon-button) {
+    width: 26px;
+    height: 26px;
   }
   .name-btn {
     flex: 1 1 auto;
