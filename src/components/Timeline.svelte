@@ -504,7 +504,7 @@
       <button
         type="button"
         class="temp-line"
-        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {Math.max(2, pxPerDay)}px"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) + 2}px; width: {Math.max(2, pxPerDay - 4)}px"
         aria-label="Drag to move or tap to clear temporary marker"
         onpointerdown={tempPointerDown}
         onpointermove={tempPointerMove}
@@ -598,15 +598,16 @@
     opacity: 0.6;
   }
   .toggle-marker-wrap {
-    position: absolute;
-    top: 2px;
-    left: calc(var(--scroll-left, 0px) + var(--viewport-w, 100%) - 28px);
-    z-index: 7;
+    position: fixed;
+    top: 54px;
+    right: 6px;
+    z-index: 11;
     pointer-events: auto;
   }
   .toggle-marker-wrap :global(.icon-button) {
     width: 22px;
     height: 22px;
-    background: var(--paper);
+    border: none;
+    background: transparent;
   }
 </style>

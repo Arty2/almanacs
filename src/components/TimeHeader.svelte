@@ -2,7 +2,7 @@
   import { zoom, config, ui } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { dateToPx } from '../lib/layout';
+  import { dateToPx, pxToDate } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity } from '../lib/time';
   import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend } from '../lib/format';
   import type { Tier } from '../lib/time';
@@ -15,7 +15,7 @@
     holidayDayKeys?: Set<string>;
     observanceDayKeys?: Set<string>;
   };
-  const { rangeStart, rangeEnd, pxPerDay, holidayDayKeys, observanceDayKeys }: Props = $props();
+  const { rangeStart, rangeEnd, pxPerDay, scrollEl, holidayDayKeys, observanceDayKeys }: Props = $props();
 
   function dayKey(d: Date): string {
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
@@ -122,13 +122,45 @@
       ? formatDate(new Date(ui.tempMarkerMs), config.dateFormat, config.locale)
       : '',
   );
+
+  let labelDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
+
+  function labelPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    labelDrag = { startX: e.clientX, moved: false, pid: e.pointerId };
+    e.stopPropagation();
+  }
+
+  function labelPointerMove(e: PointerEvent): void {
+    if (!labelDrag || labelDrag.pid !== e.pointerId || !scrollEl) return;
+    const dx = e.clientX - labelDrag.startX;
+    if (!labelDrag.moved) {
+      if (Math.abs(dx) < 4) return;
+      labelDrag.moved = true;
+    }
+    const rect = scrollEl.getBoundingClientRect();
+    const xInTimeline = e.clientX - rect.left + scrollEl.scrollLeft;
+    const d = pxToDate(xInTimeline, rangeStart, pxPerDay);
+    ui.tempMarkerMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+
+  function labelPointerUp(e: PointerEvent): void {
+    if (!labelDrag || labelDrag.pid !== e.pointerId) return;
+    labelDrag = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer capture may already be released */
+    }
+  }
 </script>
 
 <div class="tiers" data-zoom={zoom.value}>
   {#each tiers as t (t.tier)}
     <div class="tier" data-tier={t.tier}>
       {#each t.bands as b (b.date.toISOString())}
-        {@const gap = t.tier === 'week' ? 2 : 0}
+        {@const gap = t.tier === 'week' ? 4 : 0}
         <button
           type="button"
           class="band"
@@ -148,12 +180,17 @@
           aria-hidden="true"
         >{nowTimeLabel}</span>
         {#if tempMarkerPxLeft != null}
-          <span
+          <button
+            type="button"
             class="temp-date-label"
             data-mono
-            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay) + 4}px"
-            aria-hidden="true"
-          >{tempMarkerDateLabel}</span>
+            style="left: {tempMarkerPxLeft + Math.max(2, pxPerDay - 4) + 4}px"
+            aria-label="Drag to move temporary marker"
+            onpointerdown={labelPointerDown}
+            onpointermove={labelPointerMove}
+            onpointerup={labelPointerUp}
+            onpointercancel={labelPointerUp}
+          >{tempMarkerDateLabel}</button>
         {/if}
       {/if}
     </div>
@@ -168,7 +205,7 @@
           data-holiday={holidayDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-observance={observanceDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
-          style="left: {b.left + 1}px; width: {Math.max(0, b.width - 2)}px"
+          style="left: {b.left + 2}px; width: {Math.max(0, b.width - 4)}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
         >
@@ -207,12 +244,15 @@
     display: flex;
     align-items: center;
     padding: 0 4px;
+    border: none;
+    font: inherit;
     font-size: 11px;
     line-height: 1;
     color: var(--accent);
-    background: var(--paper);
+    background-color: var(--paper);
     white-space: nowrap;
-    pointer-events: none;
+    cursor: ew-resize;
+    touch-action: none;
     z-index: 3;
   }
   .tier {
@@ -317,6 +357,13 @@
   [data-tier='year'] .label {
     font-weight: 700;
     font-size: 12px;
+  }
+  [data-tier='week'] .label {
+    position: static;
+    display: block;
+    width: 100%;
+    padding: 1px 0;
+    text-align: center;
   }
   [data-tier='month'] .label,
   [data-tier='quarter'] .label {

@@ -343,11 +343,13 @@
   }
   .style-swatch[data-style='inverted-dashed'] {
     background: var(--ink);
+    border-color: var(--ink);
     border-style: dashed;
     border-width: 1.5px;
   }
   .style-swatch[data-style='inverted-strike'] {
     background: var(--ink);
+    border-color: var(--ink);
   }
   .style-swatch[data-style='inverted-strike']::after {
     content: '';
@@ -360,18 +362,18 @@
     transform: translateY(-50%);
   }
   .style-swatch[data-style='muted'] {
+    background: var(--paper);
     opacity: 0.4;
-    background: var(--ink);
   }
   .style-swatch[data-style='highlight'] {
     background: var(--paper);
-    border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    border-color: var(--ink);
+    box-shadow: 0 0 0 2px var(--accent);
   }
   .style-swatch[data-style='hidden'] {
-    opacity: 0.5;
+    background: var(--paper);
+    opacity: 0.25;
     filter: grayscale(1);
-    background: var(--ink-faint);
   }
   .style-swatch[data-style='hidden']::after {
     content: '';

@@ -332,9 +332,10 @@
     flex: 1 1 auto;
     min-width: 0;
     display: inline-flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.4em;
-    border: 1px solid transparent;
+    border: none;
+    outline: none;
     background: transparent;
     color: inherit;
     padding: 2px 8px;
@@ -344,8 +345,13 @@
     cursor: pointer;
     overflow: hidden;
   }
-  .name-btn:hover {
-    border-color: var(--ink-faint);
+  .name-btn:hover .name-text,
+  .name-btn:focus-visible .name-text {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .name-btn:focus {
+    outline: none;
   }
   .name-text {
     font-size: 13px;
