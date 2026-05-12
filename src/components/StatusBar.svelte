@@ -105,7 +105,7 @@
         <span class="dot" aria-hidden="true"></span>
         <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
       </span>
-      {#if latestEntry}
+      {#if latestEntry && !expanded}
         <span class="latest" data-kind={latestEntry.kind}>{latestEntry.message}</span>
       {/if}
     </span>
@@ -140,13 +140,15 @@
     z-index: 20;
     display: flex;
     flex-direction: column;
-    border-top: 1px solid var(--ink);
+    border-top: 2px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    box-shadow: 0 -1px 0 var(--ink-faint);
     user-select: none;
     -webkit-user-select: none;
     transition: height 120ms ease-out;
+  }
+  .status-bar[data-expanded='true'] .handle {
+    border-bottom: 1px dashed var(--ink);
   }
   .status-bar[data-expanded='true'] {
     transition: none;
@@ -202,9 +204,6 @@
     flex: 1 1 auto;
     min-width: 0;
   }
-  .latest.muted {
-    color: var(--ink-muted);
-  }
   .latest[data-kind='warn'] {
     color: var(--ink);
   }
@@ -220,7 +219,6 @@
   .log {
     flex: 1 1 auto;
     overflow-y: auto;
-    border-top: 1px solid var(--ink-faint);
     padding: 0.4em 0.6em 0.6em;
   }
   .log ol {

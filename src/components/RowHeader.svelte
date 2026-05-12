@@ -2,9 +2,11 @@
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
   import { config, ui, focus, events, effectiveFeedTz } from '../lib/state.svelte';
+  import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
   import { formatTime, formatTzDiff, isDaylight } from '../lib/format';
+  import { longPress } from '../lib/haptics';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
   type Props = {
@@ -17,9 +19,7 @@
   };
   const { feed, visibleEvents, rangeStart, pxPerDay, scrollEl, rowIndex }: Props = $props();
 
-  function toggle(e: MouseEvent): void {
-    e.preventDefault();
-    e.stopPropagation();
+  function toggleCollapsed(): void {
     const target = config.feeds.find((f) => f.id === feed.id);
     if (target) target.collapsed = !target.collapsed;
   }
@@ -30,47 +30,7 @@
     ui.settingsOpen = true;
   }
 
-  let titleEl: HTMLButtonElement | undefined = $state();
-
-  function scrollRowIntoView(): void {
-    if (!scrollEl || !titleEl) return;
-    const headerEl = titleEl.closest<HTMLElement>('.row-header');
-    if (!headerEl) return;
-    const top = headerEl.offsetTop - 80;
-    scrollEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-  }
-
-  function jumpRelative(direction: -1 | 1): void {
-    if (visibleEvents.length === 0) return;
-    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
-
-    // Walk from the focused event when this row is focused, so prev/next can
-    // step into off-screen events instead of being anchored to viewport center.
-    const focusedHere =
-      focus.rowIndex === rowIndex && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
-    let nextIdx: number;
-    if (focusedHere) {
-      const cur = focus.eventIndex;
-      nextIdx = direction === 1
-        ? Math.min(sorted.length - 1, cur + 1)
-        : Math.max(0, cur - 1);
-    } else {
-      const center = scrollEl ? scrollEl.scrollLeft + scrollEl.clientWidth / 2 : 0;
-      nextIdx = -1;
-      if (direction === 1) {
-        for (let i = 0; i < sorted.length; i++) {
-          const px = dateToPx(sorted[i]!.start, rangeStart, pxPerDay);
-          if (px > center) { nextIdx = i; break; }
-        }
-        if (nextIdx === -1) nextIdx = sorted.length - 1;
-      } else {
-        for (let i = sorted.length - 1; i >= 0; i--) {
-          const px = dateToPx(sorted[i]!.start, rangeStart, pxPerDay);
-          if (px < center) { nextIdx = i; break; }
-        }
-        if (nextIdx === -1) nextIdx = 0;
-      }
-    }
+  function focusAndScrollTo(sorted: DisplayEvent[], nextIdx: number): void {
     const ev = sorted[nextIdx];
     if (!ev) return;
     if (rowIndex >= 0) {
@@ -83,28 +43,121 @@
     }
   }
 
+  function jumpRelative(direction: -1 | 1): void {
+    if (visibleEvents.length === 0) return;
+    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const focusedHere =
+      focus.rowIndex === rowIndex && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
+    let nextIdx: number;
+    if (!focusedHere) {
+      // First click on prev/next anchors at the boundary around today
+      // — first future event (for next) or most recent past (for prev).
+      const todayMs = today.value.getTime();
+      if (direction === 1) {
+        nextIdx = sorted.findIndex((e) => e.start.getTime() > todayMs);
+        if (nextIdx === -1) nextIdx = sorted.length - 1;
+      } else {
+        nextIdx = -1;
+        for (let i = sorted.length - 1; i >= 0; i--) {
+          if (sorted[i]!.start.getTime() < todayMs) { nextIdx = i; break; }
+        }
+        if (nextIdx === -1) nextIdx = 0;
+      }
+    } else {
+      const cur = focus.eventIndex;
+      if (direction === 1) {
+        nextIdx = cur >= sorted.length - 1 ? 0 : cur + 1;
+      } else {
+        nextIdx = cur <= 0 ? sorted.length - 1 : cur - 1;
+      }
+    }
+    focusAndScrollTo(sorted, nextIdx);
+  }
+
+  function jumpToEnd(direction: -1 | 1): void {
+    if (visibleEvents.length === 0) return;
+    const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const nextIdx = direction === 1 ? sorted.length - 1 : 0;
+    focusAndScrollTo(sorted, nextIdx);
+  }
+
+  const NAV_LONGPRESS_MS = 500;
+  const NAV_FLASH_MS = 400;
+  let navFlash: 'prev' | 'next' | null = $state(null);
+  let navPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let navLongFired = false;
+
+  function startNavPress(direction: -1 | 1): void {
+    navLongFired = false;
+    if (navPressTimer) clearTimeout(navPressTimer);
+    navPressTimer = setTimeout(() => {
+      navPressTimer = null;
+      navLongFired = true;
+      longPress();
+      jumpToEnd(direction);
+      navFlash = direction === 1 ? 'next' : 'prev';
+      setTimeout(() => {
+        if (navFlash === (direction === 1 ? 'next' : 'prev')) navFlash = null;
+      }, NAV_FLASH_MS);
+    }, NAV_LONGPRESS_MS);
+  }
+
+  function cancelNavPress(): void {
+    if (navPressTimer) {
+      clearTimeout(navPressTimer);
+      navPressTimer = null;
+    }
+  }
+
+  function handleNavClick(direction: -1 | 1): void {
+    if (navLongFired) {
+      navLongFired = false;
+      return;
+    }
+    jumpRelative(direction);
+  }
+
   function showError(): void {
     const message = ui.feedErrors[feed.id];
     if (message) ui.errorModal = { feedName: feed.name, message };
   }
 
-  const expandLabel = $derived(feed.collapsed ? 'Expand row' : 'Collapse row');
   const categoryIconName = $derived.by<string | null>(() => {
     switch (feed.category) {
       case 'holidays': return 'category-holiday';
-      case 'travel-international': return 'category-airplane';
-      case 'travel-local': return 'category-bus';
+      case 'observances': return 'category-observances';
+      case 'guests': return 'category-guests';
+      case 'announcements': return 'category-announcements';
       default: return null;
     }
   });
   const categoryLabel = $derived.by<string>(() => {
     switch (feed.category) {
       case 'holidays': return 'Holidays';
-      case 'travel-international': return 'Travel (International)';
-      case 'travel-local': return 'Travel (Local)';
+      case 'observances': return 'Observances';
+      case 'guests': return 'Guests';
+      case 'announcements': return 'Announcements';
       default: return '';
     }
   });
+  const travelIconName = $derived.by<string | null>(() => {
+    switch (feed.travel) {
+      case 'international': return 'category-airplane';
+      case 'local': return 'category-bus';
+      default: return null;
+    }
+  });
+  const travelLabel = $derived.by<string>(() => {
+    switch (feed.travel) {
+      case 'international': return 'Travel (International)';
+      case 'local': return 'Travel (Local)';
+      default: return '';
+    }
+  });
+  const prevIcon = $derived(navFlash === 'prev' ? 'skip-to-start' : 'chevron-left');
+  const nextIcon = $derived(navFlash === 'next' ? 'skip-to-end' : 'chevron-right');
+  const prevLabel = 'Previous event (long-press for earliest)';
+  const nextLabel = 'Next event (long-press for latest)';
   const errorMessage = $derived(ui.feedErrors[feed.id] ?? null);
   const feedTz = $derived(effectiveFeedTz(feed.id));
   const tzLabel = $derived(
@@ -135,9 +188,6 @@
   data-feed-id={feed.id}
 >
   <div class="lead">
-    <span class="collapse-toggle" data-collapsed={feed.collapsed ? 'true' : null}>
-      <IconButton icon="chevron-down" label={expandLabel} variant="ghost" onclick={toggle} size={18} />
-    </span>
     {#if errorMessage}
       <button
         type="button"
@@ -153,19 +203,24 @@
         {/if}
       </button>
     {/if}
+    {#if travelIconName}
+      <span class="category-mark" aria-hidden="true" title={travelLabel}>
+        <Icon name={travelIconName} size={14} />
+      </span>
+    {/if}
     {#if categoryIconName}
       <span class="category-mark" aria-hidden="true" title={categoryLabel}>
         <Icon name={categoryIconName} size={14} />
       </span>
     {/if}
     <button
-      bind:this={titleEl}
       type="button"
       class="name-btn"
-      onclick={scrollRowIntoView}
+      onclick={toggleCollapsed}
       ondblclick={openInSettings}
-      aria-label="Scroll to {feed.name} (double-click to edit)"
-      title="Click to scroll · double-click to edit"
+      aria-label="Toggle {feed.name} (double-click to edit)"
+      aria-expanded={!feed.collapsed}
+      title="Tap to expand/collapse · double-tap to edit"
     >
       <span class="name-text">{feed.name}</span>
       {#if feedTz}
@@ -181,22 +236,42 @@
     {/if}
   </div>
   <span class="spacer"></span>
-  <div class="actions">
-    <IconButton
-      icon="chevron-left"
-      label="Previous event"
-      variant="ghost"
-      size={18}
-      onclick={() => jumpRelative(-1)}
-    />
-    <IconButton
-      icon="chevron-right"
-      label="Next event"
-      variant="ghost"
-      size={18}
-      onclick={() => jumpRelative(1)}
-    />
-  </div>
+  {#if !feed.collapsed}
+    <div class="actions">
+      <span
+        class="nav-wrap"
+        role="presentation"
+        onpointerdown={() => startNavPress(-1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+      >
+        <IconButton
+          icon={prevIcon}
+          label={prevLabel}
+          variant="ghost"
+          size={16}
+          onclick={() => handleNavClick(-1)}
+        />
+      </span>
+      <span
+        class="nav-wrap"
+        role="presentation"
+        onpointerdown={() => startNavPress(1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+      >
+        <IconButton
+          icon={nextIcon}
+          label={nextLabel}
+          variant="ghost"
+          size={16}
+          onclick={() => handleNavClick(1)}
+        />
+      </span>
+    </div>
+  {/if}
 </header>
 
 <style>
@@ -206,8 +281,8 @@
     top: 80px;
     display: flex;
     align-items: center;
-    padding: 4px 0;
-    height: 36px;
+    padding: 1px 0;
+    height: 30px;
     background: var(--paper);
     border-bottom: 1px solid var(--ink);
     z-index: 4;
@@ -216,9 +291,11 @@
     box-sizing: border-box;
   }
   .row-header[data-collapsed='true'] {
-    border-bottom: 1px dashed var(--ink-faint);
+    border-bottom: 1px dashed var(--ink);
   }
-  .row-header[data-category='holidays'] .name-text {
+  .row-header[data-category='holidays'] .name-text,
+  .row-header[data-category='observances'] .name-text,
+  .row-header[data-category='announcements'] .name-text {
     color: var(--ink-muted);
   }
   .lead {
@@ -244,35 +321,41 @@
     z-index: 1;
     flex-shrink: 0;
   }
-  .collapse-toggle {
+  .nav-wrap {
     display: inline-flex;
-    transition: transform 120ms ease;
   }
-  .collapse-toggle[data-collapsed='true'] {
-    transform: rotate(-90deg);
+  .actions :global(.icon-button) {
+    width: 26px;
+    height: 26px;
   }
   .name-btn {
     flex: 1 1 auto;
     min-width: 0;
     display: inline-flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.4em;
-    border: 1px solid transparent;
+    border: none;
+    outline: none;
     background: transparent;
     color: inherit;
-    padding: 6px 8px;
-    height: 32px;
+    padding: 2px 8px;
+    height: 28px;
     font: inherit;
     text-align: left;
     cursor: pointer;
     overflow: hidden;
   }
-  .name-btn:hover {
-    border-color: var(--ink-faint);
+  .name-btn:hover .name-text,
+  .name-btn:focus-visible .name-text {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .name-btn:focus {
+    outline: none;
   }
   .name-text {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 400;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

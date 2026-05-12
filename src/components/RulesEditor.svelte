@@ -24,9 +24,9 @@
     { id: 'none', label: 'No style' },
     { id: 'inverted-dashed', label: 'Inverted, dashed' },
     { id: 'inverted-strike', label: 'Inverted, strike' },
-    { id: 'muted', label: 'Muted' },
+    { id: 'muted', label: '*Muted' },
     { id: 'highlight', label: 'Highlight' },
-    { id: 'hidden', label: 'Hidden' },
+    { id: 'hidden', label: '*Hidden' },
   ];
 
   let snapshot: FindReplaceRule | null = $state(null);
@@ -58,7 +58,7 @@
     queueMicrotask(() => {
       listContainer
         ?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`)
-        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
   });
 
@@ -129,9 +129,9 @@
 
   function moveRule(id: string, dir: -1 | 1): void {
     const idx = config.rules.findIndex((r) => r.id === id);
-    if (idx < 0) return;
-    const next = idx + dir;
-    if (next < 0 || next >= config.rules.length) return;
+    if (idx < 0 || config.rules.length < 2) return;
+    const next = (idx + dir + config.rules.length) % config.rules.length;
+    if (next === idx) return;
     const copy = [...config.rules];
     const [moved] = copy.splice(idx, 1);
     copy.splice(next, 0, moved!);
@@ -141,7 +141,7 @@
   function previewText(rule: FindReplaceRule): string {
     const find = rule.find.trim() || '(empty)';
     const replace = rule.replace.trim() || '(empty)';
-    return `${find} → ${replace}`;
+    return `${find} > ${replace}`;
   }
 </script>
 
@@ -194,7 +194,7 @@
         </form>
       </li>
     {/if}
-    {#each config.rules as rule (rule.id)}
+    {#each config.rules as rule, ri (rule.id)}
       <li data-rule-card={rule.id} data-active={editingRuleId === rule.id ? 'true' : null}>
         <div class="rule-row">
           <button
@@ -206,14 +206,28 @@
           >
             <span class="rule-preview">{previewText(rule)}</span>
             {#if rule.style !== 'none'}
-              <span class="rule-style" data-mono>{styleLabel(rule.style)}</span>
+              <span
+                class="style-swatch"
+                data-style={rule.style}
+                aria-label={styleLabel(rule.style)}
+                title={styleLabel(rule.style)}
+              ></span>
             {/if}
           </button>
-          {#if editingRuleId !== rule.id}
-            <IconButton icon="arrow-up" label="Move up" variant="ghost" size={16} onclick={() => moveRule(rule.id, -1)} />
-            <IconButton icon="arrow-down" label="Move down" variant="ghost" size={16} onclick={() => moveRule(rule.id, 1)} />
-          {/if}
-          <IconButton icon="trash" label="Delete rule" variant="ghost" size={16} onclick={() => remove(rule.id)} />
+          <IconButton
+            icon={ri === 0 ? 'arrow-bar-down' : 'arrow-up'}
+            label={ri === 0 ? 'Wrap to end' : 'Move up'}
+            variant="ghost"
+            size={16}
+            onclick={() => moveRule(rule.id, -1)}
+          />
+          <IconButton
+            icon={ri === config.rules.length - 1 ? 'arrow-bar-up' : 'arrow-down'}
+            label={ri === config.rules.length - 1 ? 'Wrap to start' : 'Move down'}
+            variant="ghost"
+            size={16}
+            onclick={() => moveRule(rule.id, 1)}
+          />
         </div>
         {#if editingRuleId === rule.id}
           <form
@@ -239,7 +253,11 @@
                 {/each}
               </select>
             </div>
-            <div class="form-actions">
+            <div class="form-actions rule-form-actions">
+              <button type="button" class="delete-text" onclick={() => remove(rule.id)}>
+                Delete
+              </button>
+              <span class="action-spacer"></span>
               <button type="button" onclick={cancelEdit}>Cancel</button>
               <button type="submit" class="primary">Save</button>
             </div>
@@ -313,13 +331,59 @@
     white-space: nowrap;
     min-width: 0;
   }
-  .rule-style {
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 1px 6px;
-    border: 1px solid var(--ink-faint);
-    color: var(--ink-muted);
+  .style-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    box-sizing: border-box;
+    position: relative;
+  }
+  .style-swatch[data-style='inverted-dashed'] {
+    background: var(--ink);
+    border-color: var(--ink);
+    border-style: dashed;
+    border-width: 1.5px;
+  }
+  .style-swatch[data-style='inverted-strike'] {
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+  .style-swatch[data-style='inverted-strike']::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 1px;
+    right: 1px;
+    height: 1px;
+    background: var(--paper);
+    transform: translateY(-50%);
+  }
+  .style-swatch[data-style='muted'] {
+    background: var(--paper);
+    opacity: 0.4;
+  }
+  .style-swatch[data-style='highlight'] {
+    background: var(--paper);
+    border-color: var(--ink);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .style-swatch[data-style='hidden'] {
+    background: var(--paper);
+    opacity: 0.25;
+    filter: grayscale(1);
+  }
+  .style-swatch[data-style='hidden']::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 1px;
+    right: 1px;
+    height: 1px;
+    background: var(--ink);
+    transform: translateY(-50%);
   }
   .rule-edit {
     display: flex;
@@ -343,6 +407,27 @@
     height: 32px;
     width: 100%;
     box-sizing: border-box;
+  }
+  .rule-form-actions {
+    align-items: center;
+    margin-top: 0.4em;
+  }
+  .rule-form-actions .action-spacer {
+    flex: 1;
+  }
+  .delete-text {
+    background: transparent;
+    border: 0;
+    color: var(--accent);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .delete-text:hover {
+    text-decoration: underline;
   }
   @media (max-width: 480px) {
     .field {

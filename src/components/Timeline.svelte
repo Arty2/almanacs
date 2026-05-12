@@ -1,8 +1,9 @@
 <script lang="ts">
+  import IconButton from './IconButton.svelte';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
   import { zoom, search, config, focus, ui, displayEventsFor } from '../lib/state.svelte';
-  import { PX_PER_DAY, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import { computePxPerDay, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend } from '../lib/format';
   import { buildIndex, search as runSearch } from '../lib/search';
@@ -17,23 +18,11 @@
   type Props = { rangeStart: Date; rangeEnd: Date; today: Date };
   const { rangeStart, rangeEnd, today: todayDate }: Props = $props();
 
-  const pxPerDay = $derived(PX_PER_DAY[zoom.value]);
+  let viewportWidth = $state(0);
+  const pxPerDay = $derived(computePxPerDay(zoom.value, viewportWidth));
   const totalWidth = $derived(((rangeEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY) * pxPerDay);
-  const todayPx = $derived.by(() => {
-    const base = dateToPx(todayDate, rangeStart, pxPerDay);
-    if (zoom.value !== 'month') return base;
-    const now = new Date(clock.now);
-    const sameDay =
-      now.getFullYear() === todayDate.getFullYear() &&
-      now.getMonth() === todayDate.getMonth() &&
-      now.getDate() === todayDate.getDate();
-    if (!sameDay) return base;
-    const minutesIntoDay = now.getHours() * 60 + now.getMinutes();
-    return base + (minutesIntoDay / 1440) * pxPerDay;
-  });
-  const tempMarkerPx = $derived(
-    ui.tempMarkerMs != null ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) : 0,
-  );
+  const nowDateForLine = $derived(zoom.value === 'month' ? new Date(clock.now) : todayDate);
+  const todayPx = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
   const searchActive = $derived(search.query.trim().length > 0);
 
   const orderedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
@@ -90,12 +79,21 @@
     );
   });
 
+  // Day cells / week cells render at full column width with inner
+  // CSS padding for the day-letter / week label. Per-day bands
+  // (weekends, holidays, observances, temp marker) fill the same
+  // column so the cell background reads as one continuous block.
+  const dayGap = 0;
+
   const weekendStrips = $derived.by(() => {
     const out: { left: number; width: number }[] = [];
     const days = ticksBetween(rangeStart, rangeEnd, 'day');
     for (const d of days) {
       if (isWeekend(d)) {
-        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+        out.push({
+          left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
+          width: Math.max(0, pxPerDay - dayGap),
+        });
       }
     }
     return out;
@@ -107,35 +105,69 @@
     return days.map((d) => dateToPx(d, rangeStart, pxPerDay));
   });
 
-  const holidayDayKeys = $derived.by(() => {
-    const out = new Set<string>();
+  function isInert(ev: DisplayEvent): boolean {
+    return ev.hidden || ev.styleVariant === 'muted' || ev.styleVariant === 'hidden';
+  }
+
+  function eventDayKeys(ev: DisplayEvent): string[] {
+    const keys: string[] = [];
+    const start = ev.start;
+    const lastMs = ev.allDay ? Math.max(start.getTime(), ev.end.getTime() - 1) : ev.end.getTime();
+    let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+    const last = Date.UTC(
+      new Date(lastMs).getUTCFullYear(),
+      new Date(lastMs).getUTCMonth(),
+      new Date(lastMs).getUTCDate(),
+    );
+    while (cursor <= last) {
+      const d = new Date(cursor);
+      keys.push(d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate());
+      cursor += MS_PER_DAY;
+    }
+    return keys;
+  }
+
+  // Hatch classification for the time header and per-feed row bodies.
+  // Holiday-category events normally produce the heavy holiday hatch
+  // (header + full-timeline band). Holiday events flagged Muted or Hidden
+  // demote to the discreet observance hatch (header + only that feed's
+  // own row column). Observance-category events always render the
+  // observance hatch on their own row column + the header — except when
+  // they themselves are Muted or Hidden, in which case they're ignored.
+  const dayHatch = $derived.by(() => {
+    const holidayHeader = new Set<string>();
+    const observanceHeader = new Set<string>();
+    const observanceByFeed: Record<string, Set<string>> = {};
     for (const feed of config.feeds) {
-      if (feed.category !== 'holidays') continue;
-      const arr = visibleByFeed[feed.id] ?? [];
-      for (const ev of arr) {
-        const start = ev.start;
-        const lastMs = ev.allDay ? Math.max(start.getTime(), ev.end.getTime() - 1) : ev.end.getTime();
-        let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
-        const last = Date.UTC(
-          new Date(lastMs).getUTCFullYear(),
-          new Date(lastMs).getUTCMonth(),
-          new Date(lastMs).getUTCDate(),
-        );
-        while (cursor <= last) {
-          const d = new Date(cursor);
-          out.add(
-            d.getUTCFullYear() +
-              '-' +
-              (d.getUTCMonth() + 1) +
-              '-' +
-              d.getUTCDate(),
-          );
-          cursor += MS_PER_DAY;
+      const events = displayByFeed[feed.id] ?? [];
+      if (feed.category === 'holidays') {
+        for (const ev of events) {
+          const days = eventDayKeys(ev);
+          if (isInert(ev)) {
+            for (const d of days) {
+              observanceHeader.add(d);
+              (observanceByFeed[feed.id] ??= new Set()).add(d);
+            }
+          } else {
+            for (const d of days) holidayHeader.add(d);
+          }
+        }
+      } else if (feed.category === 'observances') {
+        for (const ev of events) {
+          if (isInert(ev)) continue;
+          const days = eventDayKeys(ev);
+          for (const d of days) {
+            observanceHeader.add(d);
+            (observanceByFeed[feed.id] ??= new Set()).add(d);
+          }
         }
       }
     }
-    return out;
+    return { holidayHeader, observanceHeader, observanceByFeed };
   });
+
+  const holidayDayKeys = $derived(dayHatch.holidayHeader);
+  const observanceDayKeys = $derived(dayHatch.observanceHeader);
 
   const holidayStrips = $derived.by(() => {
     if (holidayDayKeys.size === 0) return [] as { left: number; width: number }[];
@@ -144,8 +176,31 @@
     for (const d of days) {
       const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
       if (holidayDayKeys.has(key)) {
-        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+        out.push({
+          left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
+          width: Math.max(0, pxPerDay - dayGap),
+        });
       }
+    }
+    return out;
+  });
+
+  const observanceStripsByFeed = $derived.by(() => {
+    const out: Record<string, { left: number; width: number }[]> = {};
+    if (Object.keys(dayHatch.observanceByFeed).length === 0) return out;
+    const days = ticksBetween(rangeStart, rangeEnd, 'day');
+    for (const [feedId, dayKeys] of Object.entries(dayHatch.observanceByFeed)) {
+      const strips: { left: number; width: number }[] = [];
+      for (const d of days) {
+        const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+        if (dayKeys.has(key)) {
+          strips.push({
+            left: dateToPx(d, rangeStart, pxPerDay) + dayGap / 2,
+            width: Math.max(0, pxPerDay - dayGap),
+          });
+        }
+      }
+      out[feedId] = strips;
     }
     return out;
   });
@@ -167,10 +222,16 @@
     if (!scrollEl) return;
     scrollEl.style.setProperty('--scroll-left', scrollEl.scrollLeft + 'px');
     scrollEl.style.setProperty('--viewport-w', scrollEl.clientWidth + 'px');
+    viewportWidth = scrollEl.clientWidth;
   }
 
   let rafScheduled = false;
+  let lastInteractionMs = $state(0);
+  function markInteraction(): void {
+    lastInteractionMs = Date.now();
+  }
   function onScroll(): void {
+    markInteraction();
     if (rafScheduled) return;
     rafScheduled = true;
     requestAnimationFrame(() => {
@@ -191,6 +252,18 @@
     };
   });
 
+  // Track explicit user input (separate from passive scroll) so the
+  // 5-minute idle gate below can tell "user actively interacting" from
+  // "user idle while the wall clock ticks."
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const events = ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'];
+    for (const e of events) window.addEventListener(e, markInteraction, { passive: true });
+    return () => {
+      for (const e of events) window.removeEventListener(e, markInteraction);
+    };
+  });
+
   function jumpToToday(): void {
     if (!scrollEl) return;
     scrollEl.scrollTo({ left: Math.max(0, todayPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
@@ -201,6 +274,27 @@
     if (totalWidth <= 0) return;
     scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
     didCenter = true;
+  });
+
+  // Month zoom: nudge the viewport so the today line stays centered as
+  // it drifts during the day. Only re-center when the user has been
+  // idle for 5 minutes so panning is never overridden mid-interaction.
+  // The today line itself keeps ticking via nowDateForLine -> todayPx.
+  const RECENTER_IDLE_MS = 5 * 60 * 1000;
+  let lastCenteredPx = -1;
+  $effect(() => {
+    if (!scrollEl) return;
+    if (zoom.value !== 'month') return;
+    // depend on clock.now
+    void clock.now;
+    if (!didCenter) return;
+    if (Date.now() - lastInteractionMs < RECENTER_IDLE_MS) return;
+    const cur = scrollEl.scrollLeft + scrollEl.clientWidth / 2;
+    const drift = Math.abs(cur - todayPx);
+    if (drift > scrollEl.clientWidth / 2) return;
+    if (lastCenteredPx === todayPx) return;
+    lastCenteredPx = todayPx;
+    scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
   });
 
   $effect(() => {
@@ -255,6 +349,54 @@
     return () => window.removeEventListener('cal:clear-temp-marker', handler);
   });
 
+  let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
+
+  function tempPointerDown(e: PointerEvent): void {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    tempDrag = { startX: e.clientX, moved: false, pid: e.pointerId };
+    e.stopPropagation();
+  }
+
+  function tempPointerMove(e: PointerEvent): void {
+    if (!tempDrag || tempDrag.pid !== e.pointerId || !scrollEl) return;
+    const dx = e.clientX - tempDrag.startX;
+    if (!tempDrag.moved) {
+      if (Math.abs(dx) < 4) return;
+      tempDrag.moved = true;
+    }
+    const rect = scrollEl.getBoundingClientRect();
+    const xInTimeline = e.clientX - rect.left + scrollEl.scrollLeft;
+    const newDate = pxToDate(xInTimeline, rangeStart, pxPerDay);
+    ui.tempMarkerMs = Date.UTC(
+      newDate.getUTCFullYear(),
+      newDate.getUTCMonth(),
+      newDate.getUTCDate(),
+    );
+  }
+
+  function tempPointerUp(e: PointerEvent): void {
+    if (!tempDrag || tempDrag.pid !== e.pointerId) return;
+    const moved = tempDrag.moved;
+    tempDrag = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer capture may already be released */
+    }
+    if (!moved) ui.tempMarkerMs = null;
+  }
+
+  let toggleLast: 'today' | 'temp' = $state('today');
+  function toggleTodayTempMarker(): void {
+    if (!scrollEl || ui.tempMarkerMs == null) return;
+    markInteraction();
+    const tempPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
+    const targetPx = toggleLast === 'today' ? tempPx : todayPx;
+    toggleLast = toggleLast === 'today' ? 'temp' : 'today';
+    scrollEl.scrollTo({ left: Math.max(0, targetPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
+  }
+
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
   function setZoomPreservingCenter(next: Zoom): void {
@@ -267,7 +409,7 @@
     zoom.value = next;
     queueMicrotask(() => {
       if (!scrollEl) return;
-      const newPxPerDay = PX_PER_DAY[next];
+      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth);
       const newCenterPx = dateToPx(centerDate, rangeStart, newPxPerDay);
       scrollEl.scrollLeft = Math.max(0, newCenterPx - scrollEl.clientWidth / 2);
     });
@@ -338,7 +480,17 @@
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
     <header id="time-header">
-      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} />
+      <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} {observanceDayKeys} />
+      {#if ui.tempMarkerMs != null}
+        <div class="toggle-marker-wrap">
+          <IconButton
+            icon="arrows-horizontal"
+            label="Toggle between today and temporary marker"
+            size={14}
+            onclick={toggleTodayTempMarker}
+          />
+        </div>
+      {/if}
     </header>
     {#each holidayStrips as h, i (i)}
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
@@ -357,17 +509,23 @@
           {monthStartsPx}
           {weekendStrips}
           {dayTicksPx}
+          observanceStrips={observanceStripsByFeed[feed.id] ?? []}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
         />
       {/each}
     </div>
     <hr class="today-line" style="left: {todayPx}px" />
     {#if ui.tempMarkerMs != null}
-      <div
-        class="temp-marker"
-        style="left: {tempMarkerPx}px; width: {pxPerDay}px"
-        aria-hidden="true"
-      ></div>
+      <button
+        type="button"
+        class="temp-line"
+        style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay) + dayGap / 2}px; width: {Math.max(2, pxPerDay - dayGap)}px"
+        aria-label="Drag to move or tap to clear temporary marker"
+        onpointerdown={tempPointerDown}
+        onpointermove={tempPointerMove}
+        onpointerup={tempPointerUp}
+        onpointercancel={tempPointerUp}
+      ></button>
     {/if}
   </div>
 </main>
@@ -422,7 +580,7 @@
     width: 0;
     margin: 0;
     border: none;
-    border-left: 1px dashed var(--accent);
+    border-left: 2px dashed var(--accent);
     z-index: 6;
     pointer-events: none;
   }
@@ -437,13 +595,34 @@
     border-radius: 50%;
     background: var(--accent);
   }
-  .temp-marker {
+  .temp-line {
     position: absolute;
     top: 0;
     bottom: 0;
-    border: 1px dotted var(--accent);
-    box-sizing: border-box;
-    pointer-events: none;
-    z-index: 6;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: var(--accent);
+    opacity: 0.4;
+    z-index: 5;
+    cursor: ew-resize;
+    touch-action: none;
+  }
+  .temp-line:hover,
+  .temp-line:focus-visible {
+    opacity: 0.6;
+  }
+  .toggle-marker-wrap {
+    position: fixed;
+    top: 54px;
+    right: 6px;
+    z-index: 11;
+    pointer-events: auto;
+  }
+  .toggle-marker-wrap :global(.icon-button) {
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
   }
 </style>

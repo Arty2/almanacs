@@ -19,6 +19,7 @@
     monthStartsPx: number[];
     weekendStrips: { left: number; width: number }[];
     dayTicksPx: number[];
+    observanceStrips: { left: number; width: number }[];
     rowIndex: number;
   };
   function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
@@ -38,6 +39,7 @@
     monthStartsPx,
     weekendStrips,
     dayTicksPx,
+    observanceStrips,
     rowIndex,
   }: Props = $props();
 
@@ -73,12 +75,15 @@
   const isFocusedRow = $derived(focus.rowIndex === rowIndex);
 </script>
 
-<section class="row" data-feed-id={feed.id} data-collapsed={feed.collapsed ? 'true' : null}>
+<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
   <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
       {#each weekendStrips as w, i (i)}
         <i class="weekend-band" style="left: {w.left}px; width: {w.width}px"></i>
+      {/each}
+      {#each observanceStrips as o, i (i)}
+        <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
       {#each dayTicksPx as dx, i (i)}
         <i class="day-line" style="left: {dx}px"></i>
@@ -96,6 +101,7 @@
           isHolidayFeed={isHolidayFeed}
           feedColor={feed.color}
           feedStyle={feed.style}
+          feedTravel={feed.travel}
           {rowIndex}
           onFocusEvent={focusByUid}
         />
@@ -103,6 +109,9 @@
     </div>
   {:else}
     <div class="row-collapsed">
+      {#each observanceStrips as o, i (i)}
+        <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
+      {/each}
       {#each dayTicksPx as dx, i (i)}
         <i class="day-line" style="left: {dx}px"></i>
       {/each}
@@ -132,6 +141,7 @@
 
 <style>
   .row {
+    position: relative;
     width: max-content;
     min-width: 100%;
     background: var(--paper-2);
@@ -153,6 +163,22 @@
     position: relative;
     height: 16px;
     background: var(--paper);
+  }
+  .observance-strip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 9px,
+      var(--holiday-stripe) 9px,
+      var(--holiday-stripe) 10px
+    );
+    background-attachment: fixed;
+    opacity: 0.6;
   }
   .grid-line {
     position: absolute;
@@ -198,7 +224,6 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  .dot[data-highlight='true'],
   .dot[data-match='true'] {
     width: 12px;
     height: 12px;
@@ -206,8 +231,9 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  .dot[data-focused='true'] {
+  .dot[data-highlight='true'] {
+    width: 12px;
+    height: 12px;
     background: var(--accent);
-    border-color: var(--accent);
   }
 </style>

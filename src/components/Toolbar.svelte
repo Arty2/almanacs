@@ -4,8 +4,7 @@
   import { zoom, search, ui, config } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
-  import { clock } from '../lib/clock.svelte';
-  import { formatCurrentTzLabel, formatDate, formatTime, isDaylight } from '../lib/format';
+  import { formatDate } from '../lib/format';
   import { longPress, tap } from '../lib/haptics';
   import type { Zoom } from '../lib/types';
 
@@ -47,8 +46,40 @@
     { id: 'quarter', label: '3M' },
     { id: 'half-year', label: '6M' },
     { id: 'year', label: '1Y' },
-    { id: '2-year', label: '2Y' },
   ];
+
+  const yearActive = $derived(zoom.value === 'year' || zoom.value === '2-year');
+  const yearLabel = $derived(zoom.value === '2-year' ? '2Y' : '1Y');
+
+  let yearPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let yearLongFired = false;
+
+  function startYearPress(): void {
+    yearLongFired = false;
+    if (yearPressTimer) clearTimeout(yearPressTimer);
+    yearPressTimer = setTimeout(() => {
+      yearPressTimer = null;
+      yearLongFired = true;
+      longPress();
+      onZoom(zoom.value === '2-year' ? 'year' : '2-year');
+    }, LONGPRESS_MS);
+  }
+
+  function cancelYearPress(): void {
+    if (yearPressTimer) {
+      clearTimeout(yearPressTimer);
+      yearPressTimer = null;
+    }
+  }
+
+  function handleYearClick(): void {
+    if (yearLongFired) {
+      yearLongFired = false;
+      return;
+    }
+    tap();
+    onZoom('year');
+  }
 
   function jumpToToday(): void {
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
@@ -68,10 +99,6 @@
   }
 
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
-  const nowDate = $derived(new Date(clock.now));
-  const nowTimeLabel = $derived(formatTime(nowDate, config.timeFormat, config.timezone));
-  const nowTzLabel = $derived(formatCurrentTzLabel(config.timezone));
-  const nowIsDay = $derived(isDaylight(config.timezone, nowDate));
 
   const LONGPRESS_MS = 500;
   let pressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -117,38 +144,32 @@
   >
     <Icon name="today" size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
-    <span class="title-now" data-mono aria-hidden="true">
-      <Icon name={nowIsDay ? 'sun' : 'moon'} size={12} />
-      <span class="title-now-time">{nowTimeLabel}</span>
-      <span class="title-now-tz">{nowTzLabel}</span>
-    </span>
   </button>
   <nav aria-label="Zoom">
     {#each zooms as z (z.id)}
-      <button
-        class="zoom-btn"
-        type="button"
-        aria-pressed={zoom.value === z.id}
-        onclick={() => { tap(); onZoom(z.id); }}
-      >{z.label}</button>
+      {#if z.id === 'year'}
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-pressed={yearActive}
+          title="1Y · long-press for 2Y"
+          onclick={handleYearClick}
+          onpointerdown={startYearPress}
+          onpointerup={cancelYearPress}
+          onpointercancel={cancelYearPress}
+          onpointerleave={cancelYearPress}
+        >{yearLabel}</button>
+      {:else}
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-pressed={zoom.value === z.id}
+          onclick={() => { tap(); onZoom(z.id); }}
+        >{z.label}</button>
+      {/if}
     {/each}
   </nav>
   <span class="spacer"></span>
-  <IconButton
-    icon="search"
-    label="Search events"
-    pressed={search.open}
-    onclick={toggleSearch}
-  />
-  <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
-    <IconButton
-      icon="refresh"
-      label={refreshTitle}
-      title={refreshTitle}
-      disabled={refreshDisabled}
-      onclick={() => void handleRefresh()}
-    />
-  </span>
   <span
     class="settings-wrap"
     role="presentation"
@@ -165,6 +186,21 @@
       onclick={handleSettingsClick}
     />
   </span>
+  <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
+    <IconButton
+      icon="refresh"
+      label={refreshTitle}
+      title={refreshTitle}
+      disabled={refreshDisabled}
+      onclick={() => void handleRefresh()}
+    />
+  </span>
+  <IconButton
+    icon="search"
+    label="Search events"
+    pressed={search.open}
+    onclick={toggleSearch}
+  />
 </header>
 
 <style>
@@ -196,23 +232,6 @@
     font-family: var(--mono);
     font-size: 13px;
     white-space: nowrap;
-  }
-  .title-now {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
-    font-size: 11px;
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .title-now-tz {
-    color: var(--ink-muted);
-  }
-  @media (max-width: 900px) {
-    .title-now-tz { display: none; }
-  }
-  @media (max-width: 720px) {
-    .title-now { display: none; }
   }
   nav {
     display: inline-flex;
