@@ -104,9 +104,20 @@ function ts(): string {
   return Date.now().toString(36);
 }
 
+const _displayByFeed = $derived.by<Record<string, DisplayEvent[]>>(() => {
+  const out: Record<string, DisplayEvent[]> = {};
+  for (const feed of config.feeds) {
+    out[feed.id] = applyRules(events.byFeed[feed.id] ?? [], config.rules);
+  }
+  return out;
+});
+
 export function displayEventsFor(feedId: string): DisplayEvent[] {
-  const raw = events.byFeed[feedId] ?? [];
-  return applyRules(raw, config.rules);
+  return _displayByFeed[feedId] ?? [];
+}
+
+export function getDisplayByFeed(): Record<string, DisplayEvent[]> {
+  return _displayByFeed;
 }
 
 export function effectiveFeedTz(feedId: string): string | null {

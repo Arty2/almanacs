@@ -6,22 +6,17 @@
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
   import { longPress, tap } from '../lib/haptics';
+  import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
   type Props = { onRefresh: () => Promise<void>; onZoom: (z: Zoom) => void };
   const { onRefresh, onZoom }: Props = $props();
 
-  const COOLDOWN_MS = 30_000;
+  const COOLDOWN_MS = 60_000;
   let lastRefresh = $state(0);
-  let now = $state(Date.now());
-
-  $effect(() => {
-    const timer = setInterval(() => (now = Date.now()), 1000);
-    return () => clearInterval(timer);
-  });
 
   const refreshDisabled = $derived(
-    ui.loading || now - lastRefresh < COOLDOWN_MS || !online.value,
+    ui.loading || clock.now - lastRefresh < COOLDOWN_MS || !online.value,
   );
 
   const refreshTitle = $derived(
@@ -37,7 +32,6 @@
   async function handleRefresh(): Promise<void> {
     if (refreshDisabled) return;
     lastRefresh = Date.now();
-    now = lastRefresh;
     await onRefresh();
   }
 

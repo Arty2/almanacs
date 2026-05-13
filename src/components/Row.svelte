@@ -2,14 +2,15 @@
   import EventPill from './EventPill.svelte';
   import RowHeader from './RowHeader.svelte';
   import { ui, config, focus } from '../lib/state.svelte';
-  import { assignLanes, dateToPx } from '../lib/layout';
+  import { dateToPx } from '../lib/layout';
   import { formatDate } from '../lib/format';
   import { today } from '../lib/today.svelte';
-  import type { CalendarFeed, DisplayEvent } from '../lib/types';
+  import type { CalendarFeed, DisplayEvent, LaneEvent } from '../lib/types';
 
   type Props = {
     feed: CalendarFeed;
     events: DisplayEvent[];
+    laneEvents: LaneEvent[];
     rangeStart: Date;
     pxPerDay: number;
     bodyHeight: number;
@@ -30,6 +31,7 @@
   const {
     feed,
     events,
+    laneEvents,
     rangeStart,
     pxPerDay,
     bodyHeight,
@@ -44,9 +46,8 @@
   }: Props = $props();
 
   const visibleEvents = $derived(events.filter((e) => !e.hidden));
-  const lanes = $derived(assignLanes(visibleEvents, pxPerDay, rangeStart));
   const sortedLaneEvents = $derived(
-    [...lanes.laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
+    [...laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
   );
 
   function focusByUid(uid: string): void {

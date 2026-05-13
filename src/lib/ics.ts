@@ -1,6 +1,7 @@
 import ICAL from 'ical.js';
 import IcalExpander from 'ical-expander';
 import type { FeedSource, ParsedEvent } from './types';
+import { snippetFromText } from './format';
 
 export function feedIdFor(source: FeedSource): string {
   if (source.kind === 'secret') return 'secret:' + source.id;
@@ -21,11 +22,6 @@ function buildSourceUrl(source: FeedSource): string {
   return '/api/ics?url=' + encodeURIComponent(source.url);
 }
 
-function snippetFromDescription(description: string): string {
-  const normalized = description.replace(/\\n/g, '\n').replace(/\\,/g, ',');
-  const firstLine = normalized.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? '';
-  return firstLine.length > 80 ? firstLine.slice(0, 79) + '…' : firstLine;
-}
 
 type ExpanderOccurrence = {
   startDate: ICAL.Time;
@@ -89,7 +85,8 @@ export function parseIcsExtended(
     captureRaw(rawByUid, parsed.uid, occ.item);
   }
   out.sort((a, b) => a.start.getTime() - b.start.getTime());
-  const timezone = detectFeedTimezone(ics);
+  const root = (expander as unknown as { component: ICAL.Component }).component;
+  const timezone = root ? detectFeedTimezoneFromComponent(root) : null;
   return { events: out, timezone, rawByUid };
 }
 
@@ -102,10 +99,8 @@ function captureRaw(target: Record<string, string>, uid: string, event: ICAL.Eve
   }
 }
 
-function detectFeedTimezone(ics: string): string | null {
+function detectFeedTimezoneFromComponent(root: ICAL.Component): string | null {
   try {
-    const jcal = ICAL.parse(ics);
-    const root = new ICAL.Component(jcal);
     const wrTz = root.getFirstPropertyValue('x-wr-timezone');
     if (typeof wrTz === 'string' && wrTz.trim()) return wrTz.trim();
     const counts = new Map<string, number>();
@@ -151,7 +146,7 @@ function toParsedEvent(
     feedId,
     title: event.summary ?? '(untitled)',
     description,
-    descriptionSnippet: snippetFromDescription(description),
+    descriptionSnippet: snippetFromText(description),
     location: event.location ?? '',
     start,
     end,

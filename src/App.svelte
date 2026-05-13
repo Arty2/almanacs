@@ -8,6 +8,7 @@
   import ShareImportModal from './components/ShareImportModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import { config, events, ui, zoom, search, focus, displayEventsFor, pushLog } from './lib/state.svelte';
+  import { getMatches } from './lib/search-state.svelte';
   import { decodeShareState, readShareParam, stripShareParam } from './lib/share';
   import { today } from './lib/today.svelte';
   import { saveConfig, GREEK_HOLIDAYS_URL, USA_HOLIDAYS_URL } from './lib/storage';
@@ -16,7 +17,7 @@
   import { rangeForToday } from './lib/layout';
   import { readUrlState, applyUrlState } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
-  import { buildIndex, search as runSearch, nextMatch } from './lib/search';
+  import { nextMatch } from './lib/search';
   import type { DisplayEvent, Zoom } from './lib/types';
 
   const range = $derived(
@@ -111,8 +112,11 @@
     };
   });
 
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
-    saveConfig(config);
+    const snapshot = $state.snapshot(config) as typeof config;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveConfig(snapshot), 300);
   });
 
   $effect(() => {
@@ -283,26 +287,7 @@
     return () => window.removeEventListener('keydown', listener);
   });
 
-  const allVisibleEvents = $derived.by<DisplayEvent[]>(() => {
-    const out: DisplayEvent[] = [];
-    for (const feed of orderedFeeds) {
-      if (feed.collapsed) continue;
-      const arr = displayEventsFor(feed.id).filter((e) => !e.hidden);
-      out.push(...arr);
-    }
-    return out;
-  });
-
-  const searchableEvents = $derived.by(() => {
-    if (search.includesPast) return allVisibleEvents;
-    const cutoff = today.value.getTime();
-    return allVisibleEvents.filter((e) => e.end.getTime() >= cutoff);
-  });
-
-  const searchIndex = $derived(buildIndex(searchableEvents));
-  const matches = $derived(
-    search.query.trim().length > 0 ? runSearch(searchIndex, search.query) : [],
-  );
+  const matches = $derived(getMatches());
 
   function searchPrev(): void {
     if (matches.length === 0) return;

@@ -230,6 +230,12 @@ export function formatTimezoneLabel(tz: Timezone): string {
   return offset ? offset + ' · ' + city : city;
 }
 
+export function snippetFromText(text: string): string {
+  const normalized = text.replace(/\\n/g, '\n').replace(/\\,/g, ',');
+  const firstLine = normalized.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? '';
+  return firstLine.length > 80 ? firstLine.slice(0, 79) + '…' : firstLine;
+}
+
 export function resolveLocalTz(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
