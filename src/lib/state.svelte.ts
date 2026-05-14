@@ -35,8 +35,8 @@ export const search = $state<{
   includesPast: false,
 });
 
-export const focus = $state<{ rowIndex: number; eventIndex: number }>({
-  rowIndex: 0,
+export const focus = $state<{ feedId: string | null; eventIndex: number }>({
+  feedId: null,
   eventIndex: -1,
 });
 

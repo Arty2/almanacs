@@ -45,8 +45,8 @@
   const atStart = $derived(matchCount > 0 && search.currentIndex === 0);
   const atEnd = $derived(matchCount > 0 && search.currentIndex === matchCount - 1);
 
-  const prevIcon = $derived(atStart ? 'skip-to-start' : 'chevron-left');
-  const nextIcon = $derived(atEnd ? 'skip-to-end' : 'chevron-right');
+  const prevIcon = $derived(atStart ? 'rewind' : 'chevron-left');
+  const nextIcon = $derived(atEnd ? 'fast-forward' : 'chevron-right');
   const prevLabel = $derived(atStart ? 'Wrap to last match' : 'Previous match');
   const nextLabel = $derived(atEnd ? 'Wrap to first match' : 'Next match');
 
@@ -79,22 +79,26 @@
   </span>
   <span class="nav-spacer"></span>
   <div class="row-actions">
-    <IconButton
-      icon={prevIcon}
-      label={prevLabel}
-      variant="ghost"
-      size={18}
-      onclick={onPrev}
-      disabled={matchCount === 0}
-    />
-    <IconButton
-      icon={nextIcon}
-      label={nextLabel}
-      variant="ghost"
-      size={18}
-      onclick={onNext}
-      disabled={matchCount === 0}
-    />
+    <span class="nav-btn-wrap">
+      <IconButton
+        icon={prevIcon}
+        label={prevLabel}
+        variant="ghost"
+        size={16}
+        onclick={onPrev}
+        disabled={matchCount === 0}
+      />
+    </span>
+    <span class="nav-btn-wrap">
+      <IconButton
+        icon={nextIcon}
+        label={nextLabel}
+        variant="ghost"
+        size={16}
+        onclick={onNext}
+        disabled={matchCount === 0}
+      />
+    </span>
   </div>
 </div>
 
@@ -140,6 +144,13 @@
     align-items: center;
     gap: 0.4em;
     padding-right: var(--row-actions-right, 8px);
+  }
+  .nav-btn-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
   }
   @media (max-width: 640px) {
     .search-toolbar {

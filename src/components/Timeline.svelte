@@ -430,7 +430,7 @@
     if (!scrollEl) return;
     const expanded = orderedFeeds.filter((f) => !f.collapsed);
     if (expanded.length === 0) return;
-    const target = expanded[focus.rowIndex];
+    const target = expanded.find((f) => f.id === focus.feedId);
     if (!target) return;
     const arr = visibleByFeed[target.id] ?? [];
     const ev = arr[focus.eventIndex];

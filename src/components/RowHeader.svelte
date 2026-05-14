@@ -34,7 +34,7 @@
     const ev = sorted[nextIdx];
     if (!ev) return;
     if (rowIndex >= 0) {
-      focus.rowIndex = rowIndex;
+      focus.feedId = feed.id;
       focus.eventIndex = nextIdx;
     }
     if (scrollEl) {
@@ -47,7 +47,7 @@
     if (visibleEvents.length === 0) return;
     const sorted = [...visibleEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
     const focusedHere =
-      focus.rowIndex === rowIndex && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
+      focus.feedId === feed.id && focus.eventIndex >= 0 && focus.eventIndex < sorted.length;
     let nextIdx: number;
     if (!focusedHere) {
       // First click on prev/next anchors at the boundary around today

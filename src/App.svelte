@@ -204,7 +204,7 @@
   const expandedFeeds = $derived(orderedFeeds.filter((f) => !f.collapsed));
 
   const focusedFeedEvents = $derived.by<DisplayEvent[]>(() => {
-    const feed = expandedFeeds[focus.rowIndex];
+    const feed = expandedFeeds.find((f) => f.id === focus.feedId);
     if (!feed) return [];
     return displayEventsFor(feed.id)
       .filter((e) => !e.hidden)
@@ -226,9 +226,15 @@
 
   function moveRow(dir: -1 | 1): void {
     if (expandedFeeds.length === 0) return;
-    const next = Math.max(0, Math.min(expandedFeeds.length - 1, focus.rowIndex + dir));
-    if (next === focus.rowIndex) return;
-    focus.rowIndex = next;
+    const curIdx = expandedFeeds.findIndex((f) => f.id === focus.feedId);
+    let next: number;
+    if (curIdx < 0) {
+      next = dir === 1 ? 0 : expandedFeeds.length - 1;
+    } else {
+      next = Math.max(0, Math.min(expandedFeeds.length - 1, curIdx + dir));
+      if (next === curIdx) return;
+    }
+    focus.feedId = expandedFeeds[next]?.id ?? null;
     focus.eventIndex = 0;
   }
 
@@ -300,8 +306,10 @@
 
   function searchIdle(): void {
     if (matches.length > 0) {
-      search.currentIndex = 0;
-      const ev = matches[0]?.event;
+      const todayMs = today.value.getTime();
+      const firstFuture = matches.findIndex((m) => m.event.start.getTime() >= todayMs);
+      search.currentIndex = firstFuture >= 0 ? firstFuture : 0;
+      const ev = matches[search.currentIndex]?.event;
       if (ev) {
         window.dispatchEvent(
           new CustomEvent('cal:scroll-to-date', { detail: { date: ev.start } }),
@@ -322,7 +330,7 @@
       ui.settingsOpen = false;
       ui.modalEvent = null;
       ui.errorModal = null;
-      focus.rowIndex = 0;
+      focus.feedId = expandedFeeds[0]?.id ?? null;
       focus.eventIndex = -1;
       window.dispatchEvent(new CustomEvent('cal:jump-today'));
     }

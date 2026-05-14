@@ -25,7 +25,7 @@
   };
   function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
     if (currentMatchUid && currentMatchUid === ev.uid) return true;
-    if (focus.rowIndex === rowIndex && focus.eventIndex === idx) return true;
+    if (focus.feedId === feed.id && focus.eventIndex === idx) return true;
     return false;
   }
   const {
@@ -73,7 +73,7 @@
   }
 
   const isHolidayFeed = $derived(feed.category === 'holidays');
-  const isFocusedRow = $derived(focus.rowIndex === rowIndex);
+  const isFocusedRow = $derived(focus.feedId === feed.id);
 </script>
 
 <section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
@@ -103,7 +103,7 @@
           feedColor={feed.color}
           feedStyle={feed.style}
           feedTravel={feed.travel}
-          {rowIndex}
+          feedId={feed.id}
           onFocusEvent={focusByUid}
         />
       {/each}
@@ -130,7 +130,7 @@
           aria-label={dotLabel(d.ev)}
           title={dotLabel(d.ev)}
           onclick={() => {
-            focus.rowIndex = rowIndex;
+            focus.feedId = feed.id;
             focus.eventIndex = i;
             openDot(d.ev);
           }}

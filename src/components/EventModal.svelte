@@ -166,7 +166,7 @@
               onclick={() => (showRaw = !showRaw)}
               title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
               aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-            ><Icon name="search-locate" size={16} /></button>
+            >{'{}'}</button>
           {/if}
           <button
             type="button"
@@ -176,7 +176,7 @@
             title={matchedRules.length === 0 ? 'No filters apply to this event' : (showFilters ? 'Hide matching filters' : 'Show matching filters')}
             aria-label={showFilters ? 'Hide matching filters' : 'Show matching filters'}
             onclick={() => (showFilters = !showFilters)}
-          ><Icon name="search-locate" size={16} /></button>
+          ><Icon name="filter" size={16} /></button>
         </div>
         <div class="copy-slot">
           {#if showFilters}

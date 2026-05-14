@@ -75,9 +75,8 @@ export function parseIcsExtended(
   try {
     expander = new IcalExpander({ ics, maxIterations: 1000 });
     result = expander.between(rangeStart, rangeEnd) as ExpanderResult;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error('Failed to parse calendar: ' + msg);
+  } catch {
+    return parseIcsFallback(ics, feedId, rangeStart, rangeEnd);
   }
   const out: ParsedEvent[] = [];
   const rawByUid: Record<string, string> = {};
@@ -94,6 +93,39 @@ export function parseIcsExtended(
   out.sort((a, b) => a.start.getTime() - b.start.getTime());
   const root = (expander as unknown as { component: ICAL.Component }).component;
   const timezone = root ? detectFeedTimezoneFromComponent(root) : null;
+  return { events: out, timezone, rawByUid };
+}
+
+function parseIcsFallback(
+  ics: string,
+  feedId: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+): FeedParseResult {
+  const rsMs = rangeStart.getTime();
+  const reMs = rangeEnd.getTime();
+  const out: ParsedEvent[] = [];
+  const rawByUid: Record<string, string> = {};
+  let root: ICAL.Component | null = null;
+  try {
+    root = new ICAL.Component(ICAL.parse(ics));
+  } catch {
+    throw new Error('Failed to parse calendar: invalid ICS format');
+  }
+  for (const vevent of root.getAllSubcomponents('vevent')) {
+    try {
+      const event = new ICAL.Event(vevent);
+      if (!event.startDate) continue;
+      const endDate = event.endDate ?? event.startDate;
+      const parsed = toParsedEvent(event, feedId, event.startDate, endDate);
+      if (parsed.end.getTime() >= rsMs && parsed.start.getTime() <= reMs) {
+        out.push(parsed);
+        captureRaw(rawByUid, parsed.uid, event);
+      }
+    } catch { /* skip malformed individual event */ }
+  }
+  out.sort((a, b) => a.start.getTime() - b.start.getTime());
+  const timezone = detectFeedTimezoneFromComponent(root);
   return { events: out, timezone, rawByUid };
 }
 
