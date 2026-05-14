@@ -14,6 +14,7 @@
   let dialog: HTMLDialogElement | undefined = $state();
   let showRaw = $state(false);
   let showFilters = $state(false);
+  let returnEvent: typeof ui.modalEvent = null;
 
   $effect(() => {
     if (!dialog) return;
@@ -23,6 +24,14 @@
       showFilters = false;
     }
     if (!ui.modalEvent && dialog.open) dialog.close();
+  });
+
+  $effect(() => {
+    if (!ui.settingsOpen && returnEvent) {
+      const ev = returnEvent;
+      returnEvent = null;
+      ui.modalEvent = ev;
+    }
   });
 
   const matchedRules = $derived(
@@ -41,6 +50,7 @@
   }
 
   function openRuleInSettings(rule: FindReplaceRule): void {
+    returnEvent = ui.modalEvent;
     ui.settingsAutoEditRuleId = rule.id;
     ui.settingsScrollToRuleId = rule.id;
     ui.settingsOpen = true;
@@ -71,17 +81,6 @@
     } catch {
       pushLog('Copy failed', 'error');
     }
-  }
-
-  function downloadIcs(ev: NonNullable<typeof ui.modalEvent>): void {
-    const { dataUrl, filename } = buildIcsDownload(ev);
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    pushLog('Downloaded ' + filename);
   }
 
   function buildDetails(ev: NonNullable<typeof ui.modalEvent>): string {
@@ -115,7 +114,7 @@
     {@const raw = events.rawByUid[ev.uid] ?? null}
     <article>
       <header>
-        <h2>{ev.displayTitle}</h2>
+        <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
       {#if showFilters}
@@ -146,25 +145,16 @@
         {#if ev.displayDescription}<p class="desc">{ev.displayDescription}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      <div class="modal-add-row">
-        <a
-          class="action-btn"
-          href={buildOutlookAddUrl(ev)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >M365</a>
-        <a
-          class="action-btn"
-          href={buildGoogleAddUrl(ev)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >GCal</a>
-        <button
-          type="button"
-          class="action-btn"
-          onclick={() => downloadIcs(ev)}
-        >iCal</button>
-      </div>
+      {#if !showRaw && !showFilters}
+        {@const ics = buildIcsDownload(ev)}
+        <div class="modal-add-row">
+          <a href={buildOutlookAddUrl(ev)} target="_blank" rel="noopener noreferrer">Outlook</a>
+          <span class="add-dot" aria-hidden="true">·</span>
+          <a href={buildGoogleAddUrl(ev)} target="_blank" rel="noopener noreferrer">Google Calendar</a>
+          <span class="add-dot" aria-hidden="true">·</span>
+          <a href={ics.dataUrl} download={ics.filename}>iCal</a>
+        </div>
+      {/if}
       <footer class="modal-footer">
         <div class="source-slot">
           {#if raw}
@@ -176,7 +166,7 @@
               onclick={() => (showRaw = !showRaw)}
               title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
               aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{}'}</button>
+            ><Icon name="search-locate" size={16} /></button>
           {/if}
           <button
             type="button"
@@ -235,13 +225,13 @@
   header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 0.5em;
     border-bottom: 1px solid var(--ink-faint);
     padding-bottom: 0.5em;
     margin-bottom: 0.5em;
   }
-  header h2 {
+  .modal-title {
     flex: 1 1 auto;
     margin: 0;
     font-size: 1.15em;
@@ -276,20 +266,33 @@
     background: var(--paper-2);
   }
   .modal-add-row {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    align-items: center;
     gap: 0.4em;
     margin-top: 0.5em;
+    flex-wrap: wrap;
   }
-  .modal-add-row .action-btn {
-    width: 100%;
+  .modal-add-row a {
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 13px;
+  }
+  .modal-add-row a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .add-dot {
+    color: var(--ink-muted);
+    user-select: none;
   }
   .raw-toggle {
-    font-family: var(--mono);
-    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
     height: 26px;
-    padding: 0 8px;
-    border: 1px solid var(--ink-faint);
+    padding: 0;
+    border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
@@ -318,6 +321,7 @@
   .locate-filters[aria-pressed='true'] {
     background: var(--ink);
     color: var(--paper);
+    border-color: var(--ink);
   }
   .locate-filters:disabled {
     opacity: 0.4;

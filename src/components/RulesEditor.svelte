@@ -297,6 +297,8 @@
   }
   .rule-list li[data-active='true'] {
     background: var(--paper-2);
+    outline: 2px solid var(--ink);
+    outline-offset: -2px;
   }
   .rule-row {
     display: flex;
@@ -401,6 +403,7 @@
   .field label {
     font-size: 12px;
     color: var(--ink-muted);
+    user-select: none;
   }
   .field input,
   .field select {

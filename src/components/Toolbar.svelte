@@ -75,6 +75,14 @@
     onZoom('year');
   }
 
+  function handleYearDblClick(): void {
+    yearLongFired = false;
+    cancelYearPress();
+    tap();
+    onZoom('year');
+    jumpToToday();
+  }
+
   function jumpToToday(): void {
     window.dispatchEvent(new CustomEvent('cal:jump-today'));
   }
@@ -146,8 +154,9 @@
           class="zoom-btn"
           type="button"
           aria-pressed={yearActive}
-          title="1Y · long-press for 2Y"
+          title="1Y · long-press for 2Y · double-tap to jump to today"
           onclick={handleYearClick}
+          ondblclick={handleYearDblClick}
           onpointerdown={startYearPress}
           onpointerup={cancelYearPress}
           onpointercancel={cancelYearPress}
@@ -158,7 +167,9 @@
           class="zoom-btn"
           type="button"
           aria-pressed={zoom.value === z.id}
+          title="{z.label} · double-tap to jump to today"
           onclick={() => { tap(); onZoom(z.id); }}
+          ondblclick={() => { tap(); onZoom(z.id); jumpToToday(); }}
         >{z.label}</button>
       {/if}
     {/each}

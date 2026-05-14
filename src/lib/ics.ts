@@ -70,8 +70,15 @@ export function parseIcsExtended(
   rangeStart: Date,
   rangeEnd: Date,
 ): FeedParseResult {
-  const expander = new IcalExpander({ ics, maxIterations: 1000 });
-  const result = expander.between(rangeStart, rangeEnd) as ExpanderResult;
+  let expander: IcalExpander;
+  let result: ExpanderResult;
+  try {
+    expander = new IcalExpander({ ics, maxIterations: 1000 });
+    result = expander.between(rangeStart, rangeEnd) as ExpanderResult;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error('Failed to parse calendar: ' + msg);
+  }
   const out: ParsedEvent[] = [];
   const rawByUid: Record<string, string> = {};
   for (const event of result.events) {

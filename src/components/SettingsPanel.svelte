@@ -427,10 +427,13 @@
   function feedStaleSince(feed: CalendarFeed): string {
     const ts = events.lastSuccessAt[feed.id];
     if (!ts || !ui.feedErrors[feed.id]) return '';
-    const d = new Date(ts);
-    const hh = d.getHours().toString().padStart(2, '0');
-    const mm = d.getMinutes().toString().padStart(2, '0');
-    return `${hh}:${mm}`;
+    const elapsed = clock.now - ts;
+    const mins = Math.floor(elapsed / 60_000);
+    if (mins < 1) return '<1m';
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.floor(hours / 24)}d`;
   }
 </script>
 
@@ -843,6 +846,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.3em;
+    user-select: none;
   }
   .settings-footer a {
     color: inherit;
@@ -892,6 +896,7 @@
     font-size: 1.1em;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    user-select: none;
   }
   h3 {
     margin: 0 0 0.6em 0;
@@ -900,6 +905,7 @@
     letter-spacing: 0.05em;
     color: var(--ink-muted);
     font-weight: 600;
+    user-select: none;
   }
   section {
     margin: 0;
@@ -916,6 +922,7 @@
   .field label {
     font-size: 13px;
     color: var(--ink);
+    user-select: none;
   }
   .field input,
   .field select {
@@ -938,6 +945,8 @@
   }
   .feeds li[data-active='true'] {
     background: var(--paper-2);
+    outline: 2px solid var(--ink);
+    outline-offset: -2px;
   }
   .feeds :global(li.flash) {
     background: var(--paper-2);
