@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { tick } from 'svelte';
   import IconButton from './IconButton.svelte';
-  import { ui, config, events, pushLog, getDisplayByFeed } from '../lib/state.svelte';
+  import { ui, config, events, pushLog } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { matchingRulesFor } from '../lib/rules';
   import {
@@ -9,7 +8,7 @@
     buildIcsDownload,
     buildOutlookAddUrl,
   } from '../lib/calendar-links';
-  import type { DisplayEvent, FindReplaceRule, StyleVariant } from '../lib/types';
+  import type { FindReplaceRule, StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showRaw = $state(false);
@@ -55,104 +54,6 @@
     ui.settingsScrollToRuleId = rule.id;
     ui.settingsOpen = true;
     ui.modalEvent = null;
-  }
-
-  // All events across non-collapsed feeds, sorted by start date, for swipe navigation
-  const allSortedEvents = $derived.by<DisplayEvent[]>(() => {
-    const byFeed = getDisplayByFeed();
-    const out: DisplayEvent[] = [];
-    for (const feed of [...config.feeds].sort((a, b) => a.order - b.order)) {
-      if (feed.collapsed) continue;
-      for (const ev of (byFeed[feed.id] ?? [])) {
-        if (!ev.hidden) out.push(ev);
-      }
-    }
-    return out.sort((a, b) => a.start.getTime() - b.start.getTime());
-  });
-
-  // Swipe animation state
-  let swipeOffset = $state(0);
-  let swipeAnimated = $state(false);
-  let isAnimating = $state(false);
-  let swipeStartX = 0;
-  let swipeStartY = 0;
-  let swipeActive = false;
-
-  function sleep(ms: number): Promise<void> {
-    return new Promise(r => setTimeout(r, ms));
-  }
-
-  async function navigateEvent(dir: 1 | -1): Promise<void> {
-    if (isAnimating) return;
-    const current = ui.modalEvent;
-    if (!current) return;
-    const list = allSortedEvents;
-    const idx = list.findIndex(e => e.uid === current.uid);
-    if (idx < 0) return;
-    const next = list[idx + dir];
-    if (!next) return;
-
-    isAnimating = true;
-    const W = (typeof window !== 'undefined' ? window.innerWidth : 400) * 0.75;
-
-    // Slide current article out in swipe direction
-    swipeAnimated = true;
-    swipeOffset = dir < 0 ? -W : W;
-    await sleep(200);
-
-    // Swap event; instantly reposition to opposite side (no transition)
-    swipeAnimated = false;
-    ui.modalEvent = next;
-    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: next.start } }));
-    swipeOffset = dir < 0 ? W : -W;
-
-    // Let Svelte render the new content, then slide in
-    await tick();
-    swipeAnimated = true;
-    swipeOffset = 0;
-    await sleep(200);
-    isAnimating = false;
-    swipeAnimated = false;
-  }
-
-  // Article-level swipe handlers (not on dialog — avoids intercepting tray handle)
-  function onArticlePointerDown(e: PointerEvent): void {
-    if (isAnimating) return;
-    swipeStartX = e.clientX;
-    swipeStartY = e.clientY;
-    swipeActive = true;
-    swipeAnimated = false;
-  }
-  function onArticlePointerMove(e: PointerEvent): void {
-    if (!swipeActive || isAnimating) return;
-    const dx = e.clientX - swipeStartX;
-    const dy = e.clientY - swipeStartY;
-    if (Math.abs(dx) > Math.abs(dy)) {
-      swipeOffset = dx * 0.85;
-    }
-  }
-  function onArticlePointerUp(e: PointerEvent): void {
-    if (!swipeActive) return;
-    swipeActive = false;
-    const dx = e.clientX - swipeStartX;
-    const dy = e.clientY - swipeStartY;
-    const THRESHOLD = 60;
-    if (!isAnimating && Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > THRESHOLD) {
-      void navigateEvent(dx < 0 ? 1 : -1);
-      return;
-    }
-    if (!isAnimating && Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dy) > THRESHOLD) {
-      close();
-      return;
-    }
-    // Spring back
-    swipeAnimated = true;
-    swipeOffset = 0;
-  }
-  function onArticlePointerCancel(): void {
-    swipeActive = false;
-    swipeAnimated = true;
-    swipeOffset = 0;
   }
 
   function close(): void {
@@ -244,14 +145,7 @@
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
-    <article
-      class:swiping-anim={swipeAnimated}
-      style="transform: translateX({swipeOffset}px)"
-      onpointerdown={onArticlePointerDown}
-      onpointermove={onArticlePointerMove}
-      onpointerup={onArticlePointerUp}
-      onpointercancel={onArticlePointerCancel}
-    >
+    <article>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
@@ -354,10 +248,6 @@
   article {
     padding: 1em;
     position: relative;
-    will-change: transform;
-  }
-  article.swiping-anim {
-    transition: transform 220ms ease-out;
   }
   header {
     display: flex;
