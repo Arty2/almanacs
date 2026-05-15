@@ -3,7 +3,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime } from '../lib/format';
+  import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
   import { tap } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory } from '../lib/types';
@@ -137,7 +137,7 @@
     return `${range} (W${wn})`;
   }
 
-  type EventWithFeed = { event: DisplayEvent; feedId: string };
+  type EventWithFeed = { event: DisplayEvent; feedId: string; feedName: string };
 
   const CATEGORY_ORDER: FeedCategory[] = ['none', 'guests', 'announcements', 'holidays', 'observances'];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
@@ -182,10 +182,11 @@
     for (const feed of config.feeds) {
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
+        const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name };
         if (ev.start < todayEnd && ev.end > base) {
-          todayItems.push({ event: ev, feedId: feed.id });
+          todayItems.push(ef);
         } else if (ev.start >= todayEnd && ev.start < windowEnd) {
-          futureItems.push({ event: ev, feedId: feed.id });
+          futureItems.push(ef);
         }
       }
     }
@@ -222,10 +223,26 @@
   });
 
   function eventTimeLabel(ev: DisplayEvent): string {
-    if (ev.allDay) return 'All day';
-    const start = formatTime(ev.start, config.timeFormat, config.timezone);
-    const end = formatTime(ev.end, config.timeFormat, config.timezone);
-    return start + '–' + end;
+    if (!ev.allDay) {
+      return formatTime(ev.start, config.timeFormat, config.timezone)
+        + '–'
+        + formatTime(ev.end, config.timeFormat, config.timezone);
+    }
+    const days = durationDays(ev.start, ev.end, true);
+    const last = new Date(ev.end.getTime() - 1);
+    const sd = ev.start.getUTCDate();
+    const ed = last.getUTCDate();
+    const sm = formatMonth(ev.start, config.locale, 'short');
+    const em = formatMonth(last, config.locale, 'short');
+    let datePart: string;
+    if (days === 1) {
+      datePart = `${sd} ${sm}`;
+    } else if (ev.start.getUTCMonth() === last.getUTCMonth()) {
+      datePart = `${sd}–${ed} ${sm}`;
+    } else {
+      datePart = `${sd} ${sm}–${ed} ${em}`;
+    }
+    return `${datePart} (${days}d)`;
   }
 
   // Copy as tab-separated list
@@ -233,25 +250,22 @@
 
   async function copyEventList(): Promise<void> {
     if (!eventGroups) return;
-    const rows: string[] = ['Start\tEnd\tTime\tTitle\tLocation'];
+    const rows: string[] = ['Start Date\tStart Time\tEnd Date\tEnd Time\tTitle\tLocation\tCategory'];
 
-    function addItems(items: EventWithFeed[]): void {
+    function addItems(items: EventWithFeed[], categoryLabel: string): void {
       for (const { event: ev } of items) {
-        const startStr = formatDate(ev.start, config.dateFormat, config.locale);
-        const endDate = ev.allDay ? new Date(ev.end.getTime() - 1) : ev.end;
-        const endStr = formatDate(endDate, config.dateFormat, config.locale);
-        const timeStr = ev.allDay
-          ? ''
-          : formatTime(ev.start, config.timeFormat, config.timezone) +
-            '–' +
-            formatTime(ev.end, config.timeFormat, config.timezone);
-        rows.push([startStr, endStr, timeStr, ev.displayTitle, ev.displayLocation].join('\t'));
+        const startDate = formatDate(ev.start, config.dateFormat, config.locale);
+        const startTime = ev.allDay ? '' : formatTime(ev.start, config.timeFormat, config.timezone);
+        const endRaw = ev.allDay ? new Date(ev.end.getTime() - 1) : ev.end;
+        const endDate = formatDate(endRaw, config.dateFormat, config.locale);
+        const endTime = ev.allDay ? '' : formatTime(ev.end, config.timeFormat, config.timezone);
+        rows.push([startDate, startTime, endDate, endTime, ev.displayTitle, ev.displayLocation, categoryLabel].join('\t'));
       }
     }
 
-    for (const cat of eventGroups.todayCategories) addItems(cat.items);
+    for (const cat of eventGroups.todayCategories) addItems(cat.items, cat.label);
     for (const week of eventGroups.weeks) {
-      for (const cat of week.categories) addItems(cat.items);
+      for (const cat of week.categories) addItems(cat.items, cat.label);
     }
 
     try {
@@ -296,14 +310,6 @@
 
   {#if expanded && eventGroups}
     <div class="events-tray" role="region" aria-label="Upcoming events">
-      <div class="tray-toolbar">
-        <button
-          type="button"
-          class="copy-btn"
-          onclick={copyEventList}
-          title="Copy as tab-separated list for Excel"
-        >{copyDone ? 'Copied!' : 'Copy'}</button>
-      </div>
       <div class="tray-scroll">
         {#if eventGroups.todayCategories.length === 0 && eventGroups.weeks.length === 0}
           <p class="empty">No upcoming events in the next two weeks.</p>
@@ -315,12 +321,13 @@
                 <div class="cat-group">
                   <span class="cat-label">{catGroup.label}</span>
                   <ul>
-                    {#each catGroup.items as { event: ev } (ev.uid)}
+                    {#each catGroup.items as ef (ef.event.uid)}
                       <li class="event-row">
-                        <span class="event-time">{eventTimeLabel(ev)}</span>
-                        <span class="event-title">{ev.displayTitle}</span>
-                        {#if ev.displayLocation}
-                          <span class="event-location">{ev.displayLocation}</span>
+                        <span class="event-time">{eventTimeLabel(ef.event)}</span>
+                        <span class="event-title">{ef.event.displayTitle}</span>
+                        <span class="event-cal">{ef.feedName}</span>
+                        {#if ef.event.displayLocation}
+                          <span class="event-location">{ef.event.displayLocation}</span>
                         {/if}
                       </li>
                     {/each}
@@ -337,12 +344,13 @@
                 <div class="cat-group">
                   <span class="cat-label">{catGroup.label}</span>
                   <ul>
-                    {#each catGroup.items as { event: ev } (ev.uid)}
+                    {#each catGroup.items as ef (ef.event.uid)}
                       <li class="event-row">
-                        <span class="event-time">{eventTimeLabel(ev)}</span>
-                        <span class="event-title">{ev.displayTitle}</span>
-                        {#if ev.displayLocation}
-                          <span class="event-location">{ev.displayLocation}</span>
+                        <span class="event-time">{eventTimeLabel(ef.event)}</span>
+                        <span class="event-title">{ef.event.displayTitle}</span>
+                        <span class="event-cal">{ef.feedName}</span>
+                        {#if ef.event.displayLocation}
+                          <span class="event-location">{ef.event.displayLocation}</span>
                         {/if}
                       </li>
                     {/each}
@@ -353,6 +361,12 @@
           {/each}
         {/if}
       </div>
+      <button
+        type="button"
+        class="copy-btn"
+        onclick={copyEventList}
+        title="Copy as tab-separated list for Excel"
+      >{copyDone ? 'Copied!' : 'Copy'}</button>
     </div>
   {/if}
 </aside>
@@ -443,22 +457,19 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-  }
-  .tray-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 0.3em 0.6em;
-    border-bottom: 1px dashed var(--ink-faint);
-    flex-shrink: 0;
+    position: relative;
   }
   .copy-btn {
+    position: absolute;
+    bottom: 0.6em;
+    right: 0.6em;
+    z-index: 1;
     font-family: var(--mono);
     font-size: 11px;
     letter-spacing: 0.06em;
     padding: 0.2em 0.6em;
     border: 1px solid var(--ink);
-    background: transparent;
+    background: var(--paper);
     color: var(--ink);
     cursor: pointer;
   }
@@ -469,7 +480,7 @@
   .tray-scroll {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 0.4em 0.6em 0.8em;
+    padding: 0.4em 0.6em 2.5em;
     user-select: text;
     -webkit-user-select: text;
   }
@@ -505,7 +516,7 @@
   }
   .event-row {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto;
     gap: 0.5em;
     align-items: baseline;
     font-size: 12px;
@@ -516,13 +527,18 @@
     color: var(--ink-muted);
     font-size: 11px;
     white-space: nowrap;
-    flex-shrink: 0;
   }
   .event-title {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
+  }
+  .event-cal {
+    font-size: 10px;
+    color: var(--ink-muted);
+    white-space: nowrap;
+    text-align: right;
   }
   .event-location {
     grid-column: 2;
