@@ -96,6 +96,14 @@ export function parseIcsExtended(
   return { events: out, timezone, rawByUid };
 }
 
+function sanitizeJCal(jcal: unknown): unknown {
+  if (!Array.isArray(jcal)) return jcal;
+  const name = jcal[0];
+  const props = Array.isArray(jcal[1]) ? jcal[1] : [];
+  const subs = Array.isArray(jcal[2]) ? (jcal[2] as unknown[]).map(sanitizeJCal) : [];
+  return [name, props, subs];
+}
+
 function parseIcsFallback(
   ics: string,
   feedId: string,
@@ -106,13 +114,21 @@ function parseIcsFallback(
   const reMs = rangeEnd.getTime();
   const out: ParsedEvent[] = [];
   const rawByUid: Record<string, string> = {};
-  let root: ICAL.Component | null = null;
+
+  let root: ICAL.Component;
   try {
-    root = new ICAL.Component(ICAL.parse(ics));
-  } catch {
-    throw new Error('Failed to parse calendar: invalid ICS format');
+    const safe = sanitizeJCal(ICAL.parse(ics) as unknown) as unknown[];
+    root = new ICAL.Component(safe as never);
+  } catch (err) {
+    throw new Error('Failed to parse calendar: ' + (err instanceof Error ? err.message : String(err)));
   }
-  for (const vevent of root.getAllSubcomponents('vevent')) {
+
+  let vevents: ICAL.Component[] = [];
+  try {
+    vevents = root.getAllSubcomponents('vevent');
+  } catch { /* jCal still malformed — return empty */ }
+
+  for (const vevent of vevents) {
     try {
       const event = new ICAL.Event(vevent);
       if (!event.startDate) continue;
@@ -122,8 +138,9 @@ function parseIcsFallback(
         out.push(parsed);
         captureRaw(rawByUid, parsed.uid, event);
       }
-    } catch { /* skip malformed individual event */ }
+    } catch { /* skip malformed event */ }
   }
+
   out.sort((a, b) => a.start.getTime() - b.start.getTime());
   const timezone = detectFeedTimezoneFromComponent(root);
   return { events: out, timezone, rawByUid };

@@ -427,7 +427,7 @@
   function feedStaleSince(feed: CalendarFeed): string {
     const ts = events.lastSuccessAt[feed.id];
     if (!ts || !ui.feedErrors[feed.id]) return '';
-    const elapsed = clock.now - ts;
+    const elapsed = Date.now() - ts;
     const mins = Math.floor(elapsed / 60_000);
     if (mins < 1) return '<1m';
     if (mins < 60) return `${mins}m`;

@@ -171,7 +171,7 @@
   const isStale = $derived(!!errorMessage && (events.byFeed[feed.id]?.length ?? 0) > 0);
   const staleSinceLabel = $derived.by(() => {
     if (!isStale || !lastSuccess) return '';
-    const elapsed = clock.now - lastSuccess;
+    const elapsed = Date.now() - lastSuccess;
     const mins = Math.floor(elapsed / 60_000);
     if (mins < 1) return '<1m';
     if (mins < 60) return `${mins}m`;

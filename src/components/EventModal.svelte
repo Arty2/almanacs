@@ -117,7 +117,11 @@
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
-      {#if showFilters}
+      {#if showRaw && raw}
+        <div class="raw-block">
+          <pre><code>{raw}</code></pre>
+        </div>
+      {:else if showFilters}
         <ul class="filter-list">
           {#each matchedRules as rule (rule.id)}
             <li>
@@ -135,10 +139,6 @@
             </li>
           {/each}
         </ul>
-      {:else if showRaw && raw}
-        <div class="raw-block">
-          <pre><code>{raw}</code></pre>
-        </div>
       {:else}
         <p><time datetime={ev.start.toISOString()}>{formatStart(ev.start, ev.allDay)}</time></p>
         {#if ev.displayLocation}<p><strong>Location:</strong> {ev.displayLocation}</p>{/if}
@@ -157,17 +157,6 @@
       {/if}
       <footer class="modal-footer">
         <div class="source-slot">
-          {#if raw}
-            <button
-              type="button"
-              class="raw-toggle"
-              aria-pressed={showRaw}
-              disabled={showFilters}
-              onclick={() => (showRaw = !showRaw)}
-              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{}'}</button>
-          {/if}
           <button
             type="button"
             class="locate-filters"
@@ -179,13 +168,19 @@
           ><Icon name="filter" size={16} /></button>
         </div>
         <div class="copy-slot">
-          {#if showFilters}
+          {#if raw}
+            <button
+              type="button"
+              class="raw-toggle"
+              aria-pressed={showRaw}
+              onclick={() => (showRaw = !showRaw)}
+              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+            >{'{ }'}</button>
+          {/if}
+          {#if showFilters && !showRaw}
             <span class="filter-count" data-mono>{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</span>
-          {:else if showRaw && raw}
-            <button type="button" class="action-btn" onclick={() => void copyText(raw, 'data')}>
-              Copy data
-            </button>
-          {:else}
+          {:else if !showRaw}
             <button
               type="button"
               class="action-btn"
