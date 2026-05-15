@@ -1,6 +1,6 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, config, events, pushLog } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, getDisplayByFeed } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { matchingRulesFor } from '../lib/rules';
   import {
@@ -8,7 +8,7 @@
     buildIcsDownload,
     buildOutlookAddUrl,
   } from '../lib/calendar-links';
-  import type { FindReplaceRule, StyleVariant } from '../lib/types';
+  import type { DisplayEvent, FindReplaceRule, StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showRaw = $state(false);
@@ -55,6 +55,55 @@
     ui.settingsOpen = true;
     ui.modalEvent = null;
   }
+
+  // All events across non-collapsed feeds, sorted by start date, for swipe navigation
+  const allSortedEvents = $derived.by<DisplayEvent[]>(() => {
+    const byFeed = getDisplayByFeed();
+    const out: DisplayEvent[] = [];
+    for (const feed of [...config.feeds].sort((a, b) => a.order - b.order)) {
+      if (feed.collapsed) continue;
+      for (const ev of (byFeed[feed.id] ?? [])) {
+        if (!ev.hidden) out.push(ev);
+      }
+    }
+    return out.sort((a, b) => a.start.getTime() - b.start.getTime());
+  });
+
+  function navigateEvent(dir: 1 | -1): void {
+    const current = ui.modalEvent;
+    if (!current) return;
+    const list = allSortedEvents;
+    const idx = list.findIndex(e => e.uid === current.uid);
+    if (idx < 0) return;
+    const next = list[idx + dir];
+    if (!next) return;
+    ui.modalEvent = next;
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: next.start } }));
+  }
+
+  // Swipe gesture tracking (no pointer capture — lets scroll work normally)
+  let swipeStartX = 0;
+  let swipeStartY = 0;
+  let swipeActive = false;
+
+  function onDialogPointerDown(e: PointerEvent): void {
+    swipeStartX = e.clientX;
+    swipeStartY = e.clientY;
+    swipeActive = true;
+  }
+  function onDialogPointerUp(e: PointerEvent): void {
+    if (!swipeActive) return;
+    swipeActive = false;
+    const dx = e.clientX - swipeStartX;
+    const dy = e.clientY - swipeStartY;
+    const THRESHOLD = 60;
+    if (Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > THRESHOLD) {
+      navigateEvent(dx < 0 ? 1 : -1);
+    } else if (Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dy) > THRESHOLD) {
+      close();
+    }
+  }
+  function onDialogPointerCancel(): void { swipeActive = false; }
 
   function close(): void {
     ui.modalEvent = null;
@@ -141,7 +190,14 @@
   }
 </script>
 
-<dialog bind:this={dialog} onclose={close} onclick={onClick}>
+<dialog
+  bind:this={dialog}
+  onclose={close}
+  onclick={onClick}
+  onpointerdown={onDialogPointerDown}
+  onpointerup={onDialogPointerUp}
+  onpointercancel={onDialogPointerCancel}
+>
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}

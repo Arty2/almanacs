@@ -3,7 +3,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, isoWeekNumber } from '../lib/time';
-  import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
+  import { formatDate, formatDateLong, formatMonth, formatTime } from '../lib/format';
   import Icon from './Icon.svelte';
   import { tap } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory } from '../lib/types';
@@ -241,17 +241,18 @@
     const sm = formatMonth(ev.start, config.locale, 'short');
     const em = formatMonth(last, config.locale, 'short');
     if (days === 1) return `${sd} ${sm}`;
-    let datePart: string;
-    if (ev.start.getUTCMonth() === last.getUTCMonth()) {
-      datePart = `${sd}–${ed} ${sm}`;
-    } else {
-      datePart = `${sd} ${sm}–${ed} ${em}`;
-    }
-    return `${datePart} (${days}d)`;
+    if (ev.start.getUTCMonth() === last.getUTCMonth()) return `${sd}-${ed} ${sm}`;
+    return `${sd} ${sm}-${ed} ${em}`;
+  }
+
+  function openEvent(ef: EventWithFeed): void {
+    ui.modalEvent = ef.event;
+    window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start } }));
   }
 
   // Copy as tab-separated list
   let copyDone = $state(false);
+  let copyHtmlDone = $state(false);
 
   async function copyEventList(): Promise<void> {
     if (!eventGroups) return;
@@ -280,6 +281,53 @@
       copyDone = true;
       setTimeout(() => { copyDone = false; }, 2000);
       pushLog('Copied events list');
+    } catch {
+      pushLog('Copy failed', 'error');
+    }
+  }
+
+  async function copyHtml(): Promise<void> {
+    if (!eventGroups) return;
+    const lines: string[] = [];
+
+    function esc(s: string): string {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function addSection(label: string, cats: typeof eventGroups.todayCategories): void {
+      lines.push(`<b>${esc(label)}</b>`);
+      for (const cat of cats) {
+        lines.push(`<i>${esc(cat.label)}</i>`);
+        lines.push('<ul>');
+        for (const ef of cat.items) {
+          const time = esc(eventTimeLabel(ef.event));
+          const title = esc(ef.event.displayTitle);
+          const loc = ef.event.displayLocation || ef.inferredCity || '';
+          const locPart = loc ? ` · ${esc(loc)}` : '';
+          lines.push(`<li>${time} · ${title}${locPart}</li>`);
+        }
+        lines.push('</ul>');
+      }
+    }
+
+    if (eventGroups.todayCategories.length > 0) {
+      addSection(eventGroups.todayLabel, eventGroups.todayCategories);
+    }
+    for (const week of eventGroups.weeks) {
+      addSection(week.label, week.categories);
+    }
+
+    const html = lines.join('\n');
+    try {
+      if (typeof ClipboardItem !== 'undefined') {
+        const blob = new Blob([html], { type: 'text/html' });
+        await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+      } else {
+        await navigator.clipboard.writeText(html);
+      }
+      copyHtmlDone = true;
+      setTimeout(() => { copyHtmlDone = false; }, 2000);
+      pushLog('Copied events as HTML');
     } catch {
       pushLog('Copy failed', 'error');
     }
@@ -327,18 +375,17 @@
               {#each eventGroups.todayCategories as catGroup (catGroup.category)}
                 <div class="cat-group">
                   <span class="cat-label">{catGroup.label}</span>
-                  <ul>
+                  <div class="event-list">
                     {#each catGroup.items as ef (ef.event.uid)}
-                      <li class="event-row">
+                      <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                         <span class="event-time">{eventTimeLabel(ef.event)}</span>
                         <span class="event-title">{ef.event.displayTitle}</span>
-                        <span class="event-cal">{ef.feedName}</span>
                         {#if ef.event.displayLocation || ef.inferredCity}
-                          <span class="event-location">{ef.event.displayLocation || ef.inferredCity}</span>
+                          <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
                         {/if}
-                      </li>
+                      </button>
                     {/each}
-                  </ul>
+                  </div>
                 </div>
               {/each}
             </div>
@@ -350,30 +397,37 @@
               {#each week.categories as catGroup (catGroup.category)}
                 <div class="cat-group">
                   <span class="cat-label">{catGroup.label}</span>
-                  <ul>
+                  <div class="event-list">
                     {#each catGroup.items as ef (ef.event.uid)}
-                      <li class="event-row">
+                      <button type="button" class="event-row" onclick={() => openEvent(ef)}>
                         <span class="event-time">{eventTimeLabel(ef.event)}</span>
                         <span class="event-title">{ef.event.displayTitle}</span>
-                        <span class="event-cal">{ef.feedName}</span>
                         {#if ef.event.displayLocation || ef.inferredCity}
-                          <span class="event-location">{ef.event.displayLocation || ef.inferredCity}</span>
+                          <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
                         {/if}
-                      </li>
+                      </button>
                     {/each}
-                  </ul>
+                  </div>
                 </div>
               {/each}
             </div>
           {/each}
         {/if}
       </div>
-      <button
-        type="button"
-        class="copy-btn"
-        onclick={copyEventList}
-        title="Copy as tab-separated list for Excel"
-      >{copyDone ? 'Copied!' : 'Copy'}</button>
+      <div class="copy-bar">
+        <button
+          type="button"
+          class="copy-btn"
+          onclick={copyEventList}
+          title="Copy as tab-separated list for Excel"
+        >{copyDone ? '✓' : '{ }'}</button>
+        <button
+          type="button"
+          class="copy-btn"
+          onclick={copyHtml}
+          title="Copy as rich text"
+        >{copyHtmlDone ? '✓' : 'Copy'}</button>
+      </div>
     </div>
   {/if}
 </aside>
@@ -464,13 +518,16 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    position: relative;
+  }
+  .copy-bar {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.3em;
+    padding: 0.35em 0.6em;
+    border-top: 1px dashed var(--ink-faint);
   }
   .copy-btn {
-    position: absolute;
-    bottom: 0.6em;
-    right: 0.6em;
-    z-index: 1;
     font-family: var(--mono);
     font-size: 11px;
     letter-spacing: 0.06em;
@@ -487,7 +544,7 @@
   .tray-scroll {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 0.4em 0.6em 2.5em;
+    padding: 0.4em 0.6em 0.5em;
     user-select: text;
     -webkit-user-select: text;
   }
@@ -516,19 +573,28 @@
     color: var(--ink-muted);
     margin-bottom: 0.15em;
   }
-  .cat-group ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .event-list {
+    display: flex;
+    flex-direction: column;
   }
   .event-row {
     display: grid;
     grid-template-columns: auto 1fr auto;
     gap: 0.5em;
     align-items: baseline;
+    width: 100%;
     font-size: 12px;
     font-family: var(--mono);
     padding: 1px 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .event-row:focus-visible {
+    outline: none;
+    text-decoration: underline;
   }
   .event-time {
     color: var(--ink-muted);
@@ -541,20 +607,14 @@
     text-overflow: ellipsis;
     min-width: 0;
   }
-  .event-cal {
-    font-size: 10px;
-    color: var(--ink-muted);
-    white-space: nowrap;
-    text-align: right;
-  }
-  .event-location {
-    grid-column: 2;
+  .event-loc {
     font-size: 10px;
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
+    text-align: right;
   }
   .empty {
     margin: 0;
