@@ -52,11 +52,16 @@
     const startedExpanded = dragStartHeight > COLLAPSED_HEIGHT + 2;
     const startedCollapsed = !startedExpanded;
     const draggedDown = e.clientY > dragStartY;
-    const draggedUp = e.clientY < dragStartY - 30;
+    const draggedUp = e.clientY < dragStartY - 10;
     if (startedCollapsed && draggedUp) {
       height = maxHeight();
       lastExpandedHeight = height;
       ui.statusExpanded = true;
+      return;
+    }
+    if (startedCollapsed) {
+      height = COLLAPSED_HEIGHT;
+      ui.statusExpanded = false;
       return;
     }
     if (startedExpanded && draggedDown) {
