@@ -739,7 +739,7 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0.15em 0.5em;
-    border: 1px solid var(--ink-faint);
+    border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink-muted);
     cursor: pointer;
