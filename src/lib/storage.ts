@@ -126,7 +126,7 @@ export function defaultConfig(): AppConfig {
     eveningLimit: '20:00',
     trayFilter: {
       categories: ['none', 'events', 'holidays', 'announcements'],
-      travel: ['local', 'international'],
+      travel: ['none', 'local', 'international'],
     },
   };
 }
@@ -258,15 +258,17 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     trayFilter: (() => {
       const raw = parsed.trayFilter as AppConfig['trayFilter'] | undefined;
       const validCats: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'guests', 'announcements'];
-      const validTravel: Array<'local' | 'international'> = ['local', 'international'];
+      const validTravel: Travel[] = ['none', 'local', 'international'];
       let cats = Array.isArray(raw?.categories)
         ? (raw.categories as string[]).filter(c => validCats.includes(c as FeedCategory)) as FeedCategory[]
         : base.trayFilter.categories;
       // 'events' is a new category — add it for existing users who had a saved filter
       if (raw?.categories && !cats.includes('events')) cats = [...cats, 'events'];
-      const travel = Array.isArray(raw?.travel)
-        ? (raw.travel as string[]).filter(t => validTravel.includes(t as 'local' | 'international')) as Array<'local' | 'international'>
+      let travel = Array.isArray(raw?.travel)
+        ? (raw.travel as string[]).filter(t => validTravel.includes(t as Travel)) as Travel[]
         : base.trayFilter.travel;
+      // 'none' is newly filterable — add it for existing users
+      if (raw?.travel && !travel.includes('none')) travel = [...travel, 'none'];
       return { categories: cats, travel };
     })(),
   };

@@ -375,6 +375,22 @@
     scrollEl.scrollTo({ left: Math.max(0, targetPx - scrollEl.clientWidth / 2), behavior: 'smooth' });
   }
 
+  function onHeaderDblClick(e: MouseEvent): void {
+    if (ui.tempMarkerMs == null || !scrollEl) return;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const xInTimeline = e.clientX - scrollRect.left + scrollEl.scrollLeft;
+    const markerPx = dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay);
+    const headerEl = e.currentTarget as HTMLElement;
+    const headerRect = headerEl.getBoundingClientRect();
+    // Year/month row is ~27px tall (top tier); use wider threshold there
+    const isYearRow = (e.clientY - headerRect.top) < 27;
+    const threshold = isYearRow ? Math.max(44, pxPerDay * 2) : Math.max(20, pxPerDay);
+    if (Math.abs(xInTimeline - markerPx) <= threshold) {
+      ui.tempMarkerMs = null;
+      tempLastTapMs = 0;
+    }
+  }
+
   const ZOOM_ORDER: Zoom[] = ['month', 'quarter', 'half-year', 'year', '2-year'];
 
   function setZoomPreservingCenter(next: Zoom): void {
@@ -457,7 +473,7 @@
   data-search-active={searchActive ? 'true' : null}
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
-    <header id="time-header">
+    <header id="time-header" ondblclick={onHeaderDblClick}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} {observanceDayKeys} />
       {#if ui.tempMarkerMs != null}
         <div class="toggle-marker-wrap">

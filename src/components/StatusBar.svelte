@@ -6,7 +6,7 @@
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
   import { tap } from '../lib/haptics';
-  import type { DisplayEvent, FeedCategory } from '../lib/types';
+  import type { DisplayEvent, FeedCategory, Travel } from '../lib/types';
 
   const COLLAPSED_HEIGHT = 28;
   const MAX_HEIGHT_VH = 60;
@@ -193,8 +193,8 @@
     const futureItems: EventWithFeed[] = [];
 
     for (const feed of config.feeds) {
-      const feedTravel = feed.travel ?? 'none';
-      if (feedTravel !== 'none' && !config.trayFilter.travel.includes(feedTravel as 'local' | 'international')) continue;
+      const feedTravel: Travel = feed.travel ?? 'none';
+      if (!config.trayFilter.travel.includes(feedTravel)) continue;
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
         if (hiddenLocations.size > 0 && ev.displayLocation && hiddenLocations.has(ev.displayLocation)) continue;
@@ -264,7 +264,7 @@
   const windowCounts = $derived.by<{
     categories: Map<FeedCategory, number>;
     locations: Array<{ loc: string; count: number }>;
-    travel: { local: number; international: number };
+    travel: { none: number; local: number; international: number };
   } | null>(() => {
     if (!expanded) return null;
     const base = baseDate;
@@ -273,10 +273,11 @@
     const byFeed = getDisplayByFeed();
     const catCounts = new Map<FeedCategory, number>();
     const locCounts = new Map<string, number>();
+    let noneCount = 0;
     let localCount = 0;
     let intlCount = 0;
     for (const feed of config.feeds) {
-      const feedTravel = feed.travel ?? 'none';
+      const feedTravel: Travel = feed.travel ?? 'none';
       const feedCat = feed.category ?? 'none';
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
@@ -289,14 +290,15 @@
         if (ev.displayLocation) {
           locCounts.set(ev.displayLocation, (locCounts.get(ev.displayLocation) ?? 0) + 1);
         }
-        if (feedTravel === 'local') localCount++;
+        if (feedTravel === 'none') noneCount++;
+        else if (feedTravel === 'local') localCount++;
         else if (feedTravel === 'international') intlCount++;
       }
     }
     const locations = [...locCounts.entries()]
       .map(([loc, count]) => ({ loc, count }))
       .sort((a, b) => b.count - a.count);
-    return { categories: catCounts, locations, travel: { local: localCount, international: intlCount } };
+    return { categories: catCounts, locations, travel: { none: noneCount, local: localCount, international: intlCount } };
   });
 
   // Filter panel
@@ -305,7 +307,7 @@
 
   const isFilterActive = $derived(
     config.trayFilter.categories.length < 6 ||
-    config.trayFilter.travel.length < 2 ||
+    config.trayFilter.travel.length < 3 ||
     hiddenLocations.size > 0,
   );
 
@@ -334,7 +336,7 @@
     };
   }
 
-  function toggleTravel(t: 'local' | 'international'): void {
+  function toggleTravel(t: Travel): void {
     const travel = config.trayFilter.travel;
     config.trayFilter = {
       ...config.trayFilter,
@@ -350,7 +352,7 @@
   }
 
   function clearTravelFilter(): void {
-    config.trayFilter = { ...config.trayFilter, travel: ['local', 'international'] };
+    config.trayFilter = { ...config.trayFilter, travel: ['none', 'local', 'international'] };
   }
 
   function toggleLocation(loc: string): void {
@@ -543,17 +545,17 @@
             <button
               type="button"
               class="filter-clear"
-              data-active={config.trayFilter.travel.length < 2 ? 'true' : null}
+              data-active={config.trayFilter.travel.length < 3 ? 'true' : null}
               onclick={clearTravelFilter}
               title="Show all travel types"
             >Travel</button>
-            {#each (['local', 'international'] as const) as t}
+            {#each (['none', 'local', 'international'] as const) as t}
               <button
                 type="button"
                 class="filter-chip"
                 aria-pressed={config.trayFilter.travel.includes(t)}
                 onclick={() => toggleTravel(t)}
-              >{t === 'local' ? 'Local' : 'International'} ({windowCounts?.travel[t] ?? 0})</button>
+              >{t === 'none' ? 'N/A' : t === 'local' ? 'Local' : 'International'} ({windowCounts?.travel[t] ?? 0})</button>
             {/each}
           </div>
           {#if windowCounts && windowCounts.locations.length > 0}
@@ -782,6 +784,11 @@
   }
   .copy-btn[data-filter-active='true'] {
     border-style: dashed;
+  }
+  .copy-btn[data-toggle='true'] {
+    padding: 0;
+    width: 28px;
+    min-width: 28px;
   }
   .event-counter {
     font-family: var(--mono);

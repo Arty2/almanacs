@@ -99,7 +99,7 @@ export type FindReplaceRule = {
 
 export type TrayFilter = {
   categories: FeedCategory[];
-  travel: Array<'local' | 'international'>;
+  travel: Array<Travel>;
 };
 
 export type AppConfig = {

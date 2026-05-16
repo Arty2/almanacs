@@ -369,7 +369,7 @@
     { id: 'guests', label: 'Guests' },
   ];
   const travelOptions: { id: Travel; label: string }[] = [
-    { id: 'none', label: 'None' },
+    { id: 'none', label: 'N/A' },
     { id: 'international', label: 'International' },
     { id: 'local', label: 'Local' },
   ];
