@@ -311,6 +311,21 @@
 
   $effect(() => { if (!expanded) filterOpen = false; });
 
+  const visibleEventCount = $derived.by<number>(() => {
+    if (!eventGroups) return 0;
+    let n = 0;
+    for (const c of eventGroups.todayCategories) n += c.items.length;
+    for (const w of eventGroups.weeks) for (const c of w.categories) n += c.items.length;
+    return n;
+  });
+
+  const totalEventCount = $derived.by<number>(() => {
+    if (!windowCounts) return 0;
+    let total = 0;
+    for (const count of windowCounts.categories.values()) total += count;
+    return total;
+  });
+
   function toggleCategory(cat: FeedCategory): void {
     const cats = config.trayFilter.categories;
     config.trayFilter = {
@@ -571,6 +586,7 @@
           onclick={() => (filterOpen = !filterOpen)}
           title="Filter visible categories and travel"
         >Filter</button>
+        <span class="event-counter">{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
         <button
           type="button"
@@ -767,6 +783,17 @@
   .copy-btn[data-filter-active='true'] {
     border-style: dashed;
   }
+  .copy-btn[data-toggle='true'] {
+    padding: 0;
+    width: 28px;
+    min-width: 28px;
+  }
+  .event-counter {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
   .raw-block {
     flex: 1 1 auto;
     min-height: 0;
@@ -780,11 +807,15 @@
     min-height: 0;
     margin: 0;
     padding: 0.6em 0.8em;
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     font-family: var(--mono);
     font-size: 11px;
     line-height: 1.4;
     white-space: pre;
+    word-break: normal;
+    overflow-wrap: normal;
   }
   .tray-scroll {
     flex: 1 1 auto;
