@@ -11,8 +11,7 @@
   import type { FindReplaceRule, StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
-  let showRaw = $state(false);
-  let showFilters = $state(false);
+  let showSource = $state(false);
   let returnEvent: typeof ui.modalEvent = null;
   let swipeStartY: number | null = null;
   let dismissing = $state(false);
@@ -21,8 +20,7 @@
     if (!dialog) return;
     if (ui.modalEvent && !dialog.open) {
       dialog.showModal();
-      showRaw = false;
-      showFilters = false;
+      showSource = false;
       swipeStartY = null;
       dismissing = false;
     }
@@ -182,33 +180,31 @@
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
-      {#if showFilters}
+      {#if showSource}
         {#if raw}
           <div class="raw-block">
             <pre><code>{raw}</code></pre>
           </div>
         {/if}
-        <ul class="filter-list">
-          {#each matchedRules as rule (rule.id)}
-            <li>
-              <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
-                <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
-                {#if rule.style !== 'none'}
-                  <span
-                    class="style-swatch"
-                    data-style={rule.style}
-                    aria-label={styleLabel(rule.style)}
-                    title={styleLabel(rule.style)}
-                  ></span>
-                {/if}
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {:else if showRaw && raw}
-        <div class="raw-block">
-          <pre><code>{raw}</code></pre>
-        </div>
+        {#if matchedRules.length > 0}
+          <ul class="filter-list">
+            {#each matchedRules as rule (rule.id)}
+              <li>
+                <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
+                  <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
+                  {#if rule.style !== 'none'}
+                    <span
+                      class="style-swatch"
+                      data-style={rule.style}
+                      aria-label={styleLabel(rule.style)}
+                      title={styleLabel(rule.style)}
+                    ></span>
+                  {/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
       {:else}
         {@const info = formatEventDateInfo(ev)}
         <p><time datetime={ev.start.toISOString()}>{info.date}{#if info.duration} · {info.duration}{/if}</time></p>
@@ -217,7 +213,7 @@
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      {#if !showRaw && !showFilters}
+      {#if !showSource}
         {@const ics = buildIcsDownload(ev)}
         <div class="modal-add-row">
           <a href={buildOutlookAddUrl(ev)} target="_blank" rel="noopener noreferrer">Outlook</a>
@@ -231,8 +227,8 @@
         <div class="source-slot">
           {#if matchedRules.length > 0}
             <button type="button" class="filter-count" data-mono
-              aria-pressed={showFilters}
-              onclick={() => { showFilters = !showFilters; showRaw = false; }}
+              aria-pressed={showSource}
+              onclick={() => (showSource = !showSource)}
             >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
           {/if}
         </div>
@@ -241,16 +237,16 @@
             <button
               type="button"
               class="raw-toggle"
-              aria-pressed={showRaw}
-              onclick={() => (showRaw = !showRaw)}
-              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-pressed={showSource}
+              onclick={() => (showSource = !showSource)}
+              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
             >{'{ }'}</button>
           {/if}
           <button
             type="button"
             class="action-btn"
-            onclick={() => void copyText(showRaw && raw ? raw : buildDetails(ev), showRaw && raw ? 'data' : 'details')}
+            onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
           >COPY</button>
         </div>
       </footer>
