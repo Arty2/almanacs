@@ -91,28 +91,22 @@
       >✕</button>
     {/if}
   </div>
+  <span class="count" data-mono>{countLabel}</span>
   <div class="search-right">
-    <span class="count" data-mono>{countLabel}</span>
-    <span class="nav-btn-wrap">
-      <IconButton
-        icon={prevIcon}
-        label={prevLabel}
-        variant="ghost"
-        size={16}
-        onclick={onPrev}
-        disabled={matchCount === 0}
-      />
-    </span>
-    <span class="nav-btn-wrap">
-      <IconButton
-        icon={nextIcon}
-        label={nextLabel}
-        variant="ghost"
-        size={16}
-        onclick={onNext}
-        disabled={matchCount === 0}
-      />
-    </span>
+    <IconButton
+      icon={prevIcon}
+      label={prevLabel}
+      variant="ghost"
+      onclick={onPrev}
+      disabled={matchCount === 0}
+    />
+    <IconButton
+      icon={nextIcon}
+      label={nextLabel}
+      variant="ghost"
+      onclick={onNext}
+      disabled={matchCount === 0}
+    />
   </div>
 </div>
 
@@ -135,7 +129,7 @@
     border-color: var(--accent);
   }
   .search-input-wrap {
-    flex: 1;
+    flex: 0 0 var(--toolbar-zoom-w, 160px);
     min-width: 0;
     position: relative;
     display: flex;
@@ -146,6 +140,11 @@
     height: 32px;
     padding-right: 28px;
     box-sizing: border-box;
+  }
+  .search-input-wrap input[type='search']:focus,
+  .search-input-wrap input[type='search']:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--ink);
   }
   .search-input-wrap input[type='search']::-webkit-search-decoration,
   .search-input-wrap input[type='search']::-webkit-search-cancel-button {
@@ -178,21 +177,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.4em;
+    gap: 0.5em;
     padding-right: 0;
   }
   .count {
+    flex: 1;
+    text-align: left;
     font-size: 12px;
     color: var(--ink);
-    padding: 0 0.3em;
-    flex-shrink: 0;
-  }
-  .nav-btn-wrap {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
+    padding: 0 0.5em;
+    white-space: nowrap;
   }
   @media (max-width: 640px) {
     .search-toolbar {
@@ -200,7 +194,7 @@
       gap: 0.3em;
     }
     .count {
-      padding: 0 0.2em;
+      padding: 0 0.35em;
     }
   }
 </style>

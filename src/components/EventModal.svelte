@@ -11,18 +11,18 @@
   import type { FindReplaceRule, StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
-  let showRaw = $state(false);
-  let showFilters = $state(false);
+  let showSource = $state(false);
   let returnEvent: typeof ui.modalEvent = null;
   let swipeStartY: number | null = null;
+  let dismissing = $state(false);
 
   $effect(() => {
     if (!dialog) return;
     if (ui.modalEvent && !dialog.open) {
       dialog.showModal();
-      showRaw = false;
-      showFilters = false;
+      showSource = false;
       swipeStartY = null;
+      dismissing = false;
     }
     if (!ui.modalEvent && dialog.open) dialog.close();
   });
@@ -63,16 +63,21 @@
   }
 
   function onArticlePointerDown(e: PointerEvent): void {
+    if (dismissing) return;
     swipeStartY = e.clientY;
   }
   function onArticlePointerUp(e: PointerEvent): void {
-    if (swipeStartY == null) return;
+    if (swipeStartY == null || dismissing) return;
     const dy = swipeStartY - e.clientY;
     swipeStartY = null;
-    if (dy > 80) close();
+    if (dy > 80) dismissing = true;
   }
   function onArticlePointerCancel(): void {
     swipeStartY = null;
+  }
+  function onDialogTransitionEnd(e: TransitionEvent): void {
+    if (e.target !== dialog) return;
+    if (dismissing && e.propertyName === 'transform') close();
   }
 
   function onClick(e: MouseEvent): void {
@@ -154,9 +159,45 @@
     }
     return lines.join('\n');
   }
+
+  function highlightFinds(
+    text: string,
+    rules: FindReplaceRule[],
+  ): { text: string; hit: boolean }[] {
+    const finds = rules.map((r) => r.find).filter((f) => f.length > 0);
+    if (finds.length === 0) return [{ text, hit: false }];
+    const out: { text: string; hit: boolean }[] = [];
+    let i = 0;
+    while (i < text.length) {
+      let nextIdx = -1;
+      let nextLen = 0;
+      for (const f of finds) {
+        const idx = text.indexOf(f, i);
+        if (idx === -1) continue;
+        if (nextIdx === -1 || idx < nextIdx || (idx === nextIdx && f.length > nextLen)) {
+          nextIdx = idx;
+          nextLen = f.length;
+        }
+      }
+      if (nextIdx === -1) {
+        out.push({ text: text.slice(i), hit: false });
+        break;
+      }
+      if (nextIdx > i) out.push({ text: text.slice(i, nextIdx), hit: false });
+      out.push({ text: text.slice(nextIdx, nextIdx + nextLen), hit: true });
+      i = nextIdx + nextLen;
+    }
+    return out;
+  }
 </script>
 
-<dialog bind:this={dialog} onclose={close} onclick={onClick}>
+<dialog
+  bind:this={dialog}
+  class:dismissing
+  onclose={close}
+  onclick={onClick}
+  ontransitionend={onDialogTransitionEnd}
+>
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
@@ -169,33 +210,31 @@
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
       </header>
-      {#if showFilters}
+      {#if showSource}
         {#if raw}
           <div class="raw-block">
-            <pre><code>{raw}</code></pre>
+            <pre><code>{#each highlightFinds(raw, matchedRules) as part}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</code></pre>
           </div>
         {/if}
-        <ul class="filter-list">
-          {#each matchedRules as rule (rule.id)}
-            <li>
-              <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
-                <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
-                {#if rule.style !== 'none'}
-                  <span
-                    class="style-swatch"
-                    data-style={rule.style}
-                    aria-label={styleLabel(rule.style)}
-                    title={styleLabel(rule.style)}
-                  ></span>
-                {/if}
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {:else if showRaw && raw}
-        <div class="raw-block">
-          <pre><code>{raw}</code></pre>
-        </div>
+        {#if matchedRules.length > 0}
+          <ul class="filter-list">
+            {#each matchedRules as rule (rule.id)}
+              <li>
+                <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
+                  <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
+                  {#if rule.style !== 'none'}
+                    <span
+                      class="style-swatch"
+                      data-style={rule.style}
+                      aria-label={styleLabel(rule.style)}
+                      title={styleLabel(rule.style)}
+                    ></span>
+                  {/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
       {:else}
         {@const info = formatEventDateInfo(ev)}
         <p><time datetime={ev.start.toISOString()}>{info.date}{#if info.duration} · {info.duration}{/if}</time></p>
@@ -204,7 +243,7 @@
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      {#if !showRaw && !showFilters}
+      {#if !showSource}
         {@const ics = buildIcsDownload(ev)}
         <div class="modal-add-row">
           <a href={buildOutlookAddUrl(ev)} target="_blank" rel="noopener noreferrer">Outlook</a>
@@ -216,18 +255,10 @@
       {/if}
       <footer class="modal-footer">
         <div class="source-slot">
-          <button
-            type="button"
-            class="locate-filters"
-            aria-pressed={showFilters}
-            disabled={matchedRules.length === 0}
-            title={matchedRules.length === 0 ? 'No filters apply to this event' : (showFilters ? 'Hide matching filters' : 'Show matching filters')}
-            aria-label={showFilters ? 'Hide matching filters' : 'Show matching filters'}
-            onclick={() => (showFilters = !showFilters)}
-          >FIND &amp; REPLACE</button>
           {#if matchedRules.length > 0}
             <button type="button" class="filter-count" data-mono
-              onclick={() => { showFilters = true; showRaw = false; }}
+              aria-pressed={showSource}
+              onclick={() => (showSource = !showSource)}
             >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
           {/if}
         </div>
@@ -236,16 +267,16 @@
             <button
               type="button"
               class="raw-toggle"
-              aria-pressed={showRaw}
-              onclick={() => (showRaw = !showRaw)}
-              title={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showRaw ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-pressed={showSource}
+              onclick={() => (showSource = !showSource)}
+              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
             >{'{ }'}</button>
           {/if}
           <button
             type="button"
             class="action-btn"
-            onclick={() => void copyText(showRaw && raw ? raw : buildDetails(ev), showRaw && raw ? 'data' : 'details')}
+            onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
           >COPY</button>
         </div>
       </footer>
@@ -263,11 +294,16 @@
     max-height: calc(100dvh - 2rem);
     overflow: auto;
     box-sizing: border-box;
+    transition: transform 220ms ease-in, opacity 220ms ease-in;
+  }
+  dialog.dismissing {
+    transform: translateY(-100vh);
+    opacity: 0;
   }
   dialog::backdrop {
     background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
     user-select: none;
     -webkit-user-select: none;
   }
@@ -359,31 +395,6 @@
     font-size: 0.9em;
     color: var(--ink-muted);
     margin: 0.05em 0 0.15em;
-  }
-  .locate-filters {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 28px;
-    padding: 0 8px;
-    border: 1px solid var(--ink);
-    background: var(--paper);
-    color: var(--ink);
-    cursor: pointer;
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-  }
-  .locate-filters[aria-pressed='true'] {
-    background: var(--ink);
-    color: var(--paper);
-    border-color: var(--ink);
-  }
-  .locate-filters:disabled {
-    border-color: var(--ink-faint);
-    color: var(--ink-muted);
-    opacity: 0.4;
-    cursor: not-allowed;
   }
   .filter-count {
     font-size: 11px;
@@ -506,5 +517,9 @@
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-all;
+  }
+  .raw-block mark {
+    background: var(--ink);
+    color: var(--paper);
   }
 </style>
