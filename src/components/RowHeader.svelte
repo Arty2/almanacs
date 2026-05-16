@@ -182,7 +182,7 @@
     return `${Math.floor(hours / 24)}d`;
   });
   const debugFlag =
-    typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
+    typeof localStorage !== 'undefined' && localStorage.getItem('calamari.debug') === '1';
 </script>
 
 <header

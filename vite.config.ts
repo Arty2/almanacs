@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/*.svg'],
       manifest: {
-        name: '/calendari',
-        short_name: 'calendari',
+        name: '/calamari',
+        short_name: 'calamari',
         description: 'A timeline view for your iCal feeds.',
         theme_color: '#ffffff',
         background_color: '#ffffff',
@@ -57,7 +57,7 @@ export default defineConfig({
   ],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
-    __APP_HOMEPAGE__: JSON.stringify('https://heracl.es/calendari'),
+    __APP_HOMEPAGE__: JSON.stringify('https://heracl.es/calamari'),
   },
   test: {
     environment: 'jsdom',
