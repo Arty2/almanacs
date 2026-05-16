@@ -284,6 +284,17 @@
     };
   }
 
+  function clearCategoryFilter(): void {
+    config.trayFilter = {
+      ...config.trayFilter,
+      categories: ['none', 'holidays', 'observances', 'guests', 'announcements'],
+    };
+  }
+
+  function clearTravelFilter(): void {
+    config.trayFilter = { ...config.trayFilter, travel: ['local', 'international'] };
+  }
+
   // Raw mode toggle
   let rawMode = $state(false);
   let copyDone = $state(false);
@@ -386,32 +397,6 @@
 
   {#if expanded && eventGroups}
     <div class="events-tray" role="region" aria-label="Upcoming events">
-      {#if filterOpen}
-        <div class="filter-panel">
-          <div class="filter-row">
-            <span class="filter-row-label">Cat</span>
-            {#each CATEGORY_ORDER as cat}
-              <button
-                type="button"
-                class="filter-chip"
-                aria-pressed={config.trayFilter.categories.includes(cat)}
-                onclick={() => toggleCategory(cat)}
-              >{CATEGORY_LABELS[cat]}</button>
-            {/each}
-          </div>
-          <div class="filter-row">
-            <span class="filter-row-label">Travel</span>
-            {#each (['local', 'international'] as const) as t}
-              <button
-                type="button"
-                class="filter-chip"
-                aria-pressed={config.trayFilter.travel.includes(t)}
-                onclick={() => toggleTravel(t)}
-              >{t === 'local' ? 'Local' : 'International'}</button>
-            {/each}
-          </div>
-        </div>
-      {/if}
       {#if rawMode}
         <div class="raw-block">
           <pre>{tsvText}</pre>
@@ -467,6 +452,44 @@
           {/if}
         </div>
       {/if}
+      {#if filterOpen}
+        <div class="filter-panel">
+          <div class="filter-row">
+            <button
+              type="button"
+              class="filter-clear"
+              data-active={config.trayFilter.categories.length < 5 ? 'true' : null}
+              onclick={clearCategoryFilter}
+              title="Show all categories"
+            >All Categories</button>
+            {#each CATEGORY_ORDER as cat}
+              <button
+                type="button"
+                class="filter-chip"
+                aria-pressed={config.trayFilter.categories.includes(cat)}
+                onclick={() => toggleCategory(cat)}
+              >{CATEGORY_LABELS[cat]}</button>
+            {/each}
+          </div>
+          <div class="filter-row">
+            <button
+              type="button"
+              class="filter-clear"
+              data-active={config.trayFilter.travel.length < 2 ? 'true' : null}
+              onclick={clearTravelFilter}
+              title="Show all travel types"
+            >All Travel</button>
+            {#each (['local', 'international'] as const) as t}
+              <button
+                type="button"
+                class="filter-chip"
+                aria-pressed={config.trayFilter.travel.includes(t)}
+                onclick={() => toggleTravel(t)}
+              >{t === 'local' ? 'Local' : 'International'}</button>
+            {/each}
+          </div>
+        </div>
+      {/if}
       <div class="copy-bar">
         <button
           type="button"
@@ -480,6 +503,7 @@
         <button
           type="button"
           class="copy-btn"
+          data-toggle="true"
           aria-pressed={rawMode}
           onclick={() => (rawMode = !rawMode)}
           title="Toggle raw TSV view"
@@ -572,7 +596,7 @@
   .toggle {
     display: inline-flex;
     align-items: center;
-    color: var(--ink-muted);
+    color: var(--ink);
   }
 
   /* Tray */
@@ -588,7 +612,7 @@
     flex-direction: column;
     gap: 0.3em;
     padding: 0.4em 0.6em;
-    border-bottom: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink-faint);
     background: var(--paper-2);
     user-select: none;
     -webkit-user-select: none;
@@ -597,16 +621,28 @@
     display: flex;
     align-items: center;
     gap: 0.25em;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: visible;
+    scrollbar-width: none;
+    max-width: 100%;
   }
-  .filter-row-label {
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-clear {
     font-family: var(--mono);
     font-size: 10px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15em 0.5em;
+    border: 1px solid var(--ink-faint);
+    background: var(--paper);
     color: var(--ink-muted);
+    cursor: pointer;
     flex-shrink: 0;
-    min-width: 3.5em;
+    white-space: nowrap;
+  }
+  .filter-clear[data-active='true'] {
+    border-color: var(--ink);
+    color: var(--ink);
   }
   .filter-chip {
     font-family: var(--mono);
@@ -629,7 +665,7 @@
     align-items: center;
     gap: 0.3em;
     padding: 0.35em 0.6em;
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink);
   }
   .copy-spacer {
     flex: 1 1 auto;
@@ -647,7 +683,7 @@
     align-items: center;
     justify-content: center;
   }
-  .copy-btn:hover,
+  .copy-btn:hover:not([data-toggle]),
   .copy-btn[aria-pressed='true'] {
     background: var(--ink);
     color: var(--paper);
