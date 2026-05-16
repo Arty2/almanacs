@@ -33,8 +33,8 @@
     { id: 'none', label: 'None' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
-    { id: 'guests', label: 'Guests' },
     { id: 'announcements', label: 'Announcements' },
+    { id: 'guests', label: 'Guests' },
   ];
 
   let snapshot: FindReplaceRule | null = $state(null);

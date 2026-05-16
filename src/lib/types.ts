@@ -7,7 +7,7 @@ export type FeedKind = 'events' | 'holidays';
 export type FeedCategory = 'none' | 'holidays' | 'observances' | 'guests' | 'announcements';
 
 export const FEED_CATEGORIES: FeedCategory[] = [
-  'none', 'holidays', 'observances', 'guests', 'announcements',
+  'none', 'holidays', 'observances', 'announcements', 'guests',
 ];
 
 export type Travel = 'none' | 'international' | 'local';

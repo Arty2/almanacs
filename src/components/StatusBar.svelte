@@ -150,7 +150,7 @@
     return tz.split('/').pop()?.replace(/_/g, ' ') ?? null;
   }
 
-  const CATEGORY_ORDER: FeedCategory[] = ['none', 'guests', 'announcements', 'holidays', 'observances'];
+  const CATEGORY_ORDER: FeedCategory[] = ['none', 'holidays', 'observances', 'announcements', 'guests'];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
     none: 'Events',
     guests: 'Guests',
@@ -196,6 +196,7 @@
       if (feedTravel !== 'none' && !config.trayFilter.travel.includes(feedTravel as 'local' | 'international')) continue;
       for (const ev of (byFeed[feed.id] ?? [])) {
         if (ev.hidden) continue;
+        if (hiddenLocations.size > 0 && ev.displayLocation && hiddenLocations.has(ev.displayLocation)) continue;
         const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name, inferredCity: cityFromTz(feed.id) };
         if (ev.start < todayEnd && ev.end > base) {
           todayItems.push(ef);
@@ -258,12 +259,53 @@
     window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start } }));
   }
 
+  // Window counts — computed from all events in the window, no filters applied
+  const windowCounts = $derived.by<{
+    categories: Map<FeedCategory, number>;
+    locations: Array<{ loc: string; count: number }>;
+    travel: { local: number; international: number };
+  } | null>(() => {
+    if (!expanded) return null;
+    const base = baseDate;
+    const todayEnd = addDays(base, 1);
+    const windowEnd = addMonths(base, 1);
+    const byFeed = getDisplayByFeed();
+    const catCounts = new Map<FeedCategory, number>();
+    const locCounts = new Map<string, number>();
+    let localCount = 0;
+    let intlCount = 0;
+    for (const feed of config.feeds) {
+      const feedTravel = feed.travel ?? 'none';
+      const feedCat = feed.category ?? 'none';
+      for (const ev of (byFeed[feed.id] ?? [])) {
+        if (ev.hidden) continue;
+        const inWindow =
+          (ev.start < todayEnd && ev.end > base) ||
+          (ev.start >= todayEnd && ev.start < windowEnd);
+        if (!inWindow) continue;
+        const cat: FeedCategory = ev.ruleCategory ?? feedCat;
+        catCounts.set(cat, (catCounts.get(cat) ?? 0) + 1);
+        if (ev.displayLocation) {
+          locCounts.set(ev.displayLocation, (locCounts.get(ev.displayLocation) ?? 0) + 1);
+        }
+        if (feedTravel === 'local') localCount++;
+        else if (feedTravel === 'international') intlCount++;
+      }
+    }
+    const locations = [...locCounts.entries()]
+      .map(([loc, count]) => ({ loc, count }))
+      .sort((a, b) => b.count - a.count);
+    return { categories: catCounts, locations, travel: { local: localCount, international: intlCount } };
+  });
+
   // Filter panel
   let filterOpen = $state(false);
+  let hiddenLocations = $state(new Set<string>());
 
   const isFilterActive = $derived(
     config.trayFilter.categories.length < 5 ||
-    config.trayFilter.travel.length < 2,
+    config.trayFilter.travel.length < 2 ||
+    hiddenLocations.size > 0,
   );
 
   $effect(() => { if (!expanded) filterOpen = false; });
@@ -293,6 +335,16 @@
 
   function clearTravelFilter(): void {
     config.trayFilter = { ...config.trayFilter, travel: ['local', 'international'] };
+  }
+
+  function toggleLocation(loc: string): void {
+    const next = new Set(hiddenLocations);
+    if (next.has(loc)) next.delete(loc); else next.add(loc);
+    hiddenLocations = next;
+  }
+
+  function clearLocationFilter(): void {
+    hiddenLocations = new Set();
   }
 
   // Raw mode toggle
@@ -468,7 +520,7 @@
                 class="filter-chip"
                 aria-pressed={config.trayFilter.categories.includes(cat)}
                 onclick={() => toggleCategory(cat)}
-              >{CATEGORY_LABELS[cat]}</button>
+              >{CATEGORY_LABELS[cat]} ({windowCounts?.categories.get(cat) ?? 0})</button>
             {/each}
           </div>
           <div class="filter-row">
@@ -485,9 +537,28 @@
                 class="filter-chip"
                 aria-pressed={config.trayFilter.travel.includes(t)}
                 onclick={() => toggleTravel(t)}
-              >{t === 'local' ? 'Local' : 'International'}</button>
+              >{t === 'local' ? 'Local' : 'International'} ({windowCounts?.travel[t] ?? 0})</button>
             {/each}
           </div>
+          {#if windowCounts && windowCounts.locations.length > 0}
+            <div class="filter-row">
+              <button
+                type="button"
+                class="filter-clear"
+                data-active={hiddenLocations.size > 0 ? 'true' : null}
+                onclick={clearLocationFilter}
+                title="Show all locations"
+              >Location</button>
+              {#each windowCounts.locations as { loc, count } (loc)}
+                <button
+                  type="button"
+                  class="filter-chip"
+                  aria-pressed={!hiddenLocations.has(loc)}
+                  onclick={() => toggleLocation(loc)}
+                >{loc} ({count})</button>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
       <div class="copy-bar">
@@ -648,11 +719,14 @@
     font-family: var(--mono);
     font-size: 10px;
     letter-spacing: 0.04em;
+    text-transform: uppercase;
     padding: 0.15em 0.5em;
     border: 1px solid var(--ink-faint);
     background: var(--paper);
     color: var(--ink-muted);
     cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   .filter-chip[aria-pressed='true'] {
     border-color: var(--ink);

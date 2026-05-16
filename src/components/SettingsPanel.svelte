@@ -364,8 +364,8 @@
     { id: 'none', label: 'None' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
-    { id: 'guests', label: 'Guests' },
     { id: 'announcements', label: 'Announcements' },
+    { id: 'guests', label: 'Guests' },
   ];
   const travelOptions: { id: Travel; label: string }[] = [
     { id: 'none', label: 'None' },
