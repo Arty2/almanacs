@@ -81,6 +81,7 @@
     tap();
     onZoom('year');
     jumpToToday();
+    clearTempMarker();
   }
 
   function jumpToToday(): void {
@@ -169,7 +170,7 @@
           class="zoom-btn"
           type="button"
           aria-pressed={yearActive}
-          title="1Y · long-press for 2Y · double-tap to jump to today"
+          title="1Y · long-press for 2Y · double-tap to clear marker"
           onclick={handleYearClick}
           ondblclick={handleYearDblClick}
           onpointerdown={startYearPress}
@@ -182,9 +183,9 @@
           class="zoom-btn"
           type="button"
           aria-pressed={zoom.value === z.id}
-          title="{z.label} · double-tap to jump to today"
+          title="{z.label} · double-tap to clear marker"
           onclick={() => { tap(); onZoom(z.id); }}
-          ondblclick={() => { tap(); onZoom(z.id); jumpToToday(); }}
+          ondblclick={() => { tap(); onZoom(z.id); jumpToToday(); clearTempMarker(); }}
         >{z.label}</button>
       {/if}
     {/each}

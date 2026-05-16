@@ -461,7 +461,7 @@
               data-active={config.trayFilter.categories.length < 5 ? 'true' : null}
               onclick={clearCategoryFilter}
               title="Show all categories"
-            >All Categories</button>
+            >Categories</button>
             {#each CATEGORY_ORDER as cat}
               <button
                 type="button"
@@ -478,7 +478,7 @@
               data-active={config.trayFilter.travel.length < 2 ? 'true' : null}
               onclick={clearTravelFilter}
               title="Show all travel types"
-            >All Travel</button>
+            >Travel</button>
             {#each (['local', 'international'] as const) as t}
               <button
                 type="button"
@@ -612,7 +612,7 @@
     flex-direction: column;
     gap: 0.3em;
     padding: 0.4em 0.6em;
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink);
     background: var(--paper-2);
     user-select: none;
     -webkit-user-select: none;

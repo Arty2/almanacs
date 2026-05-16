@@ -318,6 +318,8 @@
   });
 
   let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
+  let tempLastTapMs = 0;
+  const DOUBLE_TAP_MS = 350;
 
   function tempPointerDown(e: PointerEvent): void {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -352,7 +354,15 @@
     } catch {
       /* pointer capture may already be released */
     }
-    if (!moved) ui.tempMarkerMs = null;
+    if (!moved) {
+      const now = Date.now();
+      if (now - tempLastTapMs < DOUBLE_TAP_MS) {
+        ui.tempMarkerMs = null;
+        tempLastTapMs = 0;
+      } else {
+        tempLastTapMs = now;
+      }
+    }
   }
 
   let toggleLast: 'today' | 'temp' = $state('today');
@@ -489,7 +499,7 @@
         type="button"
         class="temp-line"
         style="left: {dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)}px; width: {Math.max(2, pxPerDay)}px"
-        aria-label="Drag to move or tap to clear temporary marker"
+        aria-label="Drag to move or double-tap to clear temporary marker"
         onpointerdown={tempPointerDown}
         onpointermove={tempPointerMove}
         onpointerup={tempPointerUp}
