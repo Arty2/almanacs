@@ -76,9 +76,9 @@ export function buildIcs(ev: ParsedEvent): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//calendari//EN',
+    'PRODID:-//calamari//EN',
     'BEGIN:VEVENT',
-    'UID:' + (ev.uid || dtstamp + '@calendari'),
+    'UID:' + (ev.uid || dtstamp + '@calamari'),
     'DTSTAMP:' + dtstamp,
     'SUMMARY:' + escapeIcsText(ev.title),
   ];

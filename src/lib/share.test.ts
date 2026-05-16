@@ -88,7 +88,7 @@ describe('share encode/decode', () => {
   });
 
   it('default config share URL stays well under the limit', () => {
-    const url = buildShareUrl(defaultConfig(), 'month', 'https://heracl.es/calendari');
+    const url = buildShareUrl(defaultConfig(), 'month', 'https://heracl.es/calamari');
     expect(url.length).toBeLessThan(SHARE_URL_LIMIT);
   });
 
