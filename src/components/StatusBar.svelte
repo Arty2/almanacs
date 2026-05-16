@@ -783,11 +783,6 @@
   .copy-btn[data-filter-active='true'] {
     border-style: dashed;
   }
-  .copy-btn[data-toggle='true'] {
-    padding: 0;
-    width: 28px;
-    min-width: 28px;
-  }
   .event-counter {
     font-family: var(--mono);
     font-size: 11px;
