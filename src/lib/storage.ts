@@ -39,10 +39,10 @@ export function snapRefreshInterval(ms: number): number {
 }
 
 export const DEFAULT_RULES: FindReplaceRule[] = [
-  { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'inverted-dashed' },
-  { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'inverted-dashed' },
-  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'inverted-strike' },
-  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'muted' },
+  { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'inverted-dashed', category: 'none' },
+  { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'inverted-dashed', category: 'none' },
+  { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'inverted-strike', category: 'none' },
+  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'muted', category: 'observances' },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));

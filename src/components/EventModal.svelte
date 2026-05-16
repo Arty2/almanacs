@@ -41,9 +41,9 @@
     switch (s) {
       case 'inverted-dashed': return 'Inverted, dashed';
       case 'inverted-strike': return 'Inverted, strike';
-      case 'muted': return '*Muted';
+      case 'muted': return 'Muted';
       case 'highlight': return 'Highlight';
-      case 'hidden': return '*Hidden';
+      case 'hidden': return 'Hidden';
       default: return 'No style';
     }
   }

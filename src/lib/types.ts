@@ -68,6 +68,7 @@ export type DisplayEvent = ParsedEvent & {
   displayLocation: string;
   styleVariant: StyleVariant;
   hidden: boolean;
+  ruleCategory: FeedCategory | null;
 };
 
 export type LaneEvent = DisplayEvent & {
@@ -93,6 +94,7 @@ export type FindReplaceRule = {
   find: string;
   replace: string;
   style: StyleVariant;
+  category: FeedCategory;
 };
 
 export type AppConfig = {

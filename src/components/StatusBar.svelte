@@ -2,7 +2,7 @@
   import { config, getDisplayByFeed, pushLog, ui, effectiveFeedTz } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
-  import { startOfDay, addDays, isoWeekNumber } from '../lib/time';
+  import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
   import { tap } from '../lib/haptics';
@@ -165,7 +165,8 @@
   function groupByCategory(items: EventWithFeed[]): CategoryGroup[] {
     const map = new Map<FeedCategory, EventWithFeed[]>();
     for (const ef of items) {
-      const cat = config.feeds.find(f => f.id === ef.feedId)?.category ?? 'none';
+      const feedCat = config.feeds.find(f => f.id === ef.feedId)?.category ?? 'none';
+      const cat: FeedCategory = ef.event.ruleCategory ?? feedCat;
       if (!map.has(cat)) map.set(cat, []);
       map.get(cat)!.push(ef);
     }
@@ -184,7 +185,7 @@
 
     const base = baseDate;
     const todayEnd = addDays(base, 1);
-    const windowEnd = addDays(base, 15);
+    const windowEnd = addMonths(base, 1);
     const byFeed = getDisplayByFeed();
 
     const todayItems: EventWithFeed[] = [];
@@ -227,8 +228,8 @@
     }));
 
     const todayLabel = ui.tempMarkerMs != null
-      ? formatDateLong(base, config.locale)
-      : 'Today';
+      ? `${formatDateLong(base, config.locale)} (W${isoWeekNumber(base)})`
+      : `Today (W${isoWeekNumber(base)})`;
 
     return { todayLabel, todayCategories: groupByCategory(todayItems), weeks };
   });
@@ -255,14 +256,14 @@
     window.dispatchEvent(new CustomEvent('cal:scroll-to-date', { detail: { date: ef.event.start } }));
   }
 
-  // Copy as tab-separated list
+  // Raw mode toggle
+  let rawMode = $state(false);
   let copyDone = $state(false);
-  let copyHtmlDone = $state(false);
 
-  async function copyEventList(): Promise<void> {
-    if (!eventGroups) return;
+  // TSV text — derived so it updates reactively and can be displayed or copied
+  const tsvText = $derived.by<string>(() => {
+    if (!eventGroups) return '';
     const rows: string[] = ['Start Date\tEnd Date\tStart Time\tEnd Time\tTitle\tLocation\tCategory'];
-
     function addItems(items: EventWithFeed[], categoryLabel: string): void {
       for (const ef of items) {
         const ev = ef.event;
@@ -275,64 +276,51 @@
         rows.push([startDate, endDate, startTime, endTime, ev.displayTitle, location, categoryLabel].join('\t'));
       }
     }
-
     for (const cat of eventGroups.todayCategories) addItems(cat.items, cat.label);
-    for (const week of eventGroups.weeks) {
+    for (const week of eventGroups.weeks)
       for (const cat of week.categories) addItems(cat.items, cat.label);
-    }
+    return rows.join('\n');
+  });
 
+  async function copyContent(): Promise<void> {
     try {
-      await navigator.clipboard.writeText(rows.join('\n'));
+      if (rawMode) {
+        await navigator.clipboard.writeText(tsvText);
+        pushLog('Copied events list');
+      } else {
+        if (!eventGroups) return;
+        const lines: string[] = [];
+        function esc(s: string): string {
+          return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        function addSection(label: string, cats: typeof eventGroups.todayCategories): void {
+          lines.push(`<b>${esc(label)}</b>`);
+          for (const cat of cats) {
+            lines.push(`<i>${esc(cat.label)}</i>`);
+            lines.push('<ul>');
+            for (const ef of cat.items) {
+              const time = esc(eventTimeLabel(ef.event));
+              const title = esc(ef.event.displayTitle);
+              const loc = ef.event.displayLocation || ef.inferredCity || '';
+              const locPart = loc ? ` · ${esc(loc)}` : '';
+              lines.push(`<li>${time} · ${title}${locPart}</li>`);
+            }
+            lines.push('</ul>');
+          }
+        }
+        if (eventGroups.todayCategories.length > 0) addSection(eventGroups.todayLabel, eventGroups.todayCategories);
+        for (const week of eventGroups.weeks) addSection(week.label, week.categories);
+        const html = lines.join('\n');
+        if (typeof ClipboardItem !== 'undefined') {
+          const blob = new Blob([html], { type: 'text/html' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+        } else {
+          await navigator.clipboard.writeText(html);
+        }
+        pushLog('Copied events as HTML');
+      }
       copyDone = true;
       setTimeout(() => { copyDone = false; }, 2000);
-      pushLog('Copied events list');
-    } catch {
-      pushLog('Copy failed', 'error');
-    }
-  }
-
-  async function copyHtml(): Promise<void> {
-    if (!eventGroups) return;
-    const lines: string[] = [];
-
-    function esc(s: string): string {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-
-    function addSection(label: string, cats: typeof eventGroups.todayCategories): void {
-      lines.push(`<b>${esc(label)}</b>`);
-      for (const cat of cats) {
-        lines.push(`<i>${esc(cat.label)}</i>`);
-        lines.push('<ul>');
-        for (const ef of cat.items) {
-          const time = esc(eventTimeLabel(ef.event));
-          const title = esc(ef.event.displayTitle);
-          const loc = ef.event.displayLocation || ef.inferredCity || '';
-          const locPart = loc ? ` · ${esc(loc)}` : '';
-          lines.push(`<li>${time} · ${title}${locPart}</li>`);
-        }
-        lines.push('</ul>');
-      }
-    }
-
-    if (eventGroups.todayCategories.length > 0) {
-      addSection(eventGroups.todayLabel, eventGroups.todayCategories);
-    }
-    for (const week of eventGroups.weeks) {
-      addSection(week.label, week.categories);
-    }
-
-    const html = lines.join('\n');
-    try {
-      if (typeof ClipboardItem !== 'undefined') {
-        const blob = new Blob([html], { type: 'text/html' });
-        await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
-      } else {
-        await navigator.clipboard.writeText(html);
-      }
-      copyHtmlDone = true;
-      setTimeout(() => { copyHtmlDone = false; }, 2000);
-      pushLog('Copied events as HTML');
     } catch {
       pushLog('Copy failed', 'error');
     }
@@ -370,68 +358,75 @@
 
   {#if expanded && eventGroups}
     <div class="events-tray" role="region" aria-label="Upcoming events">
-      <div class="tray-scroll">
-        {#if eventGroups.todayCategories.length === 0 && eventGroups.weeks.length === 0}
-          <p class="empty">No upcoming events in the next two weeks.</p>
-        {:else}
-          {#if eventGroups.todayCategories.length > 0}
-            <div class="week-group">
-              <h3 class="week-label">{eventGroups.todayLabel}</h3>
-              {#each eventGroups.todayCategories as catGroup (catGroup.category)}
-                <div class="cat-group">
-                  <span class="cat-label">{catGroup.label}</span>
-                  <div class="event-list">
-                    {#each catGroup.items as ef (ef.event.uid)}
-                      <button type="button" class="event-row" onclick={() => openEvent(ef)}>
-                        <span class="event-time">{eventTimeLabel(ef.event)}</span>
-                        <span class="event-title">{ef.event.displayTitle}</span>
-                        {#if ef.event.displayLocation || ef.inferredCity}
-                          <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
-                        {/if}
-                      </button>
-                    {/each}
+      {#if rawMode}
+        <div class="raw-block">
+          <pre>{tsvText}</pre>
+        </div>
+      {:else}
+        <div class="tray-scroll">
+          {#if eventGroups.todayCategories.length === 0 && eventGroups.weeks.length === 0}
+            <p class="empty">No upcoming events in the next month.</p>
+          {:else}
+            {#if eventGroups.todayCategories.length > 0}
+              <div class="week-group">
+                <h2 class="week-label">{eventGroups.todayLabel}</h2>
+                {#each eventGroups.todayCategories as catGroup (catGroup.category)}
+                  <div class="cat-group">
+                    <h3 class="cat-label">{catGroup.label}</h3>
+                    <div class="event-list">
+                      {#each catGroup.items as ef (ef.event.uid)}
+                        <button type="button" class="event-row" onclick={() => openEvent(ef)}>
+                          <span class="event-time">{eventTimeLabel(ef.event)}</span>
+                          <span class="event-title">{ef.event.displayTitle}</span>
+                          {#if ef.event.displayLocation || ef.inferredCity}
+                            <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
+                          {/if}
+                        </button>
+                      {/each}
+                    </div>
                   </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
+                {/each}
+              </div>
+            {/if}
 
-          {#each eventGroups.weeks as week}
-            <div class="week-group">
-              <h3 class="week-label">{week.label}</h3>
-              {#each week.categories as catGroup (catGroup.category)}
-                <div class="cat-group">
-                  <span class="cat-label">{catGroup.label}</span>
-                  <div class="event-list">
-                    {#each catGroup.items as ef (ef.event.uid)}
-                      <button type="button" class="event-row" onclick={() => openEvent(ef)}>
-                        <span class="event-time">{eventTimeLabel(ef.event)}</span>
-                        <span class="event-title">{ef.event.displayTitle}</span>
-                        {#if ef.event.displayLocation || ef.inferredCity}
-                          <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
-                        {/if}
-                      </button>
-                    {/each}
+            {#each eventGroups.weeks as week}
+              <div class="week-group">
+                <h2 class="week-label">{week.label}</h2>
+                {#each week.categories as catGroup (catGroup.category)}
+                  <div class="cat-group">
+                    <h3 class="cat-label">{catGroup.label}</h3>
+                    <div class="event-list">
+                      {#each catGroup.items as ef (ef.event.uid)}
+                        <button type="button" class="event-row" onclick={() => openEvent(ef)}>
+                          <span class="event-time">{eventTimeLabel(ef.event)}</span>
+                          <span class="event-title">{ef.event.displayTitle}</span>
+                          {#if ef.event.displayLocation || ef.inferredCity}
+                            <span class="event-loc">{ef.event.displayLocation || ef.inferredCity}</span>
+                          {/if}
+                        </button>
+                      {/each}
+                    </div>
                   </div>
-                </div>
-              {/each}
-            </div>
-          {/each}
-        {/if}
-      </div>
+                {/each}
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
       <div class="copy-bar">
         <button
           type="button"
           class="copy-btn"
-          onclick={copyEventList}
-          title="Copy as tab-separated list for Excel"
-        >{copyDone ? '✓' : '{ }'}</button>
+          aria-pressed={rawMode}
+          onclick={() => (rawMode = !rawMode)}
+          title="Toggle raw TSV view"
+        >{'{ }'}</button>
         <button
           type="button"
           class="copy-btn"
-          onclick={copyHtml}
-          title="Copy as rich text"
-        >{copyHtmlDone ? '✓' : 'Copy'}</button>
+          onclick={() => void copyContent()}
+          title={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
+        >{copyDone ? '✓' : 'Copy'}</button>
       </div>
     </div>
   {/if}
@@ -533,18 +528,41 @@
     border-top: 1px dashed var(--ink-faint);
   }
   .copy-btn {
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    padding: 0.2em 0.6em;
+    height: 28px;
+    padding: 0 12px;
     border: 1px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
+    font-size: 12px;
+    font-family: var(--mono);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
-  .copy-btn:hover {
+  .copy-btn:hover,
+  .copy-btn[aria-pressed='true'] {
     background: var(--ink);
     color: var(--paper);
+  }
+  .raw-block {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 0.4em 0.6em;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .raw-block pre {
+    margin: 0;
+    padding: 0.6em 0.8em;
+    border: 1px solid var(--ink-faint);
+    background: var(--paper-2);
+    overflow: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre;
+    word-break: break-all;
   }
   .tray-scroll {
     flex: 1 1 auto;
@@ -556,7 +574,7 @@
   .week-group {
     margin-bottom: 0.8em;
   }
-  .week-label {
+  h2.week-label {
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
     border-bottom: 1px solid var(--ink);
@@ -569,14 +587,15 @@
   .cat-group {
     margin-bottom: 0.4em;
   }
-  .cat-label {
+  h3.cat-label {
     display: block;
     font-family: var(--mono);
     font-size: 10px;
+    font-weight: normal;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-muted);
-    margin-bottom: 0.15em;
+    margin: 0 0 0.15em;
   }
   .event-list {
     display: flex;
