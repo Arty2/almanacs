@@ -125,7 +125,7 @@ export function defaultConfig(): AppConfig {
     morningLimit: '08:00',
     eveningLimit: '20:00',
     trayFilter: {
-      categories: ['none', 'holidays', 'observances', 'guests', 'announcements'],
+      categories: ['none', 'events', 'holidays', 'announcements'],
       travel: ['local', 'international'],
     },
   };
@@ -257,11 +257,13 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     eveningLimit: typeof parsed.eveningLimit === 'string' ? parsed.eveningLimit : '',
     trayFilter: (() => {
       const raw = parsed.trayFilter as AppConfig['trayFilter'] | undefined;
-      const validCats: FeedCategory[] = ['none', 'holidays', 'observances', 'guests', 'announcements'];
+      const validCats: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'guests', 'announcements'];
       const validTravel: Array<'local' | 'international'> = ['local', 'international'];
-      const cats = Array.isArray(raw?.categories)
+      let cats = Array.isArray(raw?.categories)
         ? (raw.categories as string[]).filter(c => validCats.includes(c as FeedCategory)) as FeedCategory[]
         : base.trayFilter.categories;
+      // 'events' is a new category — add it for existing users who had a saved filter
+      if (raw?.categories && !cats.includes('events')) cats = [...cats, 'events'];
       const travel = Array.isArray(raw?.travel)
         ? (raw.travel as string[]).filter(t => validTravel.includes(t as 'local' | 'international')) as Array<'local' | 'international'>
         : base.trayFilter.travel;

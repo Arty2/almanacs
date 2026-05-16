@@ -4,10 +4,10 @@ export type FeedSource =
 
 export type FeedKind = 'events' | 'holidays';
 
-export type FeedCategory = 'none' | 'holidays' | 'observances' | 'guests' | 'announcements';
+export type FeedCategory = 'none' | 'events' | 'holidays' | 'observances' | 'guests' | 'announcements';
 
 export const FEED_CATEGORIES: FeedCategory[] = [
-  'none', 'holidays', 'observances', 'announcements', 'guests',
+  'none', 'events', 'holidays', 'observances', 'announcements', 'guests',
 ];
 
 export type Travel = 'none' | 'international' | 'local';

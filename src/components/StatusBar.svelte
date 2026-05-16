@@ -150,13 +150,14 @@
     return tz.split('/').pop()?.replace(/_/g, ' ') ?? null;
   }
 
-  const CATEGORY_ORDER: FeedCategory[] = ['none', 'holidays', 'observances', 'announcements', 'guests'];
+  const CATEGORY_ORDER: FeedCategory[] = ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'];
   const CATEGORY_LABELS: Record<FeedCategory, string> = {
-    none: 'Events',
-    guests: 'Guests',
-    announcements: 'Announcements',
+    none: 'Untagged',
+    events: 'Events',
     holidays: 'Holidays',
     observances: 'Observances',
+    announcements: 'Announcements',
+    guests: 'Guests',
   };
 
   type CategoryGroup = { category: FeedCategory; label: string; items: EventWithFeed[] };
@@ -303,7 +304,7 @@
   let hiddenLocations = $state(new Set<string>());
 
   const isFilterActive = $derived(
-    config.trayFilter.categories.length < 5 ||
+    config.trayFilter.categories.length < 6 ||
     config.trayFilter.travel.length < 2 ||
     hiddenLocations.size > 0,
   );
@@ -329,7 +330,7 @@
   function clearCategoryFilter(): void {
     config.trayFilter = {
       ...config.trayFilter,
-      categories: ['none', 'holidays', 'observances', 'guests', 'announcements'],
+      categories: ['none', 'events', 'holidays', 'observances', 'announcements', 'guests'],
     };
   }
 
@@ -510,7 +511,7 @@
             <button
               type="button"
               class="filter-clear"
-              data-active={config.trayFilter.categories.length < 5 ? 'true' : null}
+              data-active={config.trayFilter.categories.length < 6 ? 'true' : null}
               onclick={clearCategoryFilter}
               title="Show all categories"
             >Categories</button>
@@ -703,6 +704,7 @@
     font-family: var(--mono);
     font-size: 10px;
     letter-spacing: 0.04em;
+    text-transform: uppercase;
     padding: 0.15em 0.5em;
     border: 1px solid var(--ink-faint);
     background: var(--paper);

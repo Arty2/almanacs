@@ -361,7 +361,8 @@
     { id: 'inverted-strike', label: 'Inverted (strike)' },
   ];
   const categoryOptions: { id: FeedCategory; label: string }[] = [
-    { id: 'none', label: 'None' },
+    { id: 'none', label: 'Untagged' },
+    { id: 'events', label: 'Events' },
     { id: 'holidays', label: 'Holidays' },
     { id: 'observances', label: 'Observances' },
     { id: 'announcements', label: 'Announcements' },
