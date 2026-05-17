@@ -124,9 +124,9 @@
     z-index: 9;
   }
   .search-toolbar :global(.icon-button[aria-pressed='true']) {
-    background: var(--accent);
+    background: var(--ink);
     color: var(--paper);
-    border-color: var(--accent);
+    border-color: var(--ink);
   }
   .search-input-wrap {
     flex: 0 1 var(--toolbar-zoom-w, 160px);
