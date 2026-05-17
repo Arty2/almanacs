@@ -317,6 +317,9 @@
   .rule-list:empty {
     display: none;
   }
+  .rule-list li + li {
+    border-top: 1px solid var(--ink);
+  }
   .rule-list li[data-active='true'] {
     background: var(--paper-2);
     outline: 2px solid var(--ink);

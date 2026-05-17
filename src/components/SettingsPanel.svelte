@@ -74,6 +74,13 @@
   let formTimezone = $state('');
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
+  let importStatus: string | null = $state(null);
+  let importStatusTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashStatus(msg: string): void {
+    importStatus = msg;
+    if (importStatusTimer) clearTimeout(importStatusTimer);
+    importStatusTimer = setTimeout(() => { importStatus = null; }, 2500);
+  }
   let fileInput: HTMLInputElement | undefined = $state();
   let listContainer: HTMLUListElement | undefined = $state();
 
@@ -295,6 +302,7 @@
     try {
       await navigator.clipboard.writeText(exportConfig(config));
       pushLog('Config copied');
+      flashStatus('COPIED CONFIG');
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -305,8 +313,12 @@
     try {
       const text = await navigator.clipboard.readText();
       const next = importConfig(text);
+      if (typeof window !== 'undefined' && !window.confirm(
+        'Replace current calendars, rules, and settings with the clipboard content?',
+      )) return;
       applyImported(next);
       void onRefresh();
+      flashStatus('PASTED CONFIG');
     } catch (err) {
       importError = (err as Error).message;
     }
@@ -395,17 +407,23 @@
 
   async function handleImport(e: Event): Promise<void> {
     importError = null;
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
     if (!file) return;
     try {
       const text = await file.text();
       const next = importConfig(text);
-      applyImported(next);
-      void onRefresh();
+      if (typeof window === 'undefined' || window.confirm(
+        `Replace current calendars, rules, and settings with the file '${file.name}'?`,
+      )) {
+        applyImported(next);
+        void onRefresh();
+        flashStatus('IMPORTED CONFIG');
+      }
     } catch (err) {
       importError = (err as Error).message;
     }
-    (e.currentTarget as HTMLInputElement).value = '';
+    input.value = '';
   }
 
   function resetAndClear(): void {
@@ -530,6 +548,7 @@
 
 <div
   class="backdrop"
+  class:dismissing
   onclick={onBackdropClick}
   onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}
   role="presentation"
@@ -954,6 +973,7 @@
         />
       </div>
       {#if importError}<p class="error">Import failed: {importError}</p>{/if}
+      {#if importStatus}<p class="status" data-mono>{importStatus}</p>{/if}
     </section>
 
     <footer class="settings-footer">
@@ -975,6 +995,10 @@
     z-index: 20;
     display: flex;
     justify-content: flex-end;
+    transition: background 220ms ease-in;
+  }
+  .backdrop.dismissing {
+    background: rgba(0, 0, 0, 0);
   }
   .panel {
     width: min(360px, 100vw);
@@ -1107,6 +1131,9 @@
   }
   .feeds li {
     transition: background 200ms ease;
+  }
+  .feeds li + li {
+    border-top: 1px solid var(--ink);
   }
   .feeds li[data-active='true'] {
     background: var(--paper-2);
@@ -1279,6 +1306,12 @@
     margin: 0;
     color: var(--accent);
     font-size: 12px;
+  }
+  .status {
+    margin: 0;
+    color: var(--ink);
+    font-size: 12px;
+    letter-spacing: 0.04em;
   }
   @media (max-width: 640px) {
     .panel {

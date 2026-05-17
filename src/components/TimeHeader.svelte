@@ -254,7 +254,7 @@
     background: transparent;
     paint-order: stroke fill;
     -webkit-text-stroke: 2px var(--paper);
-    text-shadow: 0 0 1px var(--paper);
+    text-shadow: 0 0 2px var(--paper);
     white-space: nowrap;
     cursor: ew-resize;
     touch-action: none;

@@ -320,7 +320,7 @@
   let tempDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
   let tempLastTapMs = 0;
   let headerTapMs = 0;
-  const DOUBLE_TAP_MS = 600;
+  const DOUBLE_TAP_MS = 1200;
 
   function tempPointerDown(e: PointerEvent): void {
     if (e.pointerType === 'mouse' && e.button !== 0) return;

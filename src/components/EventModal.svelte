@@ -332,6 +332,12 @@
     -webkit-backdrop-filter: blur(2px);
     user-select: none;
     -webkit-user-select: none;
+    transition: background 220ms ease-in, backdrop-filter 220ms ease-in, -webkit-backdrop-filter 220ms ease-in;
+  }
+  dialog.dismissing::backdrop {
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
   }
   article {
     padding: 1em;
@@ -439,10 +445,9 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    border: 1px solid var(--ink-faint);
   }
   .filter-list li + li {
-    border-top: 1px solid var(--ink-faint);
+    border-top: 1px solid var(--ink);
   }
   .filter-row {
     display: flex;
@@ -534,7 +539,7 @@
   .raw-block pre {
     margin: 0;
     padding: 0.6em 0.8em;
-    border: 1px solid var(--ink-faint);
+    border: 1px solid var(--ink);
     background: var(--paper-2);
     overflow: auto;
     max-height: 60dvh;
