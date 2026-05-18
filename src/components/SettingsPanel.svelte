@@ -616,8 +616,11 @@
           {/each}
         </select>
       </div>
-      <div class="tz-now" aria-live="polite">
-        <span>{formatTzNowLabel('local')}</span>
+      <div class="field">
+        <span></span>
+        <div class="tz-now" aria-live="polite">
+          <span>{formatTzNowLabel('local')}</span>
+        </div>
       </div>
     </section>
 
@@ -1025,8 +1028,7 @@
   }
   .settings-footer {
     margin-top: auto;
-    padding: 12px 4px 4px;
-    border-top: 1px solid var(--ink);
+    padding: 4px;
     font-size: 11px;
     color: var(--ink-muted);
     text-align: center;
@@ -1034,6 +1036,12 @@
     flex-direction: column;
     gap: 0.3em;
     user-select: none;
+  }
+  .settings-footer::before {
+    content: '* * *';
+    letter-spacing: 0.4em;
+    color: var(--ink-muted);
+    padding-bottom: 8px;
   }
   .settings-footer a {
     color: inherit;
@@ -1134,6 +1142,10 @@
   .feeds li + li {
     border-top: 1px solid var(--ink);
   }
+  .feeds li[data-active='true'] + li,
+  .feeds li[data-active='true'] {
+    border-top-color: transparent;
+  }
   .feeds li[data-active='true'] {
     background: var(--paper-2);
     outline: 2px solid var(--ink);
@@ -1181,7 +1193,7 @@
   }
   .feed-edit {
     padding: 8px 8px 10px 8px;
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink);
     display: flex;
     flex-direction: column;
     gap: 0.6em;

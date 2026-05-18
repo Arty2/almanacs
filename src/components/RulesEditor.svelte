@@ -320,6 +320,10 @@
   .rule-list li + li {
     border-top: 1px solid var(--ink);
   }
+  .rule-list li[data-active='true'] + li,
+  .rule-list li[data-active='true'] {
+    border-top-color: transparent;
+  }
   .rule-list li[data-active='true'] {
     background: var(--paper-2);
     outline: 2px solid var(--ink);
@@ -417,7 +421,7 @@
     flex-direction: column;
     gap: 0.5em;
     padding: 0.5em 0.6em 0.7em;
-    border-top: 1px dashed var(--ink-faint);
+    border-top: 1px dashed var(--ink);
   }
   .field {
     display: grid;
