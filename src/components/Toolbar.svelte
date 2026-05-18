@@ -270,6 +270,7 @@
     height: 32px;
     padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink);
+    border-radius: 0;
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
