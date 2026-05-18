@@ -18,7 +18,10 @@
   import { readUrlState, applyUrlState } from './lib/url';
   import { handleShortcut } from './lib/keyboard';
   import { nextMatch } from './lib/search';
+  import { useDisplayHygiene } from './lib/displayHygiene.svelte';
   import type { DisplayEvent, Zoom } from './lib/types';
+
+  useDisplayHygiene();
 
   // Cache-first: populate events synchronously before first network fetch
   const _cache = loadEventsCache();

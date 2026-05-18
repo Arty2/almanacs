@@ -263,3 +263,75 @@ button.config-actions > button,
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* E-ink mode: pure black/white, no animations, anti-burn-in pixel shift. */
+:root.eink,
+:root.eink[data-theme="dark"] {
+  color-scheme: light;
+  --ink: #000000;
+  --ink-faint: #cccccc;
+  --ink-muted: #555555;
+  --paper: #ffffff;
+  --paper-2: #f4f4f4;
+  --accent: #000000;
+  --weekend-bg: #ededed;
+  --holiday-bg: rgba(0, 0, 0, 0.08);
+  --holiday-stripe: rgba(0, 0, 0, 0.45);
+  --past-opacity: 0.6;
+  --shadow-1: none;
+}
+:root.eink * {
+  animation: none !important;
+  transition: none !important;
+}
+:root.eink body {
+  transform: translate(var(--eink-shift-x, 0), var(--eink-shift-y, 0));
+}
+:root[data-eink-flash="true"] {
+  filter: invert(1);
+}
+
+/* Print: paper-friendly snapshot of whatever is currently on screen. No
+   in-app button — invoked via the browser's native print/Save-as-PDF. */
+@media print {
+  :root,
+  :root[data-theme="dark"] {
+    color-scheme: light;
+    --ink: #000000;
+    --ink-faint: #bdbdbd;
+    --ink-muted: #555555;
+    --paper: #ffffff;
+    --paper-2: #f4f4f4;
+    --accent: #000000;
+    --weekend-bg: #ededed;
+    --holiday-bg: rgba(0, 0, 0, 0.06);
+    --holiday-stripe: rgba(0, 0, 0, 0.45);
+    --shadow-1: none;
+  }
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .toolbar,
+  .status-bar,
+  .backdrop,
+  dialog {
+    display: none !important;
+  }
+  #timeline {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+}
