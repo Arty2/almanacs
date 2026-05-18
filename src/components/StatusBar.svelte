@@ -10,6 +10,12 @@
 
   const COLLAPSED_HEIGHT = 28;
   const MAX_HEIGHT_VH = 60;
+  let showVersion = $state(true);
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const t = setTimeout(() => { showVersion = false; }, 1000);
+    return () => clearTimeout(t);
+  });
 
   let dragging = $state(false);
   let dragStartY = 0;
@@ -467,7 +473,7 @@
         title={online.value ? 'Online' : 'Offline'}
       >
         <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
+        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
       </span>
       {#if nextEventLabel && !expanded}
         <span class="next-event">{nextEventLabel}</span>
