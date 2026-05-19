@@ -223,10 +223,8 @@
     window.dispatchEvent(new CustomEvent('cal:set-zoom', { detail: { zoom: z } }));
   }
 
-  const orderedFeeds = $derived(
-    [...config.feeds].filter((f) => !f.hidden).sort((a, b) => a.order - b.order),
-  );
-  const expandedFeeds = $derived(orderedFeeds.filter((f) => !f.collapsed));
+  const orderedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
+  const expandedFeeds = $derived(orderedFeeds.filter((f) => !f.collapsed && !f.hidden));
 
   const focusedFeedEvents = $derived.by<DisplayEvent[]>(() => {
     const feed = expandedFeeds.find((f) => f.id === focus.feedId);
@@ -319,6 +317,15 @@
     };
     window.addEventListener('cal:open-add-event', handler);
     return () => window.removeEventListener('cal:open-add-event', handler);
+  });
+
+  // Entering multi-select drops the single-event focus, so the focus ring
+  // doesn't compete with the selection ring on the same pill.
+  $effect(() => {
+    if (selection.mode) {
+      focus.feedId = null;
+      focus.eventIndex = -1;
+    }
   });
 
   $effect(() => {

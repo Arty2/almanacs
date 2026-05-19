@@ -811,14 +811,12 @@
               <button
                 type="button"
                 class="feed-name-btn"
+                data-disabled={feed.hidden ? 'true' : null}
                 onclick={() => (editingFeedId === feed.id ? clearForm() : startEdit(feed))}
                 aria-label={'Edit ' + feed.name}
                 aria-expanded={editingFeedId === feed.id}
               >
                 <span class="feed-name-text">{feed.name}</span>
-                {#if feed.hidden}
-                  <span class="feed-disabled-chip">disabled</span>
-                {/if}
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
@@ -926,9 +924,12 @@
                 {/if}
                 <div class="form-actions feed-form-actions">
                   {#if isScratchpad(feed)}
-                    <button type="button" class="disable-btn" onclick={() => toggleHidden(feed)}>
-                      {feed.hidden ? 'Enable' : 'Disable'}
-                    </button>
+                    <button
+                      type="button"
+                      class="disable-btn"
+                      data-state={feed.hidden ? 'enable' : 'disable'}
+                      onclick={() => toggleHidden(feed)}
+                    >{feed.hidden ? 'Enable' : 'Disable'}</button>
                   {:else if feed.source.kind === 'user'}
                     <button type="button" class="delete-btn" onclick={() => removeFeed(feed.id)}>
                       Delete
@@ -1100,21 +1101,15 @@
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   }
-  .form-actions .disable-btn {
-    border-color: var(--ink-muted);
-    color: var(--ink-muted);
+  .form-actions .disable-btn[data-state='disable'] {
+    border-color: var(--accent);
+    color: var(--accent);
   }
-  .form-actions .disable-btn:hover {
+  .form-actions .disable-btn[data-state='disable']:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .disable-btn[data-state='enable']:hover {
     background: var(--paper-2);
-  }
-  .feed-disabled-chip {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--ink-muted);
-    border: 1px solid var(--ink-muted);
-    padding: 0 4px;
-    flex-shrink: 0;
   }
   .feed-edit input[type='text']:focus,
   .feed-edit input[type='url']:focus {
@@ -1194,6 +1189,8 @@
   }
   .feeds li[data-active='true'] {
     background: var(--paper-2);
+    outline: 2px solid var(--ink);
+    outline-offset: -2px;
   }
   .feeds li[data-active='true'] .feed-name-btn .feed-name-text {
     text-decoration: underline;
@@ -1225,8 +1222,15 @@
     padding: 4px 6px;
     cursor: pointer;
   }
-  .feed-name-btn:hover {
-    border-color: var(--ink);
+  .feed-name-btn:hover .feed-name-text,
+  .feed-name-btn:focus-visible .feed-name-text {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .feed-name-btn[data-disabled='true'] .feed-name-text {
+    text-decoration: line-through;
+    text-decoration-color: var(--ink-muted);
+    color: var(--ink-muted);
   }
   .feed-name-text {
     overflow: hidden;

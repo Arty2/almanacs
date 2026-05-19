@@ -187,7 +187,9 @@
     const map = new Map<FeedCategory, EventWithFeed[]>();
     for (const ef of items) {
       const feedCat = config.feeds.find(f => f.id === ef.feedId)?.category ?? 'none';
-      const cat: FeedCategory = ef.event.ruleCategory ?? feedCat;
+      // One bucket per event: explicit event.category trumps rule-derived
+      // ruleCategory, which trumps the feed's category.
+      const cat: FeedCategory = ef.event.category ?? ef.event.ruleCategory ?? feedCat;
       if (!map.has(cat)) map.set(cat, []);
       map.get(cat)!.push(ef);
     }
@@ -314,7 +316,7 @@
           (ev.start < todayEnd && ev.end > base) ||
           (ev.start >= todayEnd && ev.start < windowEnd);
         if (!inWindow) continue;
-        const cat: FeedCategory = ev.ruleCategory ?? feedCat;
+        const cat: FeedCategory = ev.category ?? ev.ruleCategory ?? feedCat;
         catCounts.set(cat, (catCounts.get(cat) ?? 0) + 1);
         if (ev.displayLocation) {
           locCounts.set(ev.displayLocation, (locCounts.get(ev.displayLocation) ?? 0) + 1);

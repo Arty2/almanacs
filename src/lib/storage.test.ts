@@ -95,6 +95,12 @@ describe('config import/export', () => {
     expect(scratch!.order).toBe(maxOrder);
   });
 
+  it('starts scratchpad disabled by default (hidden: true)', () => {
+    const cfg = defaultConfig();
+    const scratch = cfg.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
+    expect(scratch!.hidden).toBe(true);
+  });
+
   it('migrate() injects a scratchpad feed when an imported config lacks one', () => {
     const cfg = defaultConfig();
     const stripped = {

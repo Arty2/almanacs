@@ -326,8 +326,17 @@
   }
   .rule-list li[data-active='true'] {
     background: var(--paper-2);
+    outline: 2px solid var(--ink);
+    outline-offset: -2px;
   }
   .rule-list li[data-active='true'] .rule-name-btn .rule-preview {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .rule-name-btn:focus-visible {
+    outline: none;
+  }
+  .rule-name-btn:focus-visible .rule-preview {
     text-decoration: underline;
     text-underline-offset: 2px;
   }

@@ -71,6 +71,7 @@ export function scratchpadFeed(order: number): CalendarFeed {
     order,
     kind: 'events',
     category: 'none',
+    hidden: true,
   };
 }
 

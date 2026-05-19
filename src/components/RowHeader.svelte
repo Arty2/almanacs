@@ -200,6 +200,7 @@
   data-kind={feed.kind}
   data-category={feed.category}
   data-feed-id={feed.id}
+  data-disabled={feed.hidden ? 'true' : null}
 >
   <div class="lead">
     {#if isScratchpad}
@@ -209,6 +210,7 @@
           label="Add event"
           variant="ghost"
           size={16}
+          disabled={feed.hidden}
           onclick={openAddEvent}
         />
       </span>
@@ -321,6 +323,28 @@
   }
   .row-header[data-collapsed='true'] {
     border-bottom: 1px dashed var(--ink);
+  }
+  .row-header[data-disabled='true'] {
+    background: transparent;
+    position: relative;
+  }
+  .row-header[data-disabled='true'] .lead,
+  .row-header[data-disabled='true'] .actions {
+    background: transparent;
+  }
+  .row-header[data-disabled='true']::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: var(--ink-muted);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .row-header[data-disabled='true'] .name-text {
+    color: var(--ink-muted);
   }
   .row-header[data-category='holidays'] .name-text,
   .row-header[data-category='observances'] .name-text,
