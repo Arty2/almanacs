@@ -223,8 +223,10 @@
     window.dispatchEvent(new CustomEvent('cal:set-zoom', { detail: { zoom: z } }));
   }
 
-  const orderedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
-  const expandedFeeds = $derived(orderedFeeds.filter((f) => !f.collapsed && !f.hidden));
+  const orderedFeeds = $derived(
+    [...config.feeds].filter((f) => !f.hidden).sort((a, b) => a.order - b.order),
+  );
+  const expandedFeeds = $derived(orderedFeeds.filter((f) => !f.collapsed));
 
   const focusedFeedEvents = $derived.by<DisplayEvent[]>(() => {
     const feed = expandedFeeds.find((f) => f.id === focus.feedId);

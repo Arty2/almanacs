@@ -24,7 +24,9 @@
   const todayPx = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
   const searchActive = $derived(search.query.trim().length > 0);
 
-  const orderedFeeds = $derived([...config.feeds].sort((a, b) => a.order - b.order));
+  const orderedFeeds = $derived(
+    [...config.feeds].filter((f) => !f.hidden).sort((a, b) => a.order - b.order),
+  );
   const expandedRowIndex = $derived.by<Record<string, number>>(() => {
     const out: Record<string, number> = {};
     let i = 0;

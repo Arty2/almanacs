@@ -80,7 +80,7 @@
   const isFocusedRow = $derived(focus.feedId === feed.id);
 </script>
 
-<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null} data-disabled={feed.hidden ? 'true' : null}>
+<section class="row" data-feed-id={feed.id} data-category={feed.category} data-collapsed={feed.collapsed ? 'true' : null}>
   <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
@@ -159,14 +159,6 @@
   }
   .row[data-collapsed='true'] {
     background: var(--paper);
-  }
-  .row[data-disabled='true'] {
-    opacity: 0.55;
-  }
-  .row[data-feed-id='scratchpad:default'],
-  .row[data-feed-id='scratchpad:default'] .row-body,
-  .row[data-feed-id='scratchpad:default'] .row-collapsed {
-    background: transparent;
   }
   .row-body {
     position: relative;
