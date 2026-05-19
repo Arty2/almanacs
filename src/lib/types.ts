@@ -55,6 +55,7 @@ export type ParsedEvent = {
   end: Date;
   allDay: boolean;
   url?: string;
+  category?: FeedCategory;
 };
 
 export type StyleVariant =

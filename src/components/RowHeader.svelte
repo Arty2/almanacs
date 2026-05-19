@@ -202,6 +202,17 @@
   data-feed-id={feed.id}
 >
   <div class="lead">
+    {#if isScratchpad}
+      <span class="scratch-add">
+        <IconButton
+          icon="plus"
+          label="Add event"
+          variant="ghost"
+          size={16}
+          onclick={openAddEvent}
+        />
+      </span>
+    {/if}
     {#if errorMessage}
       <button
         type="button"
@@ -256,48 +267,38 @@
   <span class="spacer"></span>
   {#if !feed.collapsed}
     <div class="actions">
-      {#if isScratchpad}
+      <span
+        class="nav-wrap"
+        role="presentation"
+        onpointerdown={() => startNavPress(-1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+      >
         <IconButton
-          icon="plus"
-          label="Add event"
+          icon={prevIcon}
+          label={prevLabel}
           variant="ghost"
           size={16}
-          onclick={openAddEvent}
+          onclick={() => handleNavClick(-1)}
         />
-      {:else}
-        <span
-          class="nav-wrap"
-          role="presentation"
-          onpointerdown={() => startNavPress(-1)}
-          onpointerup={cancelNavPress}
-          onpointercancel={cancelNavPress}
-          onpointerleave={cancelNavPress}
-        >
-          <IconButton
-            icon={prevIcon}
-            label={prevLabel}
-            variant="ghost"
-            size={16}
-            onclick={() => handleNavClick(-1)}
-          />
-        </span>
-        <span
-          class="nav-wrap"
-          role="presentation"
-          onpointerdown={() => startNavPress(1)}
-          onpointerup={cancelNavPress}
-          onpointercancel={cancelNavPress}
-          onpointerleave={cancelNavPress}
-        >
-          <IconButton
-            icon={nextIcon}
-            label={nextLabel}
-            variant="ghost"
-            size={16}
-            onclick={() => handleNavClick(1)}
-          />
-        </span>
-      {/if}
+      </span>
+      <span
+        class="nav-wrap"
+        role="presentation"
+        onpointerdown={() => startNavPress(1)}
+        onpointerup={cancelNavPress}
+        onpointercancel={cancelNavPress}
+        onpointerleave={cancelNavPress}
+      >
+        <IconButton
+          icon={nextIcon}
+          label={nextLabel}
+          variant="ghost"
+          size={16}
+          onclick={() => handleNavClick(1)}
+        />
+      </span>
     </div>
   {/if}
 </header>
@@ -435,6 +436,10 @@
   .stale-text {
     font-size: 11px;
     white-space: nowrap;
+  }
+  .scratch-add {
+    display: inline-flex;
+    flex-shrink: 0;
   }
   .spacer {
     flex: 1;

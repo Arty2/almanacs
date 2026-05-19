@@ -1,6 +1,8 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
-  import { ui, addScratchpadEvent } from '../lib/state.svelte';
+  import { ui, config, addScratchpadEvent } from '../lib/state.svelte';
+  import { formatDate, parseFormattedDate } from '../lib/format';
+  import { FEED_CATEGORIES, type FeedCategory } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -11,21 +13,22 @@
   let startTime = $state('');
   let endDate = $state('');
   let endTime = $state('');
-  let allDay = $state(false);
+  let allDay = $state(true);
   let location = $state('');
   let description = $state('');
+  let category = $state<FeedCategory>('none');
   let formError: string | null = $state(null);
 
   function pad(n: number): string {
     return n < 10 ? '0' + n : String(n);
   }
 
-  function dateInputValue(d: Date): string {
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-  }
-
   function timeInputValue(d: Date): string {
     return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function utcMidnightFor(d: Date): Date {
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   }
 
   function nextHalfHour(d: Date): Date {
@@ -37,22 +40,20 @@
   }
 
   function prefill(): void {
-    const base = ui.tempMarkerMs != null ? new Date(ui.tempMarkerMs) : new Date();
-    let start: Date;
-    if (ui.tempMarkerMs != null) {
-      start = new Date(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 9, 0, 0, 0);
-    } else {
-      start = nextHalfHour(base);
-    }
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
-    startDate = dateInputValue(start);
-    startTime = timeInputValue(start);
-    endDate = dateInputValue(end);
-    endTime = timeInputValue(end);
+    const baseDay = ui.tempMarkerMs != null ? new Date(ui.tempMarkerMs) : new Date();
+    const dayUtc = utcMidnightFor(baseDay);
+    const startTimed = ui.tempMarkerMs != null
+      ? new Date(baseDay.getUTCFullYear(), baseDay.getUTCMonth(), baseDay.getUTCDate(), 9, 0, 0, 0)
+      : nextHalfHour(new Date());
+    startDate = formatDate(dayUtc, config.dateFormat, config.locale);
+    endDate = startDate;
+    startTime = timeInputValue(startTimed);
+    endTime = timeInputValue(new Date(startTimed.getTime() + 60 * 60 * 1000));
     title = '';
     location = '';
     description = '';
-    allDay = false;
+    allDay = true;
+    category = 'none';
     formError = null;
   }
 
@@ -74,35 +75,42 @@
     ui.addEventOpen = false;
   }
 
-  function parseLocal(date: string, time: string): Date | null {
-    if (!date) return null;
-    const [y, m, d] = date.split('-').map((s) => parseInt(s, 10));
-    if (!y || !m || !d) return null;
-    if (allDay) return new Date(y, m - 1, d, 0, 0, 0, 0);
-    const [hh, mm] = (time || '00:00').split(':').map((s) => parseInt(s, 10));
-    return new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
+  function parseTime(t: string): { hh: number; mm: number } {
+    const [hh, mm] = (t || '00:00').split(':').map((s) => parseInt(s, 10));
+    return { hh: hh || 0, mm: mm || 0 };
   }
 
   function save(e: Event): void {
     e.preventDefault();
     formError = null;
-    const start = parseLocal(startDate, startTime);
-    if (!start) {
-      formError = 'Start date is required.';
+    const sp = parseFormattedDate(startDate, config.dateFormat, config.locale);
+    if (!sp) {
+      formError = `Start date must be ${config.dateFormat}.`;
       return;
     }
-    let end = parseLocal(endDate || startDate, endTime);
-    if (!end) end = new Date(start.getTime() + (allDay ? 86_400_000 : 60 * 60 * 1000));
+    const ep = parseFormattedDate(endDate || startDate, config.dateFormat, config.locale);
+    if (!ep) {
+      formError = `End date must be ${config.dateFormat}.`;
+      return;
+    }
+    let start: Date;
+    let end: Date;
     if (allDay) {
-      const endDay = new Date(end);
-      endDay.setHours(0, 0, 0, 0);
-      if (endDay.getTime() <= start.getTime()) {
+      start = new Date(Date.UTC(sp.y, sp.m - 1, sp.d));
+      const endDay = new Date(Date.UTC(ep.y, ep.m - 1, ep.d));
+      if (endDay.getTime() < start.getTime()) {
         end = new Date(start.getTime() + 86_400_000);
       } else {
         end = new Date(endDay.getTime() + 86_400_000);
       }
-    } else if (end.getTime() <= start.getTime()) {
-      end = new Date(start.getTime() + 60 * 60 * 1000);
+    } else {
+      const { hh: sh, mm: sm } = parseTime(startTime);
+      const { hh: eh, mm: em } = parseTime(endTime);
+      start = new Date(sp.y, sp.m - 1, sp.d, sh, sm, 0, 0);
+      end = new Date(ep.y, ep.m - 1, ep.d, eh, em, 0, 0);
+      if (end.getTime() <= start.getTime()) {
+        end = new Date(start.getTime() + 60 * 60 * 1000);
+      }
     }
     const cleanTitle = title.trim() || 'Untitled';
     addScratchpadEvent({
@@ -112,6 +120,7 @@
       allDay,
       location: location.trim(),
       description: description.trim(),
+      category,
     });
     close();
   }
@@ -136,6 +145,15 @@
   function onClick(e: MouseEvent): void {
     if (e.target === dialog) close();
   }
+
+  const categoryLabels: Record<FeedCategory, string> = {
+    none: 'Untagged',
+    events: 'Events',
+    holidays: 'Holidays',
+    observances: 'Observances',
+    guests: 'Guests',
+    announcements: 'Announcements',
+  };
 </script>
 
 <dialog
@@ -149,44 +167,78 @@
   ontransitionend={onDialogTransitionEnd}
 >
   <article>
-    <header>
-      <h2 class="modal-title">New event</h2>
+    <div class="close-corner">
       <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
-    </header>
+    </div>
     <form onsubmit={save}>
       <div class="field">
         <label for="add-title">Title</label>
-        <input id="add-title" type="text" bind:value={title} data-add-title placeholder="What's happening?" />
+        <input id="add-title" type="text" bind:value={title} data-add-title />
       </div>
       <div class="field">
-        <label for="add-allday">All-day</label>
-        <input id="add-allday" type="checkbox" bind:checked={allDay} />
-      </div>
-      <div class="field">
-        <label for="add-start-date">Start</label>
-        <div class="date-time">
-          <input id="add-start-date" type="date" bind:value={startDate} required />
-          {#if !allDay}
-            <input type="time" bind:value={startTime} />
-          {/if}
+        <span class="field-label">When</span>
+        <div class="segmented" role="radiogroup" aria-label="Event kind">
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={allDay}
+            onclick={() => (allDay = true)}
+          >All Day</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={!allDay}
+            onclick={() => (allDay = false)}
+          >Appointment</button>
         </div>
       </div>
       <div class="field">
-        <label for="add-end-date">End</label>
-        <div class="date-time">
-          <input id="add-end-date" type="date" bind:value={endDate} />
-          {#if !allDay}
-            <input type="time" bind:value={endTime} />
-          {/if}
+        <label for="add-start-date">Date</label>
+        <div class="row-2col">
+          <input
+            id="add-start-date"
+            type="text"
+            bind:value={startDate}
+            placeholder={config.dateFormat}
+            inputmode="numeric"
+            aria-label="Start date"
+            required
+          />
+          <input
+            type="text"
+            bind:value={endDate}
+            placeholder={config.dateFormat}
+            inputmode="numeric"
+            aria-label="End date"
+          />
         </div>
+      </div>
+      {#if !allDay}
+        <div class="field">
+          <label for="add-start-time">Time</label>
+          <div class="row-2col">
+            <input id="add-start-time" type="time" bind:value={startTime} aria-label="Start time" />
+            <input type="time" bind:value={endTime} aria-label="End time" />
+          </div>
+        </div>
+      {/if}
+      <div class="field">
+        <label for="add-category">Category</label>
+        <select id="add-category" bind:value={category}>
+          {#each FEED_CATEGORIES as c (c)}
+            <option value={c}>{categoryLabels[c]}</option>
+          {/each}
+        </select>
       </div>
       <div class="field">
         <label for="add-location">Location</label>
-        <input id="add-location" type="text" bind:value={location} placeholder="Optional" />
+        <input id="add-location" type="text" bind:value={location} />
       </div>
       <div class="field">
-        <label for="add-description">Notes</label>
-        <textarea id="add-description" bind:value={description} rows="3" placeholder="Optional"></textarea>
+        <label for="add-description">Description</label>
+        <textarea id="add-description" bind:value={description} rows="3"></textarea>
       </div>
       {#if formError}<p class="error">{formError}</p>{/if}
       <footer class="modal-footer">
@@ -228,19 +280,12 @@
   }
   article {
     padding: 1em;
+    position: relative;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5em;
-    padding-bottom: 0.5em;
-    margin-bottom: 0.5em;
-  }
-  .modal-title {
-    flex: 1 1 auto;
-    margin: 0;
-    font-size: 1.15em;
+  .close-corner {
+    position: absolute;
+    top: 0.4em;
+    right: 0.4em;
   }
   form {
     display: flex;
@@ -253,32 +298,46 @@
     align-items: center;
     gap: 0.6em;
   }
-  .field label {
+  .field label,
+  .field .field-label {
     font-size: 13px;
     color: var(--ink);
     user-select: none;
   }
   .field input[type='text'],
-  .field input[type='date'],
   .field input[type='time'],
+  .field select,
   .field textarea {
     width: 100%;
     box-sizing: border-box;
   }
-  .field input[type='checkbox'] {
-    justify-self: start;
-    width: 18px;
-    height: 18px;
-  }
-  .date-time {
-    display: flex;
+  .row-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.4em;
   }
-  .date-time input[type='date'] {
-    flex: 1 1 auto;
+  .segmented {
+    display: flex;
+    width: 100%;
   }
-  .date-time input[type='time'] {
-    flex: 0 0 auto;
+  .segmented-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 32px;
+    padding: 0 0.6em;
+    border: var(--btn-border-w) solid var(--ink);
+    border-radius: 0;
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .segmented-btn + .segmented-btn {
+    border-left-width: 0;
+  }
+  .segmented-btn[aria-checked='true'] {
+    background: var(--ink);
+    color: var(--paper);
   }
   .modal-footer {
     display: flex;

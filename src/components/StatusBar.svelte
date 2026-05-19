@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, ui, effectiveFeedTz } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, ui, effectiveFeedTz } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
   import { tap } from '../lib/haptics';
-  import type { DisplayEvent, FeedCategory, Travel } from '../lib/types';
+  import { buildIcsBundleDownload } from '../lib/calendar-links';
+  import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
 
   const COLLAPSED_HEIGHT = 28;
   const MAX_HEIGHT_VH = 60;
@@ -207,6 +208,7 @@
     const todayEnd = addDays(base, 1);
     const windowEnd = addMonths(base, 1);
     const byFeed = getDisplayByFeed();
+    const inSelection = selection.mode && selection.uids.size > 0;
 
     const todayItems: EventWithFeed[] = [];
     const futureItems: EventWithFeed[] = [];
@@ -218,6 +220,10 @@
         if (ev.hidden) continue;
         if (hiddenLocations.size > 0 && ev.displayLocation && hiddenLocations.has(ev.displayLocation)) continue;
         const ef: EventWithFeed = { event: ev, feedId: feed.id, feedName: feed.name, inferredCity: cityFromTz(feed.id) };
+        if (inSelection) {
+          if (selection.uids.has(ev.uid)) todayItems.push(ef);
+          continue;
+        }
         if (ev.start < todayEnd && ev.end > base) {
           todayItems.push(ef);
         } else if (ev.start >= todayEnd && ev.start < windowEnd) {
@@ -245,14 +251,18 @@
       weekMap.get(key)!.push(ef);
     }
 
-    const weeks: WeekGroup[] = weekStartList.map(ws => ({
-      label: formatWeekLabel(ws),
-      categories: groupByCategory(weekMap.get(ws.toISOString())!),
-    }));
+    const weeks: WeekGroup[] = inSelection
+      ? []
+      : weekStartList.map(ws => ({
+          label: formatWeekLabel(ws),
+          categories: groupByCategory(weekMap.get(ws.toISOString())!),
+        }));
 
-    const todayLabel = ui.tempMarkerMs != null
-      ? `${formatDateLong(base, config.locale)} (W${isoWeekNumber(base)})`
-      : `Today (W${isoWeekNumber(base)})`;
+    const todayLabel = inSelection
+      ? `Selected (${selection.uids.size})`
+      : ui.tempMarkerMs != null
+        ? `${formatDateLong(base, config.locale)} (W${isoWeekNumber(base)})`
+        : `Today (W${isoWeekNumber(base)})`;
 
     return { todayLabel, todayCategories: groupByCategory(todayItems), weeks };
   });
@@ -387,6 +397,35 @@
   // Raw mode toggle
   let rawMode = $state(false);
   let copyDone = $state(false);
+
+  function gatherTrayEvents(): ParsedEvent[] {
+    if (!eventGroups) return [];
+    const out: ParsedEvent[] = [];
+    for (const cat of eventGroups.todayCategories) for (const ef of cat.items) out.push(ef.event);
+    for (const week of eventGroups.weeks) for (const cat of week.categories) for (const ef of cat.items) out.push(ef.event);
+    return out;
+  }
+
+  function downloadTrayIcs(): void {
+    const evs = gatherTrayEvents();
+    if (evs.length === 0) return;
+    tap();
+    const { blob, filename } = buildIcsBundleDownload(evs);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    pushLog(`Exported ${evs.length} event${evs.length === 1 ? '' : 's'}`);
+  }
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (): void => toggleExpand();
+    window.addEventListener('cal:toggle-status', handler);
+    return () => window.removeEventListener('cal:toggle-status', handler);
+  });
 
   // TSV text — derived so it updates reactively and can be displayed or copied
   const tsvText = $derived.by<string>(() => {
@@ -610,6 +649,13 @@
         >Filter</button>
         <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
+        <button
+          type="button"
+          class="copy-btn"
+          onclick={downloadTrayIcs}
+          disabled={visibleEventCount === 0}
+          title="Download tray events as iCal"
+        >iCal</button>
         <button
           type="button"
           class="copy-btn"

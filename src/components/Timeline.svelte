@@ -2,7 +2,7 @@
   import IconButton from './IconButton.svelte';
   import TimeHeader from './TimeHeader.svelte';
   import Row from './Row.svelte';
-  import { zoom, search, config, focus, ui, displayEventsFor } from '../lib/state.svelte';
+  import { zoom, search, config, focus, selection, ui, displayEventsFor } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { computePxPerDay, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import type { DisplayEvent, LaneEvent, Zoom } from '../lib/types';
@@ -499,13 +499,13 @@
   bind:this={scrollEl}
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
-  style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
+  style="height: calc(100dvh - {50 + (search.open ? 44 : 0) + (selection.mode ? 44 : 0)}px);"
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
     <header id="time-header" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {holidayDayKeys} {observanceDayKeys} />
       {#if ui.tempMarkerMs != null}
-        <div class="toggle-marker-wrap" style="top: {50 + (search.open ? 44 : 0) + 3}px">
+        <div class="toggle-marker-wrap" style="top: {50 + (search.open ? 44 : 0) + (selection.mode ? 44 : 0) + 3}px">
           <IconButton
             icon="arrows-horizontal"
             label="Toggle between today and temporary marker"
@@ -625,6 +625,7 @@
     margin: 0;
     padding: 0;
     border: none;
+    border-radius: 0;
     background: var(--accent);
     opacity: 0.4;
     z-index: 7;

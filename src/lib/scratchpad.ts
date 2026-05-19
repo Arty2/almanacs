@@ -1,5 +1,5 @@
-import type { ParsedEvent } from './types';
-import { SCRATCHPAD_FEED_ID } from './types';
+import type { FeedCategory, ParsedEvent } from './types';
+import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID } from './types';
 import { snippetFromText } from './format';
 
 export const SCRATCHPAD_KEY = 'calendar-timeline:scratchpad';
@@ -14,6 +14,7 @@ type SerializedScratchEvent = {
   end: string;
   allDay: boolean;
   url?: string;
+  category?: FeedCategory;
 };
 
 export function loadScratchpad(): ParsedEvent[] {
@@ -25,18 +26,24 @@ export function loadScratchpad(): ParsedEvent[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((e): e is SerializedScratchEvent => e && typeof e === 'object')
-      .map((e) => ({
-        uid: String(e.uid ?? ''),
-        feedId: SCRATCHPAD_FEED_ID,
-        title: String(e.title ?? ''),
-        description: String(e.description ?? ''),
-        descriptionSnippet: String(e.descriptionSnippet ?? ''),
-        location: String(e.location ?? ''),
-        start: new Date(e.start),
-        end: new Date(e.end),
-        allDay: Boolean(e.allDay),
-        ...(e.url ? { url: String(e.url) } : {}),
-      }));
+      .map((e) => {
+        const cat = typeof e.category === 'string' && (FEED_CATEGORIES as string[]).includes(e.category)
+          ? (e.category as FeedCategory)
+          : undefined;
+        return {
+          uid: String(e.uid ?? ''),
+          feedId: SCRATCHPAD_FEED_ID,
+          title: String(e.title ?? ''),
+          description: String(e.description ?? ''),
+          descriptionSnippet: String(e.descriptionSnippet ?? ''),
+          location: String(e.location ?? ''),
+          start: new Date(e.start),
+          end: new Date(e.end),
+          allDay: Boolean(e.allDay),
+          ...(e.url ? { url: String(e.url) } : {}),
+          ...(cat ? { category: cat } : {}),
+        };
+      });
   } catch {
     return [];
   }
@@ -55,6 +62,7 @@ export function saveScratchpad(events: ParsedEvent[]): void {
       end: e.end.toISOString(),
       allDay: e.allDay,
       ...(e.url ? { url: e.url } : {}),
+      ...(e.category ? { category: e.category } : {}),
     }));
     localStorage.setItem(SCRATCHPAD_KEY, JSON.stringify(serialized));
   } catch {
@@ -76,6 +84,7 @@ export type ScratchpadInput = {
   allDay: boolean;
   location?: string;
   description?: string;
+  category?: FeedCategory;
 };
 
 export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
@@ -90,5 +99,6 @@ export function makeScratchpadEvent(input: ScratchpadInput): ParsedEvent {
     start: input.start,
     end: input.end,
     allDay: input.allDay,
+    ...(input.category && input.category !== 'none' ? { category: input.category } : {}),
   };
 }

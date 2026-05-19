@@ -67,4 +67,29 @@ describe('scratchpad storage', () => {
     });
     expect(ev.descriptionSnippet).toBe('First line');
   });
+
+  it('round-trips the category field', () => {
+    const ev = makeScratchpadEvent({
+      title: 'C',
+      start: new Date('2026-04-01T00:00:00Z'),
+      end: new Date('2026-04-02T00:00:00Z'),
+      allDay: true,
+      category: 'guests',
+    });
+    expect(ev.category).toBe('guests');
+    saveScratchpad([ev]);
+    const loaded = loadScratchpad();
+    expect(loaded[0]!.category).toBe('guests');
+  });
+
+  it("doesn't persist a 'none' category", () => {
+    const ev = makeScratchpadEvent({
+      title: 'C',
+      start: new Date(),
+      end: new Date(),
+      allDay: true,
+      category: 'none',
+    });
+    expect(ev.category).toBeUndefined();
+  });
 });

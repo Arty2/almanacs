@@ -307,7 +307,8 @@
               class:confirming={confirmDelete}
               onclick={onDeleteClick}
             >{confirmDelete ? 'Confirm delete' : 'Delete'}</button>
-          {:else if showSource}
+          {/if}
+          {#if showSource}
             <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
             >+ EVENT FILTER</button>
             {#if matchedRules.length > 0}
