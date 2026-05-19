@@ -40,6 +40,29 @@ export const focus = $state<{ feedId: string | null; eventIndex: number }>({
   eventIndex: -1,
 });
 
+export const selection = $state<{ mode: boolean; uids: Set<string> }>({
+  mode: false,
+  uids: new Set(),
+});
+
+export function toggleSelected(uid: string): void {
+  const next = new Set(selection.uids);
+  if (next.has(uid)) next.delete(uid);
+  else next.add(uid);
+  selection.uids = next;
+  if (next.size === 0) selection.mode = false;
+}
+
+export function addToSelection(uid: string): void {
+  if (selection.uids.has(uid)) return;
+  selection.uids = new Set(selection.uids).add(uid);
+}
+
+export function clearSelection(): void {
+  selection.uids = new Set();
+  selection.mode = false;
+}
+
 export type ShareImportView = {
   zoom?: Zoom;
   locale?: Locale;
