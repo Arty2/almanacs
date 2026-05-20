@@ -49,7 +49,11 @@
     const out: Record<string, DisplayEvent[]> = {};
     for (const feed of config.feeds) {
       if (feed.collapsed) continue;
-      out[feed.id] = (displayByFeed[feed.id] ?? []).filter((e) => !e.hidden);
+      // Time-limit-hidden events are omitted, but Hidden-style events still
+      // render (as a faint, label-less placeholder pill).
+      out[feed.id] = (displayByFeed[feed.id] ?? []).filter(
+        (e) => !e.hidden || e.styleVariant === 'hidden',
+      );
     }
     return out;
   });
@@ -122,9 +126,10 @@
   //   thick  = prominent (none/bold/inverted)
   //   thin   = tentative (dashed/muted)
   //   none   = struck/hidden -> no hatch
-  // Holiday-category thick events span the full timeline as a band; everything
-  // else (observance thick, plus any thin) is confined to its own feed's row.
-  // The header reflects thick vs thin for all holiday/observance days.
+  // Holiday-category thick events span the full timeline as a band; their thin
+  // events are confined to the row. Observance-category events are confined to
+  // their own row (thick or thin) and never touch the header. The header only
+  // reflects holiday-category days.
   const dayHatch = $derived.by(() => {
     const thickHeader = new Set<string>();
     const thinHeader = new Set<string>();
@@ -133,23 +138,24 @@
     const thinByFeed: Record<string, Set<string>> = {};
     for (const feed of config.feeds) {
       if (feed.category !== 'holidays' && feed.category !== 'observances') continue;
+      const isHoliday = feed.category === 'holidays';
       const events = displayByFeed[feed.id] ?? [];
       for (const ev of events) {
         const density = hatchDensity(ev, feed);
         if (density === 'none') continue;
         const days = eventDayKeys(ev);
         if (density === 'thick') {
-          for (const d of days) thickHeader.add(d);
-          if (feed.category === 'holidays') {
-            for (const d of days) bandKeys.add(d);
+          if (isHoliday) {
+            for (const d of days) {
+              thickHeader.add(d);
+              bandKeys.add(d);
+            }
           } else {
             for (const d of days) (thickByFeed[feed.id] ??= new Set()).add(d);
           }
         } else {
-          for (const d of days) {
-            thinHeader.add(d);
-            (thinByFeed[feed.id] ??= new Set()).add(d);
-          }
+          if (isHoliday) for (const d of days) thinHeader.add(d);
+          for (const d of days) (thinByFeed[feed.id] ??= new Set()).add(d);
         }
       }
     }

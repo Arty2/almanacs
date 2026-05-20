@@ -47,7 +47,9 @@
     rowIndex,
   }: Props = $props();
 
-  const visibleEvents = $derived(events.filter((e) => !e.hidden));
+  const visibleEvents = $derived(
+    events.filter((e) => !e.hidden || e.styleVariant === 'hidden'),
+  );
   const sortedLaneEvents = $derived(
     [...laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
   );

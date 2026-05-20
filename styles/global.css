@@ -217,7 +217,8 @@ article[data-style="hidden"] {
   pointer-events: auto;
   cursor: not-allowed;
 }
-article[data-style="hidden"] h3 {
+article[data-style="hidden"] h3,
+article[data-style="hidden"] .meta {
   visibility: hidden;
 }
 
