@@ -80,6 +80,12 @@
     return null;
   });
 
+  // Past events show only the first word of the title (the rest fades out via
+  // the mask in global.css); upcoming events show the full title.
+  const titleText = $derived(
+    isPast ? (event.displayTitle.trim().split(/\s+/)[0] ?? '') : event.displayTitle,
+  );
+
   const showLocation = $derived(
     !!event.displayLocation &&
       feedTravel !== undefined &&
@@ -138,7 +144,7 @@
     aria-label="Open event {event.displayTitle}"
     title={tooltip}
   >
-    <h3>{event.displayTitle}</h3>
+    <h3>{titleText}</h3>
     {#if showTime}
       <p class="meta meta-time" data-mono>{timeLabel}</p>
     {/if}

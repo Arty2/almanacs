@@ -1105,7 +1105,7 @@
     <footer class="settings-footer">
       <div>
         v{__APP_VERSION__} ·
-        <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/calendari</a>
+        <a href={__APP_HOMEPAGE__} target="_blank" rel="noopener noreferrer">heracl.es/almanacs</a>
       </div>
       <div class="credit">Dialectic Acheiropoieton of<br />Heracles Papatheodorou and Claude</div>
     </footer>
