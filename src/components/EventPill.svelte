@@ -98,9 +98,13 @@
   });
 
   // Past events show only the first word of the title (the rest fades out via
-  // the mask in global.css); upcoming events show the full title.
+  // the mask in global.css) — unless focused/selected/current, where the full
+  // label is shown. Upcoming events always show the full title.
+  const showFullLabel = $derived(
+    isFocused || isCurrent || selection.uids.has(event.uid),
+  );
   const titleText = $derived(
-    isPast ? (event.displayTitle.trim().split(/\s+/)[0] ?? '') : event.displayTitle,
+    isPast && !showFullLabel ? (event.displayTitle.trim().split(/\s+/)[0] ?? '') : event.displayTitle,
   );
 
   // A small dot marks pills that a find-replace rule (filter) matched.
@@ -190,16 +194,16 @@
   article:focus-within {
     z-index: 2;
   }
-  /* Discreet dot in the pill's top-left corner when a filter matches. */
+  /* Discreet backtick mark in the pill's top-left corner when a filter matches. */
   article[data-filter='true']::before {
-    content: '';
+    content: '`';
     position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--ink-muted);
+    top: -2px;
+    left: 4px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    color: inherit;
     pointer-events: none;
     z-index: 3;
   }
@@ -233,7 +237,6 @@
     line-height: 1.2;
     color: var(--ink-muted);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
   }
 </style>
