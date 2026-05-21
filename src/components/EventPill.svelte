@@ -98,9 +98,13 @@
   });
 
   // Past events show only the first word of the title (the rest fades out via
-  // the mask in global.css); upcoming events show the full title.
+  // the mask in global.css) — unless focused/selected/current, where the full
+  // label is shown. Upcoming events always show the full title.
+  const showFullLabel = $derived(
+    isFocused || isCurrent || selection.uids.has(event.uid),
+  );
   const titleText = $derived(
-    isPast ? (event.displayTitle.trim().split(/\s+/)[0] ?? '') : event.displayTitle,
+    isPast && !showFullLabel ? (event.displayTitle.trim().split(/\s+/)[0] ?? '') : event.displayTitle,
   );
 
   // A small dot marks pills that a find-replace rule (filter) matched.
@@ -199,7 +203,7 @@
     font-size: 14px;
     font-weight: 700;
     line-height: 1;
-    color: var(--ink-muted);
+    color: inherit;
     pointer-events: none;
     z-index: 3;
   }
@@ -233,7 +237,6 @@
     line-height: 1.2;
     color: var(--ink-muted);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
   }
 </style>

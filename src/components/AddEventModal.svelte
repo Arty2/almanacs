@@ -298,7 +298,7 @@
             role="radio"
             aria-checked={!allDay}
             onclick={() => (allDay = false)}
-          >{hourCount} Hour Event</button>
+          >{allDay ? 'Appointment' : `${hourCount} Hour Event`}</button>
         </div>
       </div>
       <div class="field">
