@@ -24,6 +24,7 @@ export function applyRules(events: ParsedEvent[], rules: FindReplaceRule[]): Dis
 export function matchingRulesFor(event: ParsedEvent, rules: FindReplaceRule[]): FindReplaceRule[] {
   const out: FindReplaceRule[] = [];
   for (const rule of rules) {
+    if (rule.disabled) continue;
     if (!rule.find) continue;
     if (
       event.title.includes(rule.find) ||
@@ -43,6 +44,7 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
   let styleVariant: StyleVariant = 'none';
   let ruleCategory: FeedCategory | null = null;
   for (const rule of rules) {
+    if (rule.disabled) continue;
     if (!rule.find) continue;
     const inTitle = title.includes(rule.find);
     const inDesc = description.includes(rule.find);

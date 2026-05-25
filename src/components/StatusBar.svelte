@@ -26,14 +26,6 @@
 
   const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
-  // Entering multi-select opens the tray automatically so the selected events
-  // are shown immediately.
-  $effect(() => {
-    if (inSelectionMode && height <= COLLAPSED_HEIGHT + 2) {
-      height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
-      ui.statusExpanded = true;
-    }
-  });
   let fullyExpanded = $state(false);
   $effect(() => {
     if (!ui.statusExpanded || dragging) {
@@ -518,12 +510,19 @@
 
 <aside class="status-bar" style="height: {height}px;" data-expanded={expanded ? 'true' : null}>
   {#if inSelectionMode}
-    <div class="handle selection-head">
+    <div
+      class="handle selection-head"
+      onpointerdown={startDrag}
+      onpointermove={onDrag}
+      onpointerup={endDrag}
+      onpointercancel={endDrag}
+    >
       <button
         type="button"
         class="clear-sel"
         aria-label="Clear selection"
         title="Clear selection"
+        onpointerdown={(e) => e.stopPropagation()}
         onclick={clearSelection}
       >
         <Icon name="close" size={16} />
@@ -807,8 +806,8 @@
     display: flex;
     align-items: center;
     gap: 0.5em;
-    cursor: default;
-    touch-action: auto;
+    cursor: pointer;
+    touch-action: none;
   }
   .clear-sel {
     display: inline-flex;

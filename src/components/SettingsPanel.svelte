@@ -81,6 +81,7 @@
   let formCategory: FeedCategory = $state('none');
   let formTravel: Travel = $state('none');
   let formTimezone = $state('');
+  let formHidden = $state(false);
   let formError: string | null = $state(null);
   let importError: string | null = $state(null);
   let exportFlashed = $state(false);
@@ -115,6 +116,7 @@
     formCategory = 'none';
     formTravel = 'none';
     formTimezone = '';
+    formHidden = false;
     formError = null;
     if (confirmDeleteFeedTimer) clearTimeout(confirmDeleteFeedTimer);
     confirmDeleteFeedId = null;
@@ -152,7 +154,7 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory }): void {
+  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; disabled: boolean }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
     config.rules = [...config.rules, next];
@@ -172,6 +174,7 @@
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
     formTravel = feed.travel ?? 'none';
     formTimezone = feed.timezone ?? '';
+    formHidden = !!feed.hidden;
     formError = null;
     scrollEditingFeedIntoView(feed.id);
   }
@@ -183,6 +186,7 @@
     formCategory = 'none';
     formTravel = 'none';
     formTimezone = '';
+    formHidden = false;
     formError = null;
     scrollEditingFeedIntoView(ADD_NEW_ID);
   }
@@ -241,6 +245,8 @@
       target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
       if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
       else delete target.travel;
+      if (formHidden) target.hidden = true;
+      else delete target.hidden;
       if (!isScratchpad(target)) {
         if (formTimezone) target.timezone = formTimezone;
         else delete target.timezone;
@@ -273,6 +279,7 @@
       category: resolved.category,
       ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
+      ...(formHidden ? { hidden: true } : {}),
     };
     config.feeds.push(feed);
     clearForm();
@@ -901,7 +908,8 @@
                 class="feed-name-btn"
                 data-disabled={feed.hidden ? 'true' : null}
                 onclick={() => (editingFeedId === feed.id ? clearForm() : startEdit(feed))}
-                aria-label={'Edit ' + feed.name}
+                ondblclick={() => toggleHidden(feed)}
+                aria-label={'Edit ' + feed.name + ' (double-tap to enable/disable)'}
                 aria-expanded={editingFeedId === feed.id}
               >
                 <span class="feed-name-text">{feed.name}</span>
@@ -1016,9 +1024,9 @@
                   <button
                     type="button"
                     class="disable-btn"
-                    data-state={feed.hidden ? 'enable' : 'disable'}
-                    onclick={() => toggleHidden(feed)}
-                  >{feed.hidden ? 'Enable' : 'Disable'}</button>
+                    data-state={formHidden ? 'enable' : 'disable'}
+                    onclick={() => (formHidden = !formHidden)}
+                  >{formHidden ? 'Enable' : 'Disable'}</button>
                   {#if feed.source.kind === 'user'}
                     <button
                       type="button"
@@ -1030,7 +1038,7 @@
                     >{doneDeleteFeedId === feed.id
                       ? 'Delete ✓'
                       : confirmDeleteFeedId === feed.id
-                        ? 'Confirm delete'
+                        ? 'Delete ?'
                         : 'Delete'}</button>
                   {/if}
                   <span class="action-spacer"></span>
