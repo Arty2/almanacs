@@ -263,9 +263,7 @@
     transform: translateX(-100%);
     pointer-events: none;
     z-index: 2;
-    filter:
-      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
-      drop-shadow(0 0 2px var(--paper));
+    filter: var(--clock-halo);
   }
   .now-time-label {
     position: absolute;
@@ -276,9 +274,7 @@
     font-size: 11px;
     line-height: 1;
     color: var(--accent);
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
-    text-shadow: 0 0 3px var(--paper);
+    filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;

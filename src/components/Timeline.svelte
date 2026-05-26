@@ -603,7 +603,8 @@
           <IconButton
             icon="arrows-horizontal"
             label="Toggle between today and temporary marker"
-            size={14}
+            variant="ghost"
+            size={18}
             onclick={toggleTodayTempMarker}
           />
         </div>
@@ -736,19 +737,8 @@
     z-index: 11;
     pointer-events: auto;
   }
-  .toggle-marker-wrap :global(.icon-button) {
-    width: 22px;
-    height: 22px;
-    border: none;
-    background: transparent;
-  }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
     color: var(--accent);
-    /* Crisp 1px page-colored stroke around the (mask-rendered) icon. */
-    filter:
-      drop-shadow(1px 0 0 var(--paper)) drop-shadow(-1px 0 0 var(--paper))
-      drop-shadow(0 1px 0 var(--paper)) drop-shadow(0 -1px 0 var(--paper))
-      drop-shadow(1px 1px 0 var(--paper)) drop-shadow(-1px -1px 0 var(--paper))
-      drop-shadow(1px -1px 0 var(--paper)) drop-shadow(-1px 1px 0 var(--paper));
+    filter: var(--clock-halo);
   }
 </style>

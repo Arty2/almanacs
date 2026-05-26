@@ -394,9 +394,7 @@
     transform: translateX(-100%);
     pointer-events: none;
     z-index: 2;
-    filter:
-      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
-      drop-shadow(0 0 2px var(--paper));
+    filter: var(--clock-halo);
   }
   .tz-time {
     position: absolute;
@@ -407,9 +405,7 @@
     gap: 0.3em;
     font-size: 11px;
     color: var(--ink-muted);
-    filter:
-      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
-      drop-shadow(0 0 2px var(--paper));
+    filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
