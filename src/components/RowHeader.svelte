@@ -1,11 +1,11 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { config, ui, focus, effectiveFeedTz } from '../lib/state.svelte';
+  import { config, ui, focus, effectiveFeedTz, zoom } from '../lib/state.svelte';
   import { today } from '../lib/today.svelte';
   import { dateToPx } from '../lib/layout';
   import { clock } from '../lib/clock.svelte';
-  import { formatTime, formatTzDiff, isDaylight } from '../lib/format';
+  import { formatTime, formatTzDiff, isDaylight, tzOffsetMinutesVsDisplay } from '../lib/format';
   import { longPress, createLongPress } from '../lib/haptics';
   import type { CalendarFeed, DisplayEvent, Timezone } from '../lib/types';
 
@@ -178,6 +178,15 @@
   const morningH = $derived(config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8);
   const eveningH = $derived(config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20);
   const feedIsDay = $derived(feedTz ? isDaylight(feedTz as Timezone, new Date(clock.now), morningH, eveningH) : true);
+  // x of the current-time marker as it passes through this row (content
+  // coords), so the row clock can hug it: icon left of the line, time right.
+  const markerLeft = $derived.by(() => {
+    const nowDate = zoom.value === 'month' ? new Date(clock.now) : today.value;
+    const base = dateToPx(nowDate, rangeStart, pxPerDay);
+    if (!feedTz) return base;
+    const mins = tzOffsetMinutesVsDisplay(feedTz, config.timezone, new Date(clock.now));
+    return base + (mins / 1440) * pxPerDay;
+  });
   const debugFlag =
     typeof localStorage !== 'undefined' && localStorage.getItem('calendari.debug') === '1';
 </script>
@@ -236,18 +245,20 @@
       title="Tap to expand/collapse · double-tap or long-press to edit"
     >
       <span class="name-text">{feed.name}</span>
-      {#if feedTz}
-        <span class="tz-now" data-mono aria-hidden="true">
-          <Icon name={feedIsDay ? 'sun' : 'moon'} size={11} />
-          <span>{feedClockTime}</span>
-          {#if tzLabel}<span class="tz-offset">({tzLabel})</span>{/if}
-        </span>
-      {/if}
     </button>
     {#if debugFlag}
       <span class="badge" data-mono data-debug>{visibleEvents.length}</span>
     {/if}
   </div>
+  {#if feedTz}
+    <span class="tz-icon" style="left: {markerLeft - 4}px" aria-hidden="true">
+      <Icon name={feedIsDay ? 'sun' : 'moon'} size={11} />
+    </span>
+    <span class="tz-time" data-mono style="left: {markerLeft + 4}px" aria-hidden="true">
+      <span>{feedClockTime}</span>
+      {#if tzLabel}<span class="tz-offset">({tzLabel})</span>{/if}
+    </span>
+  {/if}
   <span class="spacer"></span>
   {#if !feed.collapsed}
     <div class="actions">
@@ -373,14 +384,29 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .tz-now {
+  .tz-icon {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    color: var(--ink-muted);
+    transform: translateX(-100%);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .tz-time {
+    position: absolute;
+    top: 0;
+    height: 100%;
     display: inline-flex;
     align-items: center;
     gap: 0.3em;
     font-size: 11px;
     color: var(--ink-muted);
-    flex-shrink: 0;
     white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
   }
   .tz-offset {
     color: var(--ink-muted);
