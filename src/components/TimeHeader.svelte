@@ -5,7 +5,7 @@
   import { clock } from '../lib/clock.svelte';
   import { dateToPx, pxToDate } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber, addDays } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend } from '../lib/format';
+  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -134,19 +134,13 @@
       ? 'W' + isoWeekNumber(addDays(new Date(ui.tempMarkerMs), config.weekStart === 'sunday' ? 4 : 3))
       : '',
   );
-  // Day/night glyph for the current-date marker, based on the local hour.
-  const nowHour = $derived.by(() => {
-    const tz = config.timezone === 'local' ? undefined : config.timezone;
-    try {
-      const h = new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: tz })
-        .formatToParts(new Date(clock.now))
-        .find((p) => p.type === 'hour')?.value;
-      return parseInt(h ?? '0', 10) % 24;
-    } catch {
-      return new Date(clock.now).getHours();
-    }
-  });
-  const nowIcon = $derived(nowHour >= 6 && nowHour < 18 ? 'sun' : 'moon');
+  // Day/night glyph for the current-date marker, using the configured
+  // morning/evening limits (same boundaries as the calendar row headers).
+  const morningH = $derived(config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8);
+  const eveningH = $derived(config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20);
+  const nowIcon = $derived(
+    isDaylight(config.timezone, new Date(clock.now), morningH, eveningH) ? 'sun' : 'moon',
+  );
 
   let labelDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
 
