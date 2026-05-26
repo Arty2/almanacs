@@ -7,7 +7,7 @@
     editingRuleId: string | null;
     onEditingChange: (id: string | null) => void;
     draftRule?: FindReplaceRule | null;
-    onCommitDraft?: (updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory }) => void;
+    onCommitDraft?: (updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; disabled: boolean }) => void;
     onDiscardDraft?: () => void;
   };
   const {
@@ -50,6 +50,7 @@
   let formReplace = $state('');
   let formStyle = $state<StyleVariant>('none');
   let formCategory = $state<FeedCategory>('none');
+  let formDisabled = $state(false);
   let listContainer: HTMLUListElement | undefined = $state();
   let lastEditingId: string | null = null;
 
@@ -81,6 +82,7 @@
     formReplace = rule.replace;
     formStyle = rule.style;
     formCategory = rule.category ?? 'none';
+    formDisabled = !!rule.disabled;
     queueMicrotask(() => {
       listContainer
         ?.querySelector<HTMLElement>(`[data-rule-card="${rule.id}"]`)
@@ -94,6 +96,15 @@
 
   function startEdit(rule: FindReplaceRule): void {
     onEditingChange(rule.id);
+  }
+
+  // Direct enable/disable toggle (double-tap shortcut), applied immediately.
+  function toggleRuleDisabled(rule: FindReplaceRule): void {
+    const idx = config.rules.findIndex((r) => r.id === rule.id);
+    if (idx < 0) return;
+    const cur = config.rules[idx]!;
+    const next = { ...cur, disabled: !cur.disabled };
+    config.rules = [...config.rules.slice(0, idx), next, ...config.rules.slice(idx + 1)];
   }
 
   function cancelEdit(): void {
@@ -120,7 +131,7 @@
   function saveEdit(): void {
     if (!editingRuleId) return;
     if (isEditingDraft) {
-      onCommitDraft?.({ find: formFind, replace: formReplace, style: formStyle, category: formCategory });
+      onCommitDraft?.({ find: formFind, replace: formReplace, style: formStyle, category: formCategory, disabled: formDisabled });
       snapshot = null;
       return;
     }
@@ -136,6 +147,7 @@
       replace: formReplace,
       style: formStyle,
       category: formCategory,
+      disabled: formDisabled,
     };
     config.rules = [
       ...config.rules.slice(0, idx),
@@ -260,9 +272,11 @@
           <button
             type="button"
             class="rule-name-btn"
-            aria-label={'Edit rule ' + previewText(rule)}
+            data-disabled={rule.disabled ? 'true' : null}
+            aria-label={'Edit rule ' + previewText(rule) + ' (double-tap to enable/disable)'}
             aria-expanded={editingRuleId === rule.id}
             onclick={() => (editingRuleId === rule.id ? cancelEdit() : startEdit(rule))}
+            ondblclick={() => toggleRuleDisabled(rule)}
           >
             <span class="rule-preview">{previewText(rule)}</span>
             <span
@@ -322,6 +336,12 @@
             <div class="form-actions rule-form-actions">
               <button
                 type="button"
+                class="disable-btn"
+                data-state={formDisabled ? 'enable' : 'disable'}
+                onclick={() => (formDisabled = !formDisabled)}
+              >{formDisabled ? 'Enable' : 'Disable'}</button>
+              <button
+                type="button"
                 class="delete-btn"
                 class:confirming={confirmDeleteId === rule.id}
                 class:done={doneDeleteId === rule.id}
@@ -330,7 +350,7 @@
               >{doneDeleteId === rule.id
                 ? 'Delete ✓'
                 : confirmDeleteId === rule.id
-                  ? 'Confirm delete'
+                  ? 'Delete ?'
                   : 'Delete'}</button>
               <span class="action-spacer"></span>
               <button
@@ -426,6 +446,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+  .rule-name-btn[data-disabled='true'] .rule-preview {
+    text-decoration: line-through;
+    text-decoration-color: var(--ink-muted);
+    color: var(--ink-muted);
   }
   /* Mini event-label preview: an "α" styled like a pill of the given style,
      with its border reflecting the style. */
@@ -527,6 +552,16 @@
     background: var(--paper);
     color: var(--ink);
     border-color: var(--ink);
+  }
+  .form-actions .disable-btn[data-state='disable'] {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .form-actions .disable-btn[data-state='disable']:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .disable-btn[data-state='enable']:hover {
+    background: var(--paper-2);
   }
   @media (max-width: 480px) {
     .field {
