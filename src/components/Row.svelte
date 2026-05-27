@@ -270,18 +270,14 @@
   .dot {
     position: absolute;
     top: 50%;
-    width: 6px;
-    height: 6px;
+    width: 10px;
+    height: 10px;
     border-radius: 999px;
     border: 1px solid var(--ink);
     padding: 0;
     background: transparent;
     transform: translate(-50%, -50%);
     cursor: pointer;
-  }
-  .dot:hover, .dot:focus-visible {
-    width: 10px;
-    height: 10px;
   }
   .dot:focus {
     outline: none;
@@ -312,8 +308,6 @@
     opacity: var(--past-opacity);
   }
   .dot[data-match='true'] {
-    width: 10px;
-    height: 10px;
     background: var(--accent);
     border-color: var(--accent);
     outline: 2px solid var(--accent);
@@ -321,8 +315,6 @@
   }
   .dot[data-highlight='true'],
   .dot[data-selected='true'] {
-    width: 10px;
-    height: 10px;
     background: var(--accent);
     border-color: var(--accent);
   }
