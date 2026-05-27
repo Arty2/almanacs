@@ -22,7 +22,7 @@
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
   }
 
-  type Band = { date: Date; left: number; width: number; label: string; past?: boolean };
+  type Band = { date: Date; left: number; width: number; label: string; past?: boolean; current?: boolean };
 
   function setTempMarker(b: Band, e: MouseEvent): void {
     if (typeof window === 'undefined') return;
@@ -92,6 +92,8 @@
           // Past only if the whole period ends on/before today — so the band
           // containing today (current week/month/quarter/year) is not dimmed.
           past: next.getTime() <= today.value.getTime(),
+          current:
+            d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
         };
       });
       return { tier, bands };
@@ -108,6 +110,7 @@
       left: dateToPx(d, rangeStart, pxPerDay),
       width: pxPerDay,
       label: formatDayInitial(d, config.locale),
+      current: d.getTime() === today.value.getTime(),
     }));
   });
 
@@ -183,6 +186,7 @@
           type="button"
           class="band"
           data-past={b.past ? 'true' : null}
+          data-current={b.current ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
@@ -234,6 +238,7 @@
           data-holiday={thickDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-observance={thinDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
+          data-current={b.current ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
@@ -289,9 +294,7 @@
     line-height: 1;
     color: var(--accent);
     transform: translateX(-100%);
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
-    text-shadow: 0 0 3px var(--paper);
+    filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;
     z-index: 3;
@@ -359,6 +362,11 @@
   .band[data-past='true'] .day-letter,
   .band[data-past='true'] .day-num {
     color: var(--ink-faint);
+  }
+  .band[data-current='true'] .label,
+  .band[data-current='true'] .day-letter,
+  .band[data-current='true'] .day-num {
+    font-weight: 500;
   }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
     position: absolute;

@@ -600,7 +600,7 @@
     <header id="time-header" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
       {#if ui.tempMarkerMs != null}
-        <div class="toggle-marker-wrap" style="top: {50 + (search.open ? 44 : 0) + 3}px">
+        <div class="toggle-marker-wrap" style="top: {50 + (search.open ? 44 : 0) - 1}px">
           <IconButton
             icon="arrows-horizontal"
             label="Toggle between today and temporary marker"
@@ -734,13 +734,16 @@
   }
   .toggle-marker-wrap {
     position: fixed;
-    right: calc(0.75em + 5px);
+    right: calc(0.75em + 1px);
     z-index: 11;
     pointer-events: auto;
   }
   .toggle-marker-wrap :global(.icon-button) {
     width: 24px;
     height: 24px;
+  }
+  .toggle-marker-wrap :global(.icon-button):hover {
+    background: transparent;
   }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
     color: var(--accent);

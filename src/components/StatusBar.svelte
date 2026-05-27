@@ -440,10 +440,12 @@
     return () => window.removeEventListener('cal:toggle-status', handler);
   });
 
-  // TSV text — derived so it updates reactively and can be displayed or copied
-  const tsvText = $derived.by<string>(() => {
-    if (!eventGroups) return '';
-    const rows: string[] = ['Start Date\tEnd Date\tStart Time\tEnd Time\tTitle\tLocation\tCategory'];
+  // Raw export columns shared by the table display and the TSV copy.
+  const RAW_COLUMNS = ['Start Date', 'End Date', 'Start Time', 'End Time', 'Title', 'Location', 'Category'];
+  // Structured rows — drives both the raw-mode table and the TSV text below.
+  const rawRows = $derived.by<string[][]>(() => {
+    if (!eventGroups) return [];
+    const out: string[][] = [];
     function addItems(items: EventWithFeed[], categoryLabel: string): void {
       for (const ef of items) {
         const ev = ef.event;
@@ -453,14 +455,19 @@
         const startTime = ev.allDay ? '' : formatTime(ev.start, config.timeFormat, config.timezone);
         const endTime = ev.allDay ? '' : formatTime(ev.end, config.timeFormat, config.timezone);
         const location = ev.displayLocation || ef.inferredCity || '';
-        rows.push([startDate, endDate, startTime, endTime, ev.displayTitle, location, categoryLabel].join('\t'));
+        out.push([startDate, endDate, startTime, endTime, ev.displayTitle, location, categoryLabel]);
       }
     }
     for (const cat of eventGroups.todayCategories) addItems(cat.items, cat.label);
     for (const week of eventGroups.weeks)
       for (const cat of week.categories) addItems(cat.items, cat.label);
-    return rows.join('\n');
+    return out;
   });
+
+  // TSV text — derived so it updates reactively and can be copied.
+  const tsvText = $derived(
+    [RAW_COLUMNS.join('\t'), ...rawRows.map((r) => r.join('\t'))].join('\n'),
+  );
 
   async function copyContent(): Promise<void> {
     try {
@@ -575,7 +582,16 @@
     <div class="events-tray" role="region" aria-label="Upcoming events" inert={!fullyExpanded}>
       {#if rawMode}
         <div class="raw-block">
-          <pre>{tsvText}</pre>
+          <table class="raw-table">
+            <thead>
+              <tr>{#each RAW_COLUMNS as col (col)}<th>{col}</th>{/each}</tr>
+            </thead>
+            <tbody>
+              {#each rawRows as row, i (i)}
+                <tr>{#each row as cell, c (c)}<td>{cell}</td>{/each}</tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
       {:else}
         <div class="tray-scroll">
@@ -945,25 +961,28 @@
   .raw-block {
     flex: 1 1 auto;
     min-height: 0;
-    display: flex;
-    flex-direction: column;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0.6em 0.8em;
     user-select: text;
     -webkit-user-select: text;
   }
-  .raw-block pre {
-    flex: 1 1 auto;
-    min-height: 0;
-    margin: 0;
-    padding: 0.6em 0.8em;
-    overflow-x: auto;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+  .raw-table {
+    border-collapse: collapse;
     font-family: var(--mono);
     font-size: 11px;
     line-height: 1.4;
-    white-space: pre;
-    word-break: normal;
-    overflow-wrap: normal;
+    white-space: nowrap;
+  }
+  .raw-table th,
+  .raw-table td {
+    padding: 0.15em 0.6em 0.15em 0;
+    text-align: left;
+    vertical-align: top;
+  }
+  .raw-table th {
+    font-weight: 600;
+    border-bottom: 1px solid var(--ink-faint);
   }
   .tray-scroll {
     flex: 1 1 auto;
