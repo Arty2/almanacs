@@ -26,14 +26,6 @@
 
   const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
-  // Entering multi-select opens the tray automatically so the selected events
-  // are shown immediately.
-  $effect(() => {
-    if (inSelectionMode && height <= COLLAPSED_HEIGHT + 2) {
-      height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
-      ui.statusExpanded = true;
-    }
-  });
   let fullyExpanded = $state(false);
   $effect(() => {
     if (!ui.statusExpanded || dragging) {
@@ -122,6 +114,7 @@
     let closest: DisplayEvent | null = null;
     const byFeed = getDisplayByFeed();
     for (const feed of config.feeds) {
+      if (feed.hidden) continue;
       if (feed.category !== 'none') continue;
       if (feed.source.kind === 'scratchpad') continue; // never surface Draft events here
       for (const ev of (byFeed[feed.id] ?? [])) {
@@ -224,6 +217,7 @@
     const futureItems: EventWithFeed[] = [];
 
     for (const feed of config.feeds) {
+      if (feed.hidden) continue;
       const feedTravel: Travel = feed.travel ?? 'none';
       if (!config.trayFilter.travel.includes(feedTravel)) continue;
       for (const ev of (byFeed[feed.id] ?? [])) {
@@ -316,6 +310,7 @@
     let localCount = 0;
     let intlCount = 0;
     for (const feed of config.feeds) {
+      if (feed.hidden) continue;
       const feedTravel: Travel = feed.travel ?? 'none';
       const feedCat = feed.category ?? 'none';
       for (const ev of (byFeed[feed.id] ?? [])) {
@@ -515,12 +510,19 @@
 
 <aside class="status-bar" style="height: {height}px;" data-expanded={expanded ? 'true' : null}>
   {#if inSelectionMode}
-    <div class="handle selection-head">
+    <div
+      class="handle selection-head"
+      onpointerdown={startDrag}
+      onpointermove={onDrag}
+      onpointerup={endDrag}
+      onpointercancel={endDrag}
+    >
       <button
         type="button"
         class="clear-sel"
         aria-label="Clear selection"
         title="Clear selection"
+        onpointerdown={(e) => e.stopPropagation()}
         onclick={clearSelection}
       >
         <Icon name="close" size={16} />
@@ -535,6 +537,9 @@
         <span class="dot" aria-hidden="true"></span>
         <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
       </span>
+      <span class="toggle" aria-hidden="true">
+        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+      </span>
     </div>
   {:else}
     <button
@@ -548,17 +553,17 @@
       onpointercancel={endDrag}
     >
       <span class="status-line">
-        <span
-          class="status-chip"
-          data-online={online.value ? 'true' : null}
-          title={online.value ? 'Online' : 'Offline'}
-        >
-          <span class="dot" aria-hidden="true"></span>
-          <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
-        </span>
         {#if nextEventLabel && !expanded}
           <span class="next-event">{nextEventLabel}</span>
         {/if}
+      </span>
+      <span
+        class="status-chip"
+        data-online={online.value ? 'true' : null}
+        title={online.value ? 'Online' : 'Offline'}
+      >
+        <span class="dot" aria-hidden="true"></span>
+        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
       </span>
       <span class="toggle" aria-hidden="true">
         <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
@@ -747,7 +752,7 @@
   }
   .handle {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     align-items: center;
     gap: 0.6em;
     height: 28px;
@@ -804,8 +809,8 @@
     display: flex;
     align-items: center;
     gap: 0.5em;
-    cursor: default;
-    touch-action: auto;
+    cursor: pointer;
+    touch-action: none;
   }
   .clear-sel {
     display: inline-flex;
@@ -814,8 +819,8 @@
     width: 24px;
     height: 24px;
     padding: 0;
-    border: var(--btn-border-w) solid var(--ink);
-    background: var(--paper);
+    border: none;
+    background: transparent;
     color: var(--ink);
     cursor: pointer;
     flex-shrink: 0;

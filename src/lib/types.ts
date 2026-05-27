@@ -103,6 +103,7 @@ export type FindReplaceRule = {
   replace: string;
   style: StyleVariant;
   category: FeedCategory;
+  disabled?: boolean;
 };
 
 export type TrayFilter = {
