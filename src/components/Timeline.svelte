@@ -597,7 +597,7 @@
   style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
-    <header id="time-header" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
+    <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
       {#if ui.tempMarkerMs != null}
         <div class="toggle-marker-wrap" style="top: {50 + (search.open ? 44 : 0) + 1}px">
