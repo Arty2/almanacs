@@ -114,6 +114,10 @@
     return 'thick';
   }
 
+  function dayKeyOf(d: Date): string {
+    return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+  }
+
   function eventDayKeys(ev: DisplayEvent): string[] {
     const keys: string[] = [];
     const start = ev.start;
@@ -125,8 +129,7 @@
       new Date(lastMs).getUTCDate(),
     );
     while (cursor <= last) {
-      const d = new Date(cursor);
-      keys.push(d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate());
+      keys.push(dayKeyOf(new Date(cursor)));
       cursor += MS_PER_DAY;
     }
     return keys;
@@ -177,13 +180,17 @@
   const thickDayKeys = $derived(dayHatch.thickHeader);
   const thinDayKeys = $derived(dayHatch.thinHeader);
 
+  // Day-key strings depend only on the date range (allDays), not zoom, so
+  // precompute them once. stripsForKeys then only does cheap px arithmetic per
+  // zoom instead of rebuilding a key string for every day.
+  const allDayKeys = $derived(allDays.map(dayKeyOf));
+
   function stripsForKeys(dayKeys: Set<string>): { left: number; width: number }[] {
     if (dayKeys.size === 0) return [];
     const out: { left: number; width: number }[] = [];
-    for (const d of allDays) {
-      const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
-      if (dayKeys.has(key)) {
-        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+    for (let i = 0; i < allDays.length; i++) {
+      if (dayKeys.has(allDayKeys[i]!)) {
+        out.push({ left: dateToPx(allDays[i]!, rangeStart, pxPerDay), width: pxPerDay });
       }
     }
     return out;
@@ -203,6 +210,18 @@
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
   const thinStripsByFeed = $derived(stripsByFeed(dayHatch.thinByFeed));
 
+  // Cache the per-feed start-sorted event array keyed by array identity.
+  // visibleByFeed arrays keep their reference across zoom (pxPerDay isn't one
+  // of their dependencies), so this skips the O(n log n) sort on every zoom.
+  const sortedCache = new Map<string, { ref: DisplayEvent[]; sorted: DisplayEvent[] }>();
+  function sortedFor(feedId: string, arr: DisplayEvent[]): DisplayEvent[] {
+    const cached = sortedCache.get(feedId);
+    if (cached && cached.ref === arr) return cached.sorted;
+    const sorted = [...arr].sort((a, b) => a.start.getTime() - b.start.getTime());
+    sortedCache.set(feedId, { ref: arr, sorted });
+    return sorted;
+  }
+
   const rowLanes = $derived.by(() => {
     const result: Record<string, { height: number; laneEvents: LaneEvent[] }> = {};
     for (const feed of orderedFeeds) {
@@ -211,7 +230,8 @@
         continue;
       }
       const arr = visibleByFeed[feed.id] ?? [];
-      const { laneEvents, laneCount } = assignLanes(arr, pxPerDay, rangeStart);
+      const sorted = sortedFor(feed.id, arr);
+      const { laneEvents, laneCount } = assignLanes(sorted, pxPerDay, rangeStart, undefined, true);
       result[feed.id] = {
         height: Math.max(LANE_HEIGHT, laneCount * LANE_HEIGHT) + ROW_PADDING_PX * 2,
         laneEvents,

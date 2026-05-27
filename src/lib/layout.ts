@@ -53,9 +53,12 @@ export function assignLanes(
   pxPerDay: number,
   epoch: Date,
   collisionMinPx: number = MIN_PILL_PX,
+  presorted = false,
 ): { laneEvents: LaneEvent[]; laneCount: number } {
   if (events.length === 0) return { laneEvents: [], laneCount: 0 };
-  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
+  // Sort order is independent of pxPerDay, so callers re-running this on every
+  // zoom can pre-sort once and pass presorted to skip the per-frame sort.
+  const sorted = presorted ? events : [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
   const laneEnds: number[] = [];
   const laneEvents: LaneEvent[] = [];
   const useFractional = pxPerDay >= MID_COLUMN_MIN_PX_PER_DAY;
