@@ -5,7 +5,7 @@
   import { clock } from '../lib/clock.svelte';
   import { dateToPx, pxToDate } from '../lib/layout';
   import { HEADER_TIERS, MS_PER_DAY, ticksBetween, formatTier, tierToGranularity, isoWeekNumber, addDays } from '../lib/time';
-  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight } from '../lib/format';
+  import { formatDate, formatDayInitial, formatMonth, formatTime, isWeekend, isDaylight, dayLimitMinutes } from '../lib/format';
   import type { Tier } from '../lib/time';
 
   type Props = {
@@ -22,7 +22,7 @@
     return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
   }
 
-  type Band = { date: Date; left: number; width: number; label: string; past?: boolean };
+  type Band = { date: Date; left: number; width: number; label: string; past?: boolean; current?: boolean };
 
   function setTempMarker(b: Band, e: MouseEvent): void {
     if (typeof window === 'undefined') return;
@@ -92,6 +92,8 @@
           // Past only if the whole period ends on/before today — so the band
           // containing today (current week/month/quarter/year) is not dimmed.
           past: next.getTime() <= today.value.getTime(),
+          current:
+            d.getTime() <= today.value.getTime() && today.value.getTime() < next.getTime(),
         };
       });
       return { tier, bands };
@@ -108,6 +110,7 @@
       left: dateToPx(d, rangeStart, pxPerDay),
       width: pxPerDay,
       label: formatDayInitial(d, config.locale),
+      current: d.getTime() === today.value.getTime(),
     }));
   });
 
@@ -136,10 +139,10 @@
   );
   // Day/night glyph for the current-date marker, using the configured
   // morning/evening limits (same boundaries as the calendar row headers).
-  const morningH = $derived(config.morningLimit ? (parseInt(config.morningLimit.split(':')[0]!, 10) || 8) : 8);
-  const eveningH = $derived(config.eveningLimit ? (parseInt(config.eveningLimit.split(':')[0]!, 10) || 20) : 20);
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
   const nowIcon = $derived(
-    isDaylight(config.timezone, new Date(clock.now), morningH, eveningH) ? 'sun' : 'moon',
+    isDaylight(config.timezone, new Date(clock.now), morningMin, eveningMin) ? 'sun' : 'moon',
   );
 
   let labelDrag: { startX: number; moved: boolean; pid: number } | null = $state(null);
@@ -183,6 +186,7 @@
           type="button"
           class="band"
           data-past={b.past ? 'true' : null}
+          data-current={b.current ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
@@ -234,6 +238,7 @@
           data-holiday={thickDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-observance={thinDayKeys?.has(dayKey(b.date)) ? 'true' : null}
           data-past={b.date.getTime() < today.value.getTime() ? 'true' : null}
+          data-current={b.current ? 'true' : null}
           style="left: {b.left}px; width: {b.width}px"
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
@@ -263,9 +268,7 @@
     transform: translateX(-100%);
     pointer-events: none;
     z-index: 2;
-    filter:
-      drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
-      drop-shadow(0 0 2px var(--paper));
+    filter: var(--clock-halo);
   }
   .now-time-label {
     position: absolute;
@@ -276,9 +279,7 @@
     font-size: 11px;
     line-height: 1;
     color: var(--accent);
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
-    text-shadow: 0 0 3px var(--paper);
+    filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
@@ -293,9 +294,7 @@
     line-height: 1;
     color: var(--accent);
     transform: translateX(-100%);
-    paint-order: stroke fill;
-    -webkit-text-stroke: var(--marker-stroke-w) var(--paper);
-    text-shadow: 0 0 3px var(--paper);
+    filter: var(--clock-halo);
     white-space: nowrap;
     pointer-events: none;
     z-index: 3;
@@ -363,6 +362,11 @@
   .band[data-past='true'] .day-letter,
   .band[data-past='true'] .day-num {
     color: var(--ink-faint);
+  }
+  .band[data-current='true'] .label,
+  .band[data-current='true'] .day-letter,
+  .band[data-current='true'] .day-num {
+    font-weight: 500;
   }
   [data-zoom='month'] .day-letter-band[data-holiday='true'] {
     position: absolute;

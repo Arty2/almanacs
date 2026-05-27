@@ -22,6 +22,10 @@
   --btn-radius: 2px;
   --stroke-w: 3px;
   --marker-stroke-w: 5px;
+  --clock-halo:
+    drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
+    drop-shadow(0 0 2px var(--paper)) drop-shadow(0 0 2px var(--paper))
+    drop-shadow(0 0 2px var(--paper));
 
   --cal-peach-bg: #fde6d3;
   --cal-peach-border: #e6b993;
