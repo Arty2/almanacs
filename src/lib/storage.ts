@@ -135,7 +135,7 @@ function normalizeMotion(value: unknown): Motion {
 }
 
 function normalizeFontSize(value: unknown): FontSize {
-  if (value === 14 || value === 16 || value === 18) return value;
+  if (value === 14 || value === 16 || value === 18 || value === 20 || value === 22) return value;
   return 14;
 }
 

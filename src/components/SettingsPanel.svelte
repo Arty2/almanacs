@@ -550,6 +550,8 @@
     { id: 14, label: '14px' },
     { id: 16, label: '16px' },
     { id: 18, label: '18px' },
+    { id: 20, label: '20px' },
+    { id: 22, label: '22px' },
   ];
   function stepFont(dir: 1 | -1): void {
     const i = fontSizeOptions.findIndex((f) => f.id === config.fontSize);

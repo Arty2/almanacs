@@ -531,6 +531,19 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
+      <span class="toggle" aria-hidden="true">
+        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+      </span>
+      <span
+        class="status-chip"
+        data-online={online.value ? 'true' : null}
+        title={online.value ? 'Online' : 'Offline'}
+      >
+        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
+        <span class="dot" aria-hidden="true"></span>
+      </span>
+      <span class="spacer"></span>
+      <span class="sel-count">{selection.uids.size} selected</span>
       <button
         type="button"
         class="clear-sel"
@@ -541,19 +554,6 @@
       >
         <Icon name="close" size={16} />
       </button>
-      <span class="sel-count">{selection.uids.size} selected</span>
-      <span class="spacer"></span>
-      <span
-        class="status-chip"
-        data-online={online.value ? 'true' : null}
-        title={online.value ? 'Online' : 'Offline'}
-      >
-        <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
-      </span>
-      <span class="toggle" aria-hidden="true">
-        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
-      </span>
     </div>
   {:else}
     <button
@@ -566,21 +566,21 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span class="status-line">
-        {#if nextEventLabel && !expanded}
-          <span class="next-event">{nextEventLabel}</span>
-        {/if}
+      <span class="toggle" aria-hidden="true">
+        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
       </span>
       <span
         class="status-chip"
         data-online={online.value ? 'true' : null}
         title={online.value ? 'Online' : 'Offline'}
       >
-        <span class="dot" aria-hidden="true"></span>
         <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+        <span class="dot" aria-hidden="true"></span>
       </span>
-      <span class="toggle" aria-hidden="true">
-        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+      <span class="status-line">
+        {#if nextEventLabel && !expanded}
+          <span class="next-event">{nextEventLabel}</span>
+        {/if}
       </span>
     </button>
   {/if}
@@ -775,7 +775,7 @@
   }
   .handle {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: auto auto 1fr;
     align-items: center;
     gap: 0.6em;
     height: 28px;

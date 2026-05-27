@@ -18,7 +18,10 @@
   const { rangeStart, rangeEnd, today: todayDate }: Props = $props();
 
   let viewportWidth = $state(0);
-  const pxPerDay = $derived(computePxPerDay(zoom.value, viewportWidth));
+  // Font-size scale also widens day/week columns so the header labels (and pill
+  // text) keep their proportions as the font grows.
+  const fontScale = $derived(config.fontSize / 14);
+  const pxPerDay = $derived(computePxPerDay(zoom.value, viewportWidth) * fontScale);
   const totalWidth = $derived(((rangeEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY) * pxPerDay);
   const nowDateForLine = $derived(zoom.value === 'month' ? new Date(clock.now) : todayDate);
   const todayPx = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
@@ -231,7 +234,6 @@
 
   // Lane metrics scale with the font-size setting so taller text fits; must
   // match EventPill's top-offset math.
-  const fontScale = $derived(config.fontSize / 14);
   const laneH = $derived(Math.round(LANE_HEIGHT * fontScale));
   const rowPad = $derived(Math.round(ROW_PADDING_PX * fontScale));
 
