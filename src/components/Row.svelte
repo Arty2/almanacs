@@ -312,6 +312,9 @@
   /* Carry the event/feed style variant, matching expanded pills. (striked has
      no pill representation since pills carry no text.) */
   .dot[data-style='bold'], .span-bar[data-style='bold'] { border-width: 2px; }
+  /* Border-box keeps the outer size fixed, so bump the round pill 2px to keep
+     the heavier 2px border visually balanced. */
+  .dot[data-style='bold'] { width: 12px; height: 12px; }
   .dot[data-style='dashed'], .span-bar[data-style='dashed'] { border-style: dashed; }
   .dot[data-style='inverted'], .span-bar[data-style='inverted'] { background: var(--ink); }
   /* Past pills mute the same way expanded rows do. */
