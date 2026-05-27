@@ -722,7 +722,14 @@
             disabled={config.fontSize <= fontSizeOptions[0].id}
             aria-label="Decrease font size"
           >−</button>
-          <span class="segmented-value" aria-live="polite">{config.fontSize}px</span>
+          <button
+            type="button"
+            class="segmented-value"
+            onclick={() => (config.fontSize = fontSizeOptions[0].id)}
+            title="Reset to default"
+            aria-label="Reset font size to default"
+            aria-live="polite"
+          >{config.fontSize}px</button>
           <button
             type="button"
             class="segmented-btn"
@@ -1533,15 +1540,19 @@
     cursor: default;
   }
   .segmented-value {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
     height: 32px;
-    border-block: var(--btn-border-w) solid var(--ink);
+    padding: 0 0.9em;
+    border: var(--btn-border-w) solid var(--ink);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-radius: 0;
     background: var(--paper);
     color: var(--ink);
+    cursor: pointer;
     font-size: var(--fs-12);
   }
   .config-actions {
