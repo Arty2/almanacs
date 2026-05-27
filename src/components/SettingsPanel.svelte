@@ -546,12 +546,14 @@
     { id: 'reduced', label: 'Disabled' },
     { id: 'full', label: 'Enabled' },
   ];
+  const DEFAULT_FONT_SIZE: FontSize = 14;
   const fontSizeOptions: { id: FontSize; label: string }[] = [
+    { id: 10, label: '10px' },
+    { id: 12, label: '12px' },
     { id: 14, label: '14px' },
     { id: 16, label: '16px' },
     { id: 18, label: '18px' },
     { id: 20, label: '20px' },
-    { id: 22, label: '22px' },
   ];
   function stepFont(dir: 1 | -1): void {
     const i = fontSizeOptions.findIndex((f) => f.id === config.fontSize);
@@ -727,7 +729,7 @@
           <button
             type="button"
             class="segmented-value"
-            onclick={() => (config.fontSize = fontSizeOptions[0].id)}
+            onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
             title="Reset to default"
             aria-label="Reset font size to default"
             aria-live="polite"

@@ -89,7 +89,7 @@ export type Theme = 'light' | 'dark' | 'auto';
 
 export type Motion = 'auto' | 'reduced' | 'full';
 
-export type FontSize = 14 | 16 | 18 | 20 | 22;
+export type FontSize = 10 | 12 | 14 | 16 | 18 | 20;
 
 export type Locale = 'en' | 'el';
 
