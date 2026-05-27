@@ -207,6 +207,13 @@
   }
 
   const holidayStrips = $derived(stripsForKeys(dayHatch.bandKeys));
+  const vHolidayStrips = $derived(
+    holidayStrips.filter(
+      (h) =>
+        !(visibleRight > visibleLeft) ||
+        (h.left <= visibleRight && h.left + h.width >= visibleLeft),
+    ),
+  );
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
   const thinStripsByFeed = $derived(stripsByFeed(dayHatch.thinByFeed));
 
@@ -301,12 +308,21 @@
     return segs.join(' ');
   });
 
+  let scrollLeft = $state(0);
   function updateViewportVars(): void {
     if (!scrollEl) return;
     scrollEl.style.setProperty('--scroll-left', scrollEl.scrollLeft + 'px');
     scrollEl.style.setProperty('--viewport-w', scrollEl.clientWidth + 'px');
     viewportWidth = scrollEl.clientWidth;
+    scrollLeft = scrollEl.scrollLeft;
   }
+
+  // Horizontal window (in content px) of what's rendered, with one viewport of
+  // overscan on each side so normal scrolling never reveals un-rendered area.
+  // Rows clip pills and background strips to this window; off-screen nodes
+  // (which can number in the thousands across a 1-2 year range) are skipped.
+  const visibleLeft = $derived(viewportWidth > 0 ? scrollLeft - viewportWidth : 0);
+  const visibleRight = $derived(viewportWidth > 0 ? scrollLeft + 2 * viewportWidth : 0);
 
   let rafScheduled = false;
   let lastInteractionMs = $state(0);
@@ -631,7 +647,7 @@
         </div>
       {/if}
     </header>
-    {#each holidayStrips as h, i (i)}
+    {#each vHolidayStrips as h (h.left)}
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
     {/each}
     <div class="rows">
@@ -652,6 +668,8 @@
           thickStrips={thickStripsByFeed[feed.id] ?? []}
           thinStrips={thinStripsByFeed[feed.id] ?? []}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
+          {visibleLeft}
+          {visibleRight}
         />
       {/each}
     </div>

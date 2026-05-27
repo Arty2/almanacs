@@ -23,6 +23,8 @@
     thickStrips: { left: number; width: number }[];
     thinStrips: { left: number; width: number }[];
     rowIndex: number;
+    visibleLeft: number;
+    visibleRight: number;
   };
   function isHighlightedDot(ev: DisplayEvent, idx: number): boolean {
     if (currentMatchUid && currentMatchUid === ev.uid) return true;
@@ -45,6 +47,8 @@
     thickStrips,
     thinStrips,
     rowIndex,
+    visibleLeft,
+    visibleRight,
   }: Props = $props();
 
   const visibleEvents = $derived(
@@ -52,6 +56,27 @@
   );
   const sortedLaneEvents = $derived(
     [...laneEvents].sort((a, b) => a.start.getTime() - b.start.getTime()),
+  );
+
+  // Viewport virtualization: only render nodes intersecting the scroll window
+  // (with overscan, computed in Timeline). Returns true when the window isn't
+  // measured yet so the first paint renders everything.
+  function inWindow(left: number, width: number): boolean {
+    if (!(visibleRight > visibleLeft)) return true;
+    return left <= visibleRight && left + width >= visibleLeft;
+  }
+  const vWeekend = $derived(weekendStrips.filter((w) => inWindow(w.left, w.width)));
+  const vThick = $derived(thickStrips.filter((o) => inWindow(o.left, o.width)));
+  const vThin = $derived(thinStrips.filter((o) => inWindow(o.left, o.width)));
+  const vDayTicks = $derived(dayTicksPx.filter((d) => inWindow(d.px, 0)));
+  const vMonthStarts = $derived(monthStartsPx.filter((m) => inWindow(m.px, 0)));
+  // Preserve each event's index in the full sorted list so focus/keyboard
+  // navigation (which addresses events by index) stays correct when the
+  // rendered set is a filtered subset.
+  const vLaneEvents = $derived(
+    sortedLaneEvents
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => inWindow(e.leftPx, e.widthPx)),
   );
 
   function focusByUid(uid: string): void {
@@ -84,6 +109,10 @@
       });
   });
 
+  const vDots = $derived(
+    dots.map((d, i) => ({ d, i })).filter(({ d }) => inWindow(d.leftPx, d.widthPx)),
+  );
+
   const todayMs = $derived(today.value.getTime());
 
   function dotLabel(ev: DisplayEvent): string {
@@ -106,22 +135,22 @@
   <RowHeader {feed} {visibleEvents} {rangeStart} {pxPerDay} {scrollEl} {rowIndex} />
   {#if !feed.collapsed}
     <div class="row-body" style="height: {bodyHeight}px;">
-      {#each weekendStrips as w, i (i)}
+      {#each vWeekend as w (w.left)}
         <i class="weekend-band" data-past={w.past ? 'true' : null} style="left: {w.left}px; width: {w.width}px"></i>
       {/each}
-      {#each thickStrips as o, i (i)}
+      {#each vThick as o (o.left)}
         <i class="holiday-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
-      {#each thinStrips as o, i (i)}
+      {#each vThin as o (o.left)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
-      {#each dayTicksPx as dx, i (i)}
+      {#each vDayTicks as dx (dx.px)}
         <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
-      {#each monthStartsPx as mx, i (i)}
+      {#each vMonthStarts as mx (mx.px)}
         <i class="grid-line" data-past={mx.past ? 'true' : null} style="left: {mx.px}px"></i>
       {/each}
-      {#each sortedLaneEvents as e, i (e.uid)}
+      {#each vLaneEvents as { e, i } (e.uid)}
         <EventPill
           event={e}
           isMatch={matchUids.has(e.uid)}
@@ -139,19 +168,19 @@
     </div>
   {:else}
     <div class="row-collapsed">
-      {#each thickStrips as o, i (i)}
+      {#each vThick as o (o.left)}
         <i class="holiday-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
-      {#each thinStrips as o, i (i)}
+      {#each vThin as o (o.left)}
         <i class="observance-strip" style="left: {o.left}px; width: {o.width}px"></i>
       {/each}
-      {#each dayTicksPx as dx, i (i)}
+      {#each vDayTicks as dx (dx.px)}
         <i class="day-line" data-past={dx.past ? 'true' : null} style="left: {dx.px}px"></i>
       {/each}
-      {#each monthStartsPx as mx, i (i)}
+      {#each vMonthStarts as mx (mx.px)}
         <i class="grid-line" data-past={mx.past ? 'true' : null} style="left: {mx.px}px"></i>
       {/each}
-      {#each dots as d, i (d.ev.uid)}
+      {#each vDots as { d, i } (d.ev.uid)}
         <button
           type="button"
           class={d.multiDay ? 'span-bar' : 'dot'}
