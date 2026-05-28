@@ -15,7 +15,7 @@
     TZ_OVERRIDE_OPTIONS,
   } from '../lib/format';
   import { buildShareUrl, SHARE_URL_LIMIT } from '../lib/share';
-  import { longPress } from '../lib/haptics';
+  import { longPress, panelOpen } from '../lib/haptics';
   import {
     CALENDAR_COLORS,
     type CalendarColor,
@@ -35,6 +35,11 @@
 
   type Props = { onClose: () => void; onRefresh: () => Promise<void> };
   const { onClose, onRefresh }: Props = $props();
+
+  // The panel only mounts when opened — fire a firm pulse, like the tray.
+  $effect(() => {
+    panelOpen();
+  });
 
   const ADD_NEW_ID = '__add-new__';
   let panelEl: HTMLElement | undefined = $state();
