@@ -216,15 +216,17 @@
   </nav>
   <span class="spacer"></span>
   <span class="toolbar-right" bind:this={rightGroupEl}>
-    <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
-      <IconButton
-        icon="refresh"
-        label={refreshTitle}
-        title={refreshTitle}
-        disabled={refreshDisabled}
-        onclick={() => void handleRefresh()}
-      />
-    </span>
+    {#if !isKiosk()}
+      <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
+        <IconButton
+          icon="refresh"
+          label={refreshTitle}
+          title={refreshTitle}
+          disabled={refreshDisabled}
+          onclick={() => void handleRefresh()}
+        />
+      </span>
+    {/if}
     <span
       class="settings-wrap"
       role="presentation"
@@ -241,12 +243,14 @@
         onclick={handleSettingsClick}
       />
     </span>
-    <IconButton
-      icon="search"
-      label="Search events"
-      pressed={search.open}
-      onclick={toggleSearch}
-    />
+    {#if !isKiosk()}
+      <IconButton
+        icon="search"
+        label="Search events"
+        pressed={search.open}
+        onclick={toggleSearch}
+      />
+    {/if}
   </span>
 </header>
 

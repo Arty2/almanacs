@@ -297,7 +297,7 @@
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
-    <article>
+    <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
@@ -312,7 +312,7 @@
           <ul class="filter-list">
             {#each matchedRules as rule (rule.id)}
               <li>
-                <button type="button" class="filter-row" disabled={locked} onclick={() => openRuleInSettings(rule)}>
+                <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
                   <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
                   <span
                     class="style-swatch"
@@ -333,61 +333,61 @@
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      <footer class="modal-footer">
-        <div class="source-slot">
-          {#if isScratch}
-            <button
-              type="button"
-              class="action-btn delete-btn"
-              class:confirming={confirmDelete}
-              class:done={doneDelete}
-              disabled={locked}
-              title={doneDelete ? 'Tap to cancel deletion' : undefined}
-              onclick={onDeleteClick}
-            >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
-          {/if}
-          {#if showSource}
-            <button type="button" class="action-btn add-filter-btn" disabled={locked} onclick={addFilterFromEvent}
-            >+ Filter</button>
-            {#if matchedRules.length > 0}
+      {#if !locked}
+        <footer class="modal-footer">
+          <div class="source-slot">
+            {#if isScratch}
+              <button
+                type="button"
+                class="action-btn delete-btn"
+                class:confirming={confirmDelete}
+                class:done={doneDelete}
+                title={doneDelete ? 'Tap to cancel deletion' : undefined}
+                onclick={onDeleteClick}
+              >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+            {/if}
+            {#if showSource}
+              <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
+              >+ Filter</button>
+              {#if matchedRules.length > 0}
+                <button type="button" class="filter-count" data-mono
+                  aria-pressed={showSource}
+                  title="Hide source view"
+                  onclick={() => (showSource = !showSource)}
+                >{matchedRules.length}</button>
+              {/if}
+            {:else if matchedRules.length > 0}
               <button type="button" class="filter-count" data-mono
                 aria-pressed={showSource}
-                title="Hide source view"
                 onclick={() => (showSource = !showSource)}
-              >{matchedRules.length}</button>
+              >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
             {/if}
-          {:else if matchedRules.length > 0}
-            <button type="button" class="filter-count" data-mono
-              aria-pressed={showSource}
-              onclick={() => (showSource = !showSource)}
-            >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
-          {/if}
-        </div>
-        <div class="copy-slot">
-          {#if !showSource}
-            <CalendarDownloadMenu events={[ev]} disabled={locked} />
-          {/if}
-          {#if raw}
+          </div>
+          <div class="copy-slot">
+            {#if !showSource}
+              <CalendarDownloadMenu events={[ev]} />
+            {/if}
+            {#if raw}
+              <button
+                type="button"
+                class="raw-toggle"
+                aria-pressed={showSource}
+                onclick={() => (showSource = !showSource)}
+                title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+                aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+              >{'{ }'}</button>
+            {/if}
+            {#if isScratch}
+              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
+            {/if}
             <button
               type="button"
-              class="raw-toggle"
-              aria-pressed={showSource}
-              onclick={() => (showSource = !showSource)}
-              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{ }'}</button>
-          {/if}
-          {#if isScratch}
-            <button type="button" class="action-btn" disabled={locked} onclick={editDraft}>EDIT</button>
-          {/if}
-          <button
-            type="button"
-            class="action-btn"
-            disabled={locked}
-            onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
-          >COPY</button>
-        </div>
-      </footer>
+              class="action-btn"
+              onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
+            >COPY</button>
+          </div>
+        </footer>
+      {/if}
     </article>
   {/if}
 </dialog>
@@ -465,16 +465,15 @@
     justify-content: center;
     text-decoration: none;
   }
-  .action-btn:hover:not(:disabled) {
+  .action-btn:hover {
     background: var(--paper-2);
   }
-  .action-btn:disabled,
-  .filter-row:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .action-btn:disabled {
-    border-style: dashed;
+  /* Kiosk mode: read-only — block text selection / copy. */
+  .locked,
+  .locked * {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
   .delete-btn {
     border-color: var(--accent);

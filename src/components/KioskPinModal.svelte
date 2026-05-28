@@ -1,10 +1,15 @@
 <script lang="ts">
+  import IconButton from './IconButton.svelte';
   import { ui, config, zoom, clearSelection, pushLog } from '../lib/state.svelte';
   import { buildShareUrl } from '../lib/share';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let digits = $state(['', '', '', '']);
   let error = $state('');
+  let lockFlash = $state(false);
+  let shareFlash = $state(false);
+  let lockTimer: ReturnType<typeof setTimeout> | null = null;
+  let shareTimer: ReturnType<typeof setTimeout> | null = null;
   const inputs: (HTMLInputElement | undefined)[] = [];
 
   const mode = $derived(ui.kioskPinModal);
@@ -16,6 +21,8 @@
     if (mode && !dialog.open) {
       digits = ['', '', '', ''];
       error = '';
+      lockFlash = false;
+      shareFlash = false;
       dialog.showModal();
       queueMicrotask(() => inputs[0]?.focus());
     }
@@ -69,10 +76,13 @@
     }
     config.kioskPin = pin;
     clearSelection();
-    ui.kioskPinModal = null;
+    // Stay open so the user can still SHARE the link; flash a checkmark.
+    lockFlash = true;
+    if (lockTimer) clearTimeout(lockTimer);
+    lockTimer = setTimeout(() => { lockFlash = false; }, 2000);
   }
 
-  async function copyLink(): Promise<void> {
+  async function share(): Promise<void> {
     if (!complete) {
       error = 'Enter a 4-digit PIN';
       return;
@@ -82,10 +92,12 @@
     try {
       await navigator.clipboard.writeText(buildShareUrl(config, zoom.value));
       pushLog('Kiosk link copied');
+      shareFlash = true;
+      if (shareTimer) clearTimeout(shareTimer);
+      shareTimer = setTimeout(() => { shareFlash = false; }, 2000);
     } catch {
       pushLog('Copy failed', 'error');
     }
-    ui.kioskPinModal = null;
   }
 
   function doUnlock(): void {
@@ -109,6 +121,7 @@
     <article>
       <header>
         <h2>{mode === 'unlock' ? 'Unlock kiosk' : 'Set kiosk PIN'}</h2>
+        <IconButton icon="close" label="Close" variant="ghost" onclick={cancel} />
       </header>
       <p class="hint">
         {mode === 'unlock'
@@ -139,8 +152,8 @@
           {#if mode === 'unlock'}
             <button type="button" class="primary" disabled={!complete} onclick={doUnlock}>Unlock</button>
           {:else}
-            <button type="button" disabled={!complete} onclick={() => void copyLink()}>Copy link</button>
-            <button type="button" class="primary" disabled={!complete} onclick={doLock}>Lock</button>
+            <button type="button" disabled={!complete} onclick={() => void share()}>{shareFlash ? 'Share ✓' : 'Share'}</button>
+            <button type="button" class="primary" disabled={!complete} onclick={doLock}>{lockFlash ? 'Lock ✓' : 'Lock'}</button>
           {/if}
         </span>
       </div>
@@ -166,6 +179,10 @@
     padding: 1em;
   }
   header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5em;
     border-bottom: 1px solid var(--ink-faint);
     padding-bottom: 0.5em;
     margin-bottom: 0.75em;
