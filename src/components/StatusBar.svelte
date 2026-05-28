@@ -5,7 +5,8 @@
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
   import { formatDate, formatDateLong, formatMonth, formatTime, durationDays } from '../lib/format';
   import Icon from './Icon.svelte';
-  import { buildIcsBundleDownload } from '../lib/calendar-links';
+  import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
+  import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
 
   const COLLAPSED_HEIGHT = 28;
@@ -73,6 +74,7 @@
       height = maxHeight();
       lastExpandedHeight = height;
       ui.statusExpanded = true;
+      trayExpand();
       return;
     }
     if (startedCollapsed) {
@@ -83,9 +85,11 @@
     if (startedExpanded && draggedDown) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
+      trayCollapse();
     } else if (height < COLLAPSED_HEIGHT * 1.5) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
+      trayCollapse();
     } else {
       lastExpandedHeight = height;
       ui.statusExpanded = true;
@@ -96,9 +100,11 @@
     if (expanded) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
+      trayCollapse();
     } else {
       height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
       ui.statusExpanded = true;
+      trayExpand();
     }
   }
 
@@ -420,18 +426,7 @@
     return out;
   }
 
-  function downloadTrayIcs(): void {
-    const evs = gatherTrayEvents();
-    if (evs.length === 0) return;
-    const { blob, filename } = buildIcsBundleDownload(evs);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    pushLog(`Exported ${evs.length} event${evs.length === 1 ? '' : 's'}`);
-  }
+  const trayEvents = $derived(gatherTrayEvents());
 
   $effect(() => {
     if (typeof window === 'undefined') return;
@@ -525,18 +520,6 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <button
-        type="button"
-        class="clear-sel"
-        aria-label="Clear selection"
-        title="Clear selection"
-        onpointerdown={(e) => e.stopPropagation()}
-        onclick={clearSelection}
-      >
-        <Icon name="close" size={16} />
-      </button>
-      <span class="sel-count">{selection.uids.size} selected</span>
-      <span class="spacer"></span>
       <span
         class="status-chip"
         data-online={online.value ? 'true' : null}
@@ -547,6 +530,19 @@
       </span>
       <span class="toggle" aria-hidden="true">
         <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+      </span>
+      <span class="sel-right">
+        <span class="sel-count">{selection.uids.size} selected</span>
+        <button
+          type="button"
+          class="clear-sel"
+          aria-label="Clear selection"
+          title="Clear selection"
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={clearSelection}
+        >
+          <Icon name="close" size={16} />
+        </button>
       </span>
     </div>
   {:else}
@@ -560,11 +556,6 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span class="status-line">
-        {#if nextEventLabel && !expanded}
-          <span class="next-event">{nextEventLabel}</span>
-        {/if}
-      </span>
       <span
         class="status-chip"
         data-online={online.value ? 'true' : null}
@@ -575,6 +566,11 @@
       </span>
       <span class="toggle" aria-hidden="true">
         <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+      </span>
+      <span class="status-line">
+        {#if nextEventLabel && !expanded}
+          <span class="next-event">{nextEventLabel}</span>
+        {/if}
       </span>
     </button>
   {/if}
@@ -719,13 +715,7 @@
         >Filter</button>
         <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
-        <button
-          type="button"
-          class="copy-btn"
-          onclick={downloadTrayIcs}
-          disabled={visibleEventCount === 0}
-          title="Download tray events as iCal"
-        >iCal</button>
+        <CalendarDownloadMenu events={trayEvents} />
         <button
           type="button"
           class="copy-btn"
@@ -739,7 +729,7 @@
           class="copy-btn"
           onclick={() => void copyContent()}
           title={rawMode ? 'Copy as tab-separated list' : 'Copy as rich text'}
-        >{copyDone ? '✓' : 'Copy'}</button>
+        >{copyDone ? 'Copy ✓' : 'Copy'}</button>
       </div>
     </div>
   {/if}
@@ -769,7 +759,7 @@
   }
   .handle {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.6em;
     height: 28px;
@@ -785,16 +775,17 @@
   .status-line {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 0.6em;
     overflow: hidden;
-    font-size: 12px;
+    font-size: var(--fs-12);
     min-width: 0;
   }
   .status-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    font-size: 11px;
+    font-size: var(--fs-11);
     flex-shrink: 0;
   }
   .dot {
@@ -810,7 +801,7 @@
     letter-spacing: 0.04em;
   }
   .next-event {
-    font-size: 11px;
+    font-size: var(--fs-11);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -820,14 +811,22 @@
   .toggle {
     display: inline-flex;
     align-items: center;
+    justify-self: center;
     color: var(--ink);
   }
   .selection-head {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.5em;
     cursor: pointer;
     touch-action: none;
+  }
+  .sel-right {
+    display: inline-flex;
+    align-items: center;
+    justify-self: end;
+    gap: 0.5em;
   }
   .clear-sel {
     display: inline-flex;
@@ -843,12 +842,9 @@
     flex-shrink: 0;
   }
   .sel-count {
-    font-size: 12px;
+    font-size: var(--fs-12);
     letter-spacing: 0.04em;
     white-space: nowrap;
-  }
-  .spacer {
-    flex: 1;
   }
 
   /* Tray */
@@ -881,7 +877,7 @@
   }
   .filter-row::-webkit-scrollbar { display: none; }
   .filter-clear {
-    font-size: 12px;
+    font-size: var(--fs-12);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0 calc(0.5em - 2px);
@@ -899,7 +895,7 @@
     color: var(--ink);
   }
   .filter-chip {
-    font-size: 12px;
+    font-size: var(--fs-12);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 0 calc(0.5em - 2px);
@@ -935,7 +931,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -954,7 +950,7 @@
     min-width: 28px;
   }
   .event-counter {
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink);
     padding: 0 0.5em;
     white-space: nowrap;
@@ -971,7 +967,7 @@
   .raw-table {
     border-collapse: collapse;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-11);
     line-height: 1.4;
     white-space: nowrap;
   }
@@ -999,7 +995,7 @@
     margin: 0 0 0.3em;
     padding-bottom: 0.2em;
     border-bottom: 1px solid var(--ink);
-    font-size: 12px;
+    font-size: var(--fs-12);
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -1009,7 +1005,7 @@
   }
   h3.cat-label {
     display: block;
-    font-size: 12px;
+    font-size: var(--fs-12);
     font-weight: normal;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1026,7 +1022,7 @@
     gap: 0.5em;
     align-items: baseline;
     width: 100%;
-    font-size: 12px;
+    font-size: var(--fs-12);
     padding: 1px 0;
     border: 0;
     background: transparent;
@@ -1042,7 +1038,7 @@
   .event-time {
     font-family: var(--mono);
     color: var(--ink-muted);
-    font-size: 12px;
+    font-size: var(--fs-12);
     white-space: nowrap;
   }
   .event-title {
@@ -1052,7 +1048,7 @@
     min-width: 0;
   }
   .event-loc {
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -1063,6 +1059,6 @@
   .empty {
     margin: 0;
     color: var(--ink-muted);
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
 </style>

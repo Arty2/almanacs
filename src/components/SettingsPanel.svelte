@@ -23,7 +23,9 @@
     type DateFormat,
     type FeedCategory,
     type FindReplaceRule,
+    type FontSize,
     type Locale,
+    type Motion,
     type StyleVariant,
     type Theme,
     type Timezone,
@@ -362,6 +364,8 @@
     config.feeds = next.feeds;
     config.refreshIntervalMs = next.refreshIntervalMs;
     config.theme = next.theme;
+    config.motion = next.motion;
+    config.fontSize = next.fontSize;
     config.locale = next.locale;
     config.dateFormat = next.dateFormat;
     config.rules = next.rules;
@@ -372,6 +376,9 @@
     config.weekStart = next.weekStart;
     config.pastMonths = next.pastMonths;
     config.futureMonths = next.futureMonths;
+    config.morningLimit = next.morningLimit;
+    config.eveningLimit = next.eveningLimit;
+    config.trayFilter = next.trayFilter;
   }
 
   function downloadExport(): void {
@@ -539,6 +546,25 @@
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
   ];
+  const motionOptions: { id: Motion; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'reduced', label: 'Disabled' },
+    { id: 'full', label: 'Enabled' },
+  ];
+  const DEFAULT_FONT_SIZE: FontSize = 14;
+  const fontSizeOptions: { id: FontSize; label: string }[] = [
+    { id: 10, label: '10px' },
+    { id: 12, label: '12px' },
+    { id: 14, label: '14px' },
+    { id: 16, label: '16px' },
+    { id: 18, label: '18px' },
+    { id: 20, label: '20px' },
+  ];
+  function stepFont(dir: 1 | -1): void {
+    const i = fontSizeOptions.findIndex((f) => f.id === config.fontSize);
+    const next = fontSizeOptions[Math.min(fontSizeOptions.length - 1, Math.max(0, i + dir))];
+    if (next) config.fontSize = next.id;
+  }
   const localeOptions: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
     { id: 'el', label: 'Ελληνικά' },
@@ -686,6 +712,42 @@
             <option value={t.id}>{t.label}</option>
           {/each}
         </select>
+      </div>
+      <div class="field">
+        <label for="motion-select">Reduced motion</label>
+        <select id="motion-select" bind:value={config.motion}>
+          {#each motionOptions as m (m.id)}
+            <option value={m.id}>{m.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <span class="field-label">Font size</span>
+        <div class="segmented font-stepper" role="group" aria-label="Font size">
+          <button
+            type="button"
+            class="segmented-btn"
+            onclick={() => stepFont(-1)}
+            disabled={config.fontSize <= fontSizeOptions[0].id}
+            aria-label="Decrease font size"
+          >−</button>
+          <button
+            type="button"
+            class="segmented-value"
+            data-default={config.fontSize === DEFAULT_FONT_SIZE ? 'true' : null}
+            onclick={() => (config.fontSize = DEFAULT_FONT_SIZE)}
+            title="Reset to default"
+            aria-label="Reset font size to default"
+            aria-live="polite"
+          >{config.fontSize}px</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            onclick={() => stepFont(1)}
+            disabled={config.fontSize >= fontSizeOptions[fontSizeOptions.length - 1].id}
+            aria-label="Increase font size"
+          >+</button>
+        </div>
       </div>
       <div class="field">
         <label for="locale-select">Language</label>
@@ -1021,37 +1083,40 @@
                   </div>
                 {/if}
                 <div class="form-actions feed-form-actions">
-                  <button
-                    type="button"
-                    class="disable-btn"
-                    data-state={formHidden ? 'enable' : 'disable'}
-                    onclick={() => (formHidden = !formHidden)}
-                  >{formHidden ? 'Enable' : 'Disable'}</button>
-                  {#if feed.source.kind === 'user'}
+                  <div class="action-group">
                     <button
                       type="button"
-                      class="delete-btn"
-                      class:confirming={confirmDeleteFeedId === feed.id}
-                      class:done={doneDeleteFeedId === feed.id}
-                      title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
-                      onclick={() => removeFeed(feed.id)}
-                    >{doneDeleteFeedId === feed.id
-                      ? 'Delete ✓'
-                      : confirmDeleteFeedId === feed.id
-                        ? 'Delete ?'
-                        : 'Delete'}</button>
-                  {/if}
-                  <span class="action-spacer"></span>
-                  <button
-                    type="button"
-                    onclick={clearForm}
-                    disabled={doneDeleteFeedId === feed.id}
-                  >Cancel</button>
-                  <button
-                    type="submit"
-                    class="primary"
-                    disabled={doneDeleteFeedId === feed.id}
-                  >Save</button>
+                      class="disable-btn"
+                      data-state={formHidden ? 'enable' : 'disable'}
+                      onclick={() => (formHidden = !formHidden)}
+                    >{formHidden ? 'Enable' : 'Disable'}</button>
+                    {#if feed.source.kind === 'user'}
+                      <button
+                        type="button"
+                        class="delete-btn"
+                        class:confirming={confirmDeleteFeedId === feed.id}
+                        class:done={doneDeleteFeedId === feed.id}
+                        title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
+                        onclick={() => removeFeed(feed.id)}
+                      >{doneDeleteFeedId === feed.id
+                        ? 'Delete ✓'
+                        : confirmDeleteFeedId === feed.id
+                          ? 'Delete ?'
+                          : 'Delete'}</button>
+                    {/if}
+                  </div>
+                  <div class="action-group">
+                    <button
+                      type="button"
+                      onclick={clearForm}
+                      disabled={doneDeleteFeedId === feed.id}
+                    >Cancel</button>
+                    <button
+                      type="submit"
+                      class="primary"
+                      disabled={doneDeleteFeedId === feed.id}
+                    >Save</button>
+                  </div>
                 </div>
               </form>
             {/if}
@@ -1112,7 +1177,7 @@
           class:done={doneReset}
           disabled={doneReset}
           onclick={resetAndClear}
-        >{doneReset ? 'Reset ✓' : confirmReset ? 'Confirm reset' : 'Reset'}</button>
+        >{doneReset ? 'Reset ✓' : confirmReset ? 'Reset ?' : 'Reset'}</button>
         <input
           bind:this={fileInput}
           type="file"
@@ -1175,7 +1240,7 @@
   .settings-footer {
     margin-top: auto;
     padding: 4px;
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
     text-align: center;
     display: flex;
@@ -1198,21 +1263,30 @@
   .form-actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.4em;
     margin-top: 0.4em;
   }
-  .form-actions .action-spacer {
-    flex: 1;
+  .form-actions .action-group {
+    display: flex;
+    align-items: center;
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 0.4em;
   }
   .form-actions button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    min-width: 0;
     height: 26px;
     padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    font-size: 12px;
+    font-size: var(--fs-12);
+    text-transform: uppercase;
     cursor: pointer;
   }
   .form-actions .delete-btn {
@@ -1289,7 +1363,7 @@
   }
   .field label,
   .field .field-label {
-    font-size: 13px;
+    font-size: var(--fs-13);
     color: var(--ink);
     user-select: none;
   }
@@ -1346,7 +1420,7 @@
     align-items: baseline;
     gap: 0.4em;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--fs-13);
     text-align: left;
     background: transparent;
     border: 1px solid transparent;
@@ -1371,7 +1445,7 @@
     flex: 0 1 auto;
   }
   .feed-tz {
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
     flex-shrink: 0;
   }
@@ -1383,7 +1457,7 @@
     gap: 0.6em;
   }
   .new-label {
-    font-size: 13px;
+    font-size: var(--fs-13);
     color: var(--ink-muted);
     padding: 4px 6px;
   }
@@ -1405,7 +1479,7 @@
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    font-size: 12px;
+    font-size: var(--fs-12);
     cursor: pointer;
   }
   .add-btn[aria-pressed='true'] {
@@ -1421,7 +1495,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink-muted);
     font-family: var(--mono);
   }
@@ -1466,7 +1540,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   .segmented-btn + .segmented-btn {
     border-left-width: 0;
@@ -1480,6 +1554,42 @@
     border-bottom-right-radius: var(--btn-radius);
   }
   .segmented-btn[aria-checked='true'] {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .segmented-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .segmented-value {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 0.9em;
+    border: var(--btn-border-w) solid var(--ink);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-radius: 0;
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: var(--fs-12);
+  }
+  /* Font stepper: keep the value cell fully bordered so it stays crisp even
+     when the adjacent −/+ are disabled (faded); drop their touching borders. */
+  .font-stepper .segmented-value {
+    border-left-width: var(--btn-border-w);
+    border-right-width: var(--btn-border-w);
+  }
+  .font-stepper .segmented-btn:first-of-type {
+    border-right-width: 0;
+  }
+  .font-stepper .segmented-btn:last-of-type {
+    border-left-width: 0;
+  }
+  .font-stepper .segmented-value[data-default='true'] {
     background: var(--ink);
     color: var(--paper);
   }
@@ -1499,7 +1609,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-13);
   }
   .config-actions .danger {
     color: var(--accent);
@@ -1518,7 +1628,7 @@
   .error {
     margin: 0;
     color: var(--accent);
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   @media (max-width: 640px) {
     .panel {

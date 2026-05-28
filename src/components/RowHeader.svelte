@@ -378,7 +378,7 @@
     outline: none;
   }
   .name-text {
-    font-size: 13px;
+    font-size: var(--fs-13);
     font-weight: 400;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -395,6 +395,7 @@
     pointer-events: none;
     z-index: 2;
     filter: var(--clock-halo);
+    transition: none;
   }
   .tz-time {
     position: absolute;
@@ -403,9 +404,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3em;
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
     filter: var(--clock-halo);
+    transition: none;
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
@@ -414,7 +416,7 @@
     color: var(--ink-muted);
   }
   .badge {
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
     background: var(--paper-2);
     padding: 2px 6px;

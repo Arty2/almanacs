@@ -1,13 +1,9 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
+  import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
   import { ui, config, events, pushLog, deleteScratchpadEvent } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import {
-    buildGoogleAddUrl,
-    buildIcsDownload,
-    buildOutlookAddUrl,
-  } from '../lib/calendar-links';
   import { SCRATCHPAD_FEED_ID, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -333,16 +329,6 @@
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      {#if !showSource}
-        {@const ics = buildIcsDownload(ev)}
-        <div class="modal-add-row">
-          <a href={buildOutlookAddUrl(ev)} target="_blank" rel="noopener noreferrer">Outlook</a>
-          <span class="add-dot" aria-hidden="true">·</span>
-          <a href={buildGoogleAddUrl(ev)} target="_blank" rel="noopener noreferrer">Google Calendar</a>
-          <span class="add-dot" aria-hidden="true">·</span>
-          <a href={ics.dataUrl} download={ics.filename}>iCal</a>
-        </div>
-      {/if}
       <footer class="modal-footer">
         <div class="source-slot">
           {#if isScratch}
@@ -357,7 +343,7 @@
           {/if}
           {#if showSource}
             <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
-            >+ EVENT FILTER</button>
+            >+ Filter</button>
             {#if matchedRules.length > 0}
               <button type="button" class="filter-count" data-mono
                 aria-pressed={showSource}
@@ -373,6 +359,9 @@
           {/if}
         </div>
         <div class="copy-slot">
+          {#if !showSource}
+            <CalendarDownloadMenu events={[ev]} />
+          {/if}
           {#if raw}
             <button
               type="button"
@@ -464,7 +453,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -490,26 +479,6 @@
     color: var(--ink);
     border-color: var(--ink);
   }
-  .modal-add-row {
-    display: flex;
-    align-items: center;
-    gap: 0.4em;
-    margin-top: 0.5em;
-    flex-wrap: wrap;
-  }
-  .modal-add-row a {
-    color: var(--ink);
-    text-decoration: none;
-    font-size: 13px;
-  }
-  .modal-add-row a:hover {
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .add-dot {
-    color: var(--ink-muted);
-    user-select: none;
-  }
   .raw-toggle {
     display: inline-flex;
     align-items: center;
@@ -522,7 +491,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   .raw-toggle:hover,
   .raw-toggle[aria-pressed='true'] {
@@ -536,7 +505,7 @@
     margin: 0.05em 0 0.15em;
   }
   .filter-count {
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
   }
   button.filter-count {
@@ -545,7 +514,7 @@
     padding: 0;
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--fs-11);
     color: var(--ink-muted);
   }
   .filter-list {
@@ -567,7 +536,7 @@
     color: inherit;
     text-align: left;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
   }
   .filter-row:hover {
     background: var(--paper-2);
@@ -590,7 +559,7 @@
     background: transparent;
     color: var(--ink);
     box-sizing: border-box;
-    font-size: 11px;
+    font-size: var(--fs-11);
     font-weight: 400;
     line-height: 1;
   }
@@ -636,7 +605,7 @@
     overflow: auto;
     max-height: 60dvh;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-11);
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-all;

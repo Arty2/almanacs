@@ -4,6 +4,8 @@ import type {
   CalendarFeed,
   FeedCategory,
   FindReplaceRule,
+  FontSize,
+  Motion,
   ParsedEvent,
   StyleVariant,
   Theme,
@@ -101,6 +103,8 @@ export function defaultConfig(): AppConfig {
     refreshIntervalMs: 60 * 60 * 1000,
     schemaVersion: SCHEMA_VERSION,
     theme: 'auto',
+    motion: 'auto',
+    fontSize: 14,
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
     rules: DEFAULT_RULES.map((r) => ({ ...r })),
@@ -123,6 +127,18 @@ export function defaultConfig(): AppConfig {
 function normalizeTheme(value: unknown): Theme {
   if (value === 'light' || value === 'dark' || value === 'auto') return value;
   return 'auto';
+}
+
+function normalizeMotion(value: unknown): Motion {
+  if (value === 'auto' || value === 'reduced' || value === 'full') return value;
+  return 'auto';
+}
+
+function normalizeFontSize(value: unknown): FontSize {
+  if (value === 10 || value === 12 || value === 14 || value === 16 || value === 18 || value === 20) {
+    return value;
+  }
+  return 14;
 }
 
 function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null {
@@ -247,6 +263,8 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     refreshIntervalMs,
     schemaVersion: SCHEMA_VERSION,
     theme: normalizeTheme(parsed.theme),
+    motion: normalizeMotion(parsed.motion),
+    fontSize: normalizeFontSize(parsed.fontSize),
     locale: (parsed.locale as AppConfig['locale']) ?? base.locale,
     dateFormat: normalizeDateFormat(parsed.dateFormat),
     rules: mergeDefaultRules(rawRules),
@@ -317,7 +335,47 @@ type SerializedEvent = {
   url?: string;
 };
 
+// Serializing every event to JSON is synchronous and can block for tens of ms
+// on slow devices. Coalesce bursts of refresh writes into a single trailing
+// write, with a flush on page hide so nothing is lost on close.
+type CachePayload = {
+  byFeed: Record<string, ParsedEvent[]>;
+  tzByFeed: Record<string, string>;
+  lastSuccessAt: Record<string, number>;
+};
+let pendingCache: CachePayload | null = null;
+let cacheTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function saveEventsCache(
+  byFeed: Record<string, ParsedEvent[]>,
+  tzByFeed: Record<string, string>,
+  lastSuccessAt: Record<string, number>,
+): void {
+  if (typeof localStorage === 'undefined') return;
+  pendingCache = { byFeed, tzByFeed, lastSuccessAt };
+  if (cacheTimer) return;
+  cacheTimer = setTimeout(flushEventsCache, 1000);
+}
+
+export function flushEventsCache(): void {
+  if (cacheTimer) {
+    clearTimeout(cacheTimer);
+    cacheTimer = null;
+  }
+  if (!pendingCache) return;
+  const { byFeed, tzByFeed, lastSuccessAt } = pendingCache;
+  pendingCache = null;
+  writeEventsCache(byFeed, tzByFeed, lastSuccessAt);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushEventsCache);
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushEventsCache();
+  });
+}
+
+function writeEventsCache(
   byFeed: Record<string, ParsedEvent[]>,
   tzByFeed: Record<string, string>,
   lastSuccessAt: Record<string, number>,

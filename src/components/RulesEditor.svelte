@@ -334,35 +334,38 @@
               </select>
             </div>
             <div class="form-actions rule-form-actions">
-              <button
-                type="button"
-                class="disable-btn"
-                data-state={formDisabled ? 'enable' : 'disable'}
-                onclick={() => (formDisabled = !formDisabled)}
-              >{formDisabled ? 'Enable' : 'Disable'}</button>
-              <button
-                type="button"
-                class="delete-btn"
-                class:confirming={confirmDeleteId === rule.id}
-                class:done={doneDeleteId === rule.id}
-                title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
-                onclick={() => remove(rule.id)}
-              >{doneDeleteId === rule.id
-                ? 'Delete ✓'
-                : confirmDeleteId === rule.id
-                  ? 'Delete ?'
-                  : 'Delete'}</button>
-              <span class="action-spacer"></span>
-              <button
-                type="button"
-                onclick={cancelEdit}
-                disabled={doneDeleteId === rule.id}
-              >Cancel</button>
-              <button
-                type="submit"
-                class="primary"
-                disabled={doneDeleteId === rule.id}
-              >Save</button>
+              <div class="action-group">
+                <button
+                  type="button"
+                  class="disable-btn"
+                  data-state={formDisabled ? 'enable' : 'disable'}
+                  onclick={() => (formDisabled = !formDisabled)}
+                >{formDisabled ? 'Enable' : 'Disable'}</button>
+                <button
+                  type="button"
+                  class="delete-btn"
+                  class:confirming={confirmDeleteId === rule.id}
+                  class:done={doneDeleteId === rule.id}
+                  title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
+                  onclick={() => remove(rule.id)}
+                >{doneDeleteId === rule.id
+                  ? 'Delete ✓'
+                  : confirmDeleteId === rule.id
+                    ? 'Delete ?'
+                    : 'Delete'}</button>
+              </div>
+              <div class="action-group">
+                <button
+                  type="button"
+                  onclick={cancelEdit}
+                  disabled={doneDeleteId === rule.id}
+                >Cancel</button>
+                <button
+                  type="submit"
+                  class="primary"
+                  disabled={doneDeleteId === rule.id}
+                >Save</button>
+              </div>
             </div>
           </form>
         {/if}
@@ -379,7 +382,7 @@
   }
   .empty {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink-muted);
   }
   .rule-list {
@@ -434,14 +437,14 @@
     color: inherit;
     text-align: left;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-13);
   }
   .rule-name-btn:hover {
     background: var(--paper-2);
   }
   .rule-preview {
     font-family: var(--sans);
-    font-size: 12px;
+    font-size: var(--fs-12);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -465,7 +468,7 @@
     background: transparent;
     color: var(--ink);
     box-sizing: border-box;
-    font-size: 11px;
+    font-size: var(--fs-11);
     font-weight: 400;
     line-height: 1;
   }
@@ -506,7 +509,7 @@
     align-items: center;
   }
   .field label {
-    font-size: 12px;
+    font-size: var(--fs-12);
     color: var(--ink-muted);
     user-select: none;
   }
@@ -519,21 +522,30 @@
   .form-actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.4em;
     margin-top: 0.4em;
   }
-  .form-actions .action-spacer {
-    flex: 1;
+  .form-actions .action-group {
+    display: flex;
+    align-items: center;
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 0.4em;
   }
   .form-actions button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    min-width: 0;
     height: 26px;
     padding: 0 0.6em;
     border: var(--btn-border-w) solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    font-size: 12px;
+    font-size: var(--fs-12);
+    text-transform: uppercase;
     cursor: pointer;
   }
   .form-actions .delete-btn {
@@ -562,10 +574,5 @@
   }
   .form-actions .disable-btn[data-state='enable']:hover {
     background: var(--paper-2);
-  }
-  @media (max-width: 480px) {
-    .field {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

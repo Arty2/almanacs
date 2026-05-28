@@ -98,7 +98,11 @@
   function startSettingsPress(e: PointerEvent): void {
     const target = e.currentTarget as HTMLElement;
     settingsPress.start(() => {
-      config.theme = config.theme === 'dark' ? 'light' : 'dark';
+      const effective =
+        config.theme === 'auto'
+          ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : config.theme;
+      config.theme = effective === 'dark' ? 'light' : 'dark';
       target.blur();
       settingsIcon = config.theme === 'dark' ? 'moon' : 'sun';
       if (iconTimer) clearTimeout(iconTimer);
@@ -234,7 +238,7 @@
     flex-shrink: 0;
   }
   .title time {
-    font-size: 13px;
+    font-size: var(--fs-13);
     white-space: nowrap;
   }
   nav {
@@ -250,7 +254,7 @@
     background: var(--paper);
     color: var(--ink);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-12);
     min-width: 40px;
   }
   .zoom-btn + .zoom-btn {
@@ -304,7 +308,7 @@
     .zoom-btn {
       min-width: 36px;
       padding: 0 0.4em;
-      font-size: 11px;
+      font-size: var(--fs-11);
     }
   }
 </style>

@@ -18,7 +18,10 @@
   const { rangeStart, rangeEnd, today: todayDate }: Props = $props();
 
   let viewportWidth = $state(0);
-  const pxPerDay = $derived(computePxPerDay(zoom.value, viewportWidth));
+  // Font-size scale also widens day/week columns so the header labels (and pill
+  // text) keep their proportions as the font grows.
+  const fontScale = $derived(config.fontSize / 14);
+  const pxPerDay = $derived(computePxPerDay(zoom.value, viewportWidth) * fontScale);
   const totalWidth = $derived(((rangeEnd.getTime() - rangeStart.getTime()) / MS_PER_DAY) * pxPerDay);
   const nowDateForLine = $derived(zoom.value === 'month' ? new Date(clock.now) : todayDate);
   const todayPx = $derived(dateToPx(nowDateForLine, rangeStart, pxPerDay));
@@ -114,6 +117,10 @@
     return 'thick';
   }
 
+  function dayKeyOf(d: Date): string {
+    return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+  }
+
   function eventDayKeys(ev: DisplayEvent): string[] {
     const keys: string[] = [];
     const start = ev.start;
@@ -125,8 +132,7 @@
       new Date(lastMs).getUTCDate(),
     );
     while (cursor <= last) {
-      const d = new Date(cursor);
-      keys.push(d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate());
+      keys.push(dayKeyOf(new Date(cursor)));
       cursor += MS_PER_DAY;
     }
     return keys;
@@ -177,13 +183,17 @@
   const thickDayKeys = $derived(dayHatch.thickHeader);
   const thinDayKeys = $derived(dayHatch.thinHeader);
 
+  // Day-key strings depend only on the date range (allDays), not zoom, so
+  // precompute them once. stripsForKeys then only does cheap px arithmetic per
+  // zoom instead of rebuilding a key string for every day.
+  const allDayKeys = $derived(allDays.map(dayKeyOf));
+
   function stripsForKeys(dayKeys: Set<string>): { left: number; width: number }[] {
     if (dayKeys.size === 0) return [];
     const out: { left: number; width: number }[] = [];
-    for (const d of allDays) {
-      const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
-      if (dayKeys.has(key)) {
-        out.push({ left: dateToPx(d, rangeStart, pxPerDay), width: pxPerDay });
+    for (let i = 0; i < allDays.length; i++) {
+      if (dayKeys.has(allDayKeys[i]!)) {
+        out.push({ left: dateToPx(allDays[i]!, rangeStart, pxPerDay), width: pxPerDay });
       }
     }
     return out;
@@ -200,20 +210,45 @@
   }
 
   const holidayStrips = $derived(stripsForKeys(dayHatch.bandKeys));
+  const vHolidayStrips = $derived(
+    holidayStrips.filter(
+      (h) =>
+        !(visibleRight > visibleLeft) ||
+        (h.left <= visibleRight && h.left + h.width >= visibleLeft),
+    ),
+  );
   const thickStripsByFeed = $derived(stripsByFeed(dayHatch.thickByFeed));
   const thinStripsByFeed = $derived(stripsByFeed(dayHatch.thinByFeed));
+
+  // Cache the per-feed start-sorted event array keyed by array identity.
+  // visibleByFeed arrays keep their reference across zoom (pxPerDay isn't one
+  // of their dependencies), so this skips the O(n log n) sort on every zoom.
+  const sortedCache = new Map<string, { ref: DisplayEvent[]; sorted: DisplayEvent[] }>();
+  function sortedFor(feedId: string, arr: DisplayEvent[]): DisplayEvent[] {
+    const cached = sortedCache.get(feedId);
+    if (cached && cached.ref === arr) return cached.sorted;
+    const sorted = [...arr].sort((a, b) => a.start.getTime() - b.start.getTime());
+    sortedCache.set(feedId, { ref: arr, sorted });
+    return sorted;
+  }
+
+  // Lane metrics scale with the font-size setting so taller text fits; must
+  // match EventPill's top-offset math.
+  const laneH = $derived(Math.round(LANE_HEIGHT * fontScale));
+  const rowPad = $derived(Math.round(ROW_PADDING_PX * fontScale));
 
   const rowLanes = $derived.by(() => {
     const result: Record<string, { height: number; laneEvents: LaneEvent[] }> = {};
     for (const feed of orderedFeeds) {
       if (feed.collapsed) {
-        result[feed.id] = { height: LANE_HEIGHT + ROW_PADDING_PX * 2, laneEvents: [] };
+        result[feed.id] = { height: laneH + rowPad * 2, laneEvents: [] };
         continue;
       }
       const arr = visibleByFeed[feed.id] ?? [];
-      const { laneEvents, laneCount } = assignLanes(arr, pxPerDay, rangeStart);
+      const sorted = sortedFor(feed.id, arr);
+      const { laneEvents, laneCount } = assignLanes(sorted, pxPerDay, rangeStart, undefined, true);
       result[feed.id] = {
-        height: Math.max(LANE_HEIGHT, laneCount * LANE_HEIGHT) + ROW_PADDING_PX * 2,
+        height: Math.max(laneH, laneCount * laneH) + rowPad * 2,
         laneEvents,
       };
     }
@@ -281,12 +316,21 @@
     return segs.join(' ');
   });
 
+  let scrollLeft = $state(0);
   function updateViewportVars(): void {
     if (!scrollEl) return;
     scrollEl.style.setProperty('--scroll-left', scrollEl.scrollLeft + 'px');
     scrollEl.style.setProperty('--viewport-w', scrollEl.clientWidth + 'px');
     viewportWidth = scrollEl.clientWidth;
+    scrollLeft = scrollEl.scrollLeft;
   }
+
+  // Horizontal window (in content px) of what's rendered, with one viewport of
+  // overscan on each side so normal scrolling never reveals un-rendered area.
+  // Rows clip pills and background strips to this window; off-screen nodes
+  // (which can number in the thousands across a 1-2 year range) are skipped.
+  const visibleLeft = $derived(viewportWidth > 0 ? scrollLeft - viewportWidth : 0);
+  const visibleRight = $derived(viewportWidth > 0 ? scrollLeft + 2 * viewportWidth : 0);
 
   let rafScheduled = false;
   let lastInteractionMs = $state(0);
@@ -519,11 +563,15 @@
     zoom.value = next;
     queueMicrotask(() => {
       if (!scrollEl) return;
-      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth);
-      // For a jump-to-today zoom, center on today using the freshly computed
-      // pxPerDay; otherwise keep the previous viewport center.
-      const targetDate = jumpToday ? nowDateForLine : centerDate;
-      const targetPx = dateToPx(targetDate, rangeStart, newPxPerDay);
+      // Jump-to-today reuses the same path as the toolbar date icon, which
+      // reads the reactive todayPx (correctly scaled by the font size) and so
+      // stays accurate at non-default font sizes.
+      if (jumpToday) {
+        jumpToToday();
+        return;
+      }
+      const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
+      const targetPx = dateToPx(centerDate, rangeStart, newPxPerDay);
       scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
     });
   }
@@ -578,12 +626,14 @@
     if (!scrollEl) return;
     const key = focus.feedId + ':' + focus.eventIndex;
     if (key === lastScrolledFocus) return;
+    // Consume the key on any focus change — even when the target row is
+    // collapsed — so later expanding that row doesn't trigger a jump-scroll.
+    lastScrolledFocus = key;
     const target = orderedFeeds.find((f) => !f.collapsed && f.id === focus.feedId);
     if (!target) return;
     const arr = visibleByFeed[target.id] ?? [];
     const ev = arr[focus.eventIndex];
     if (!ev) return;
-    lastScrolledFocus = key;
     const px = dateToPx(ev.start, rangeStart, pxPerDay);
     scrollEl.scrollTo({ left: Math.max(0, px - scrollEl.clientWidth / 2), behavior: 'smooth' });
   });
@@ -611,7 +661,7 @@
         </div>
       {/if}
     </header>
-    {#each holidayStrips as h, i (i)}
+    {#each vHolidayStrips as h (h.left)}
       <i class="holiday-band" style="left: {h.left}px; width: {h.width}px"></i>
     {/each}
     <div class="rows">
@@ -622,7 +672,7 @@
           laneEvents={rowLanes[feed.id]?.laneEvents ?? []}
           {rangeStart}
           {pxPerDay}
-          bodyHeight={rowLanes[feed.id]?.height ?? LANE_HEIGHT + ROW_PADDING_PX * 2}
+          bodyHeight={rowLanes[feed.id]?.height ?? laneH + rowPad * 2}
           {matchUids}
           {currentMatchUid}
           {scrollEl}
@@ -632,6 +682,8 @@
           thickStrips={thickStripsByFeed[feed.id] ?? []}
           thinStrips={thinStripsByFeed[feed.id] ?? []}
           rowIndex={expandedRowIndex[feed.id] ?? -1}
+          {visibleLeft}
+          {visibleRight}
         />
       {/each}
     </div>
@@ -747,5 +799,7 @@
   }
   .toggle-marker-wrap :global(.icon-button) :global(.icon) {
     color: var(--accent);
+    filter: var(--clock-halo);
+    transition: none;
   }
 </style>
