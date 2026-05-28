@@ -54,6 +54,7 @@
       config.rules.push(rule);
     }
     applyView();
+    if (importing.kioskPin) config.kioskPin = importing.kioskPin;
     close();
     void onRefresh();
   }
@@ -63,6 +64,7 @@
     config.feeds = importing.feeds.map((f, i) => ({ ...f, order: i }));
     config.rules = [...importing.rules];
     applyView();
+    if (importing.kioskPin) config.kioskPin = importing.kioskPin;
     close();
     void onRefresh();
   }

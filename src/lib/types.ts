@@ -135,6 +135,7 @@ export type AppConfig = {
   morningLimit: string;
   eveningLimit: string;
   trayFilter: TrayFilter;
+  kioskPin: string | null;
 };
 
 export const SCHEMA_VERSION = 1;

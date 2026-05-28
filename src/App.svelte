@@ -7,6 +7,7 @@
   import SettingsPanel from './components/SettingsPanel.svelte';
   import ErrorModal from './components/ErrorModal.svelte';
   import ShareImportModal from './components/ShareImportModal.svelte';
+  import KioskPinModal from './components/KioskPinModal.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import {
     config,
@@ -20,6 +21,7 @@
     toggleSelected,
     displayEventsFor,
     pushLog,
+    isKiosk,
   } from './lib/state.svelte';
   import { getMatches } from './lib/search-state.svelte';
   import { online } from './lib/online.svelte';
@@ -345,11 +347,14 @@
   }
 
   function toggleSettings(): void {
+    if (isKiosk()) return;
     ui.settingsOpen = !ui.settingsOpen;
   }
 
   function escapeKey(): void {
-    if (ui.shareImport) {
+    if (ui.kioskPinModal) {
+      ui.kioskPinModal = null;
+    } else if (ui.shareImport) {
       ui.shareImport = null;
       stripShareParam();
     } else if (ui.modalEvent) {
@@ -368,6 +373,7 @@
   }
 
   function toggleSelectFocused(): void {
+    if (isKiosk()) return;
     const list = focusedFeedEvents;
     const ev = list[focus.eventIndex];
     if (!ev) return;
@@ -393,6 +399,7 @@
   $effect(() => {
     if (typeof window === 'undefined') return;
     const handler = (): void => {
+      if (isKiosk()) return;
       ui.addEventOpen = true;
     };
     window.addEventListener('cal:open-add-event', handler);
@@ -521,6 +528,7 @@
 <AddEventModal />
 <ErrorModal />
 <ShareImportModal onRefresh={loadAllFeeds} />
+<KioskPinModal />
 {#if ui.settingsOpen}
   <SettingsPanel onClose={() => (ui.settingsOpen = false)} onRefresh={loadAllFeeds} />
 {/if}

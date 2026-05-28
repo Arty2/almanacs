@@ -19,7 +19,7 @@ export const SHARE_PARAM = 's';
 type SharedFeed = { u: string; n: string; h: 0 | 1; c?: FeedCategory; tr?: Travel; tz?: string };
 type SharedRule = { i: string; f: string; r: string; s: StyleVariant };
 type SharedView = { z?: Zoom; l?: Locale; d?: DateFormat; t?: Theme };
-type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView };
+type SharedPayload = { f: SharedFeed[]; r: SharedRule[]; v?: SharedView; k?: string };
 
 const STYLE_VARIANTS: StyleVariant[] = [
   'none', 'bold', 'inverted', 'dashed', 'muted', 'striked', 'hidden',
@@ -73,6 +73,7 @@ export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
   if (config.dateFormat) view.d = config.dateFormat;
   if (config.theme) view.t = config.theme;
   if (Object.keys(view).length > 0) payload.v = view;
+  if (config.kioskPin && /^\d{4}$/.test(config.kioskPin)) payload.k = config.kioskPin;
   const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);
   return toBase64Url(bytes);
@@ -80,7 +81,7 @@ export function encodeShareState(config: AppConfig, zoom?: Zoom): string {
 
 export function decodeShareState(
   payload: string,
-): { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: SharedView_t | null } | null {
+): { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: SharedView_t | null; kioskPin: string | null } | null {
   if (!payload || typeof payload !== 'string') return null;
   try {
     const bytes = fromBase64Url(payload);
@@ -143,7 +144,9 @@ export function decodeShareState(
       if (raw.t && THEMES.includes(raw.t)) v.theme = raw.t;
       if (Object.keys(v).length > 0) view = v;
     }
-    return { feeds, rules, view };
+    const kioskPin =
+      typeof parsed.k === 'string' && /^\d{4}$/.test(parsed.k) ? parsed.k : null;
+    return { feeds, rules, view, kioskPin };
   } catch {
     return null;
   }

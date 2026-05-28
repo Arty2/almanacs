@@ -126,9 +126,10 @@ export const ui = $state<{
   log: LogEntry[];
   statusExpanded: boolean;
   feedErrors: Record<string, string>;
-  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: ShareImportView | null } | null;
+  shareImport: { feeds: CalendarFeed[]; rules: FindReplaceRule[]; view: ShareImportView | null; kioskPin: string | null } | null;
   rawEventUid: string | null;
   tempMarkerMs: number | null;
+  kioskPinModal: 'set' | 'unlock' | null;
 }>({
   modalEvent: null,
   addEventOpen: false,
@@ -147,7 +148,14 @@ export const ui = $state<{
   shareImport: null,
   rawEventUid: null,
   tempMarkerMs: null,
+  kioskPinModal: null,
 });
+
+// Kiosk mode is active iff a PIN exists. Reading the reactive config field keeps
+// callers (templates, deriveds, effects) updated when the PIN is set/cleared.
+export function isKiosk(): boolean {
+  return config.kioskPin != null;
+}
 
 const MAX_LOG_ENTRIES = 50;
 

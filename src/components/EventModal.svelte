@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
-  import { ui, config, events, pushLog, deleteScratchpadEvent } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { SCRATCHPAD_FEED_ID, type FindReplaceRule, type StyleVariant } from '../lib/types';
@@ -22,6 +22,8 @@
   let pendingDeleteUid: string | null = null;
 
   const isScratch = $derived(ui.modalEvent?.feedId === SCRATCHPAD_FEED_ID);
+  // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
+  const locked = $derived(isKiosk());
 
   function clearConfirmTimer(): void {
     if (confirmTimer) {
@@ -103,6 +105,7 @@
   });
 
   function addFilterFromEvent(): void {
+    if (isKiosk()) return;
     const sel = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() ?? '' : '';
     const newRule = makeRule({ find: sel });
     config.rules = [...config.rules, newRule];
@@ -131,6 +134,7 @@
   }
 
   function openRuleInSettings(rule: FindReplaceRule): void {
+    if (isKiosk()) return;
     returnEvent = ui.modalEvent;
     ui.settingsAutoEditRuleId = rule.id;
     ui.settingsScrollToRuleId = rule.id;
@@ -308,7 +312,7 @@
           <ul class="filter-list">
             {#each matchedRules as rule (rule.id)}
               <li>
-                <button type="button" class="filter-row" onclick={() => openRuleInSettings(rule)}>
+                <button type="button" class="filter-row" disabled={locked} onclick={() => openRuleInSettings(rule)}>
                   <span class="filter-preview" data-mono>{rule.find} &gt; {rule.replace || '(empty)'}</span>
                   <span
                     class="style-swatch"
@@ -337,12 +341,13 @@
               class="action-btn delete-btn"
               class:confirming={confirmDelete}
               class:done={doneDelete}
+              disabled={locked}
               title={doneDelete ? 'Tap to cancel deletion' : undefined}
               onclick={onDeleteClick}
             >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
           {/if}
           {#if showSource}
-            <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
+            <button type="button" class="action-btn add-filter-btn" disabled={locked} onclick={addFilterFromEvent}
             >+ Filter</button>
             {#if matchedRules.length > 0}
               <button type="button" class="filter-count" data-mono
@@ -360,7 +365,7 @@
         </div>
         <div class="copy-slot">
           {#if !showSource}
-            <CalendarDownloadMenu events={[ev]} />
+            <CalendarDownloadMenu events={[ev]} disabled={locked} />
           {/if}
           {#if raw}
             <button
@@ -373,11 +378,12 @@
             >{'{ }'}</button>
           {/if}
           {#if isScratch}
-            <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
+            <button type="button" class="action-btn" disabled={locked} onclick={editDraft}>EDIT</button>
           {/if}
           <button
             type="button"
             class="action-btn"
+            disabled={locked}
             onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
           >COPY</button>
         </div>
@@ -459,8 +465,16 @@
     justify-content: center;
     text-decoration: none;
   }
-  .action-btn:hover {
+  .action-btn:hover:not(:disabled) {
     background: var(--paper-2);
+  }
+  .action-btn:disabled,
+  .filter-row:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .action-btn:disabled {
+    border-style: dashed;
   }
   .delete-btn {
     border-color: var(--accent);

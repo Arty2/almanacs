@@ -8,6 +8,7 @@
     toggleSelected,
     addToSelection,
     focusEventByUid,
+    isKiosk,
   } from '../lib/state.svelte';
   import { LANE_HEIGHT, ROW_PADDING_PX } from '../lib/layout';
   import { formatRange, formatTime } from '../lib/format';
@@ -118,6 +119,7 @@
   const showTime = $derived(!event.allDay && !!timeLabel);
 
   function copyContent(): void {
+    if (isKiosk()) return;
     const lines = [event.displayTitle, dateLabel];
     if (timeLabel) lines.push(timeLabel);
     if (event.displayLocation) lines.push(event.displayLocation);
@@ -142,6 +144,7 @@
   const press = createLongPress();
 
   function onPointerDown(e: PointerEvent): void {
+    if (isKiosk()) return;
     if (e.pointerType !== 'touch') return;
     press.start(enterSelection);
   }

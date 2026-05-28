@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, focus } from '../lib/state.svelte';
+  import { zoom, search, ui, config, focus, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
@@ -91,27 +91,47 @@
 
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 
-  const settingsPress = createLongPress();
-  let settingsIcon = $state('settings');
+  // Two timers run on one hold: theme flip at 500ms, kiosk lock/unlock at 3s.
+  const themePress = createLongPress();
+  const kioskPress = createLongPress(3000);
+  let tempIcon = $state<string | null>(null);
   let iconTimer: ReturnType<typeof setTimeout> | null = null;
+  const settingsIcon = $derived(tempIcon ?? (isKiosk() ? 'lock' : 'settings'));
+  const settingsLabel = $derived(
+    isKiosk()
+      ? 'Kiosk locked (long-press 3s to unlock)'
+      : 'Settings (long-press: flip theme; hold 3s to lock)',
+  );
 
   function startSettingsPress(e: PointerEvent): void {
     const target = e.currentTarget as HTMLElement;
-    settingsPress.start(() => {
+    themePress.start(() => {
       const effective =
         config.theme === 'auto'
           ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
           : config.theme;
       config.theme = effective === 'dark' ? 'light' : 'dark';
       target.blur();
-      settingsIcon = config.theme === 'dark' ? 'moon' : 'sun';
+      tempIcon = config.theme === 'dark' ? 'moon' : 'sun';
       if (iconTimer) clearTimeout(iconTimer);
-      iconTimer = setTimeout(() => { settingsIcon = 'settings'; }, 2000);
+      iconTimer = setTimeout(() => { tempIcon = null; }, 2000);
+    });
+    kioskPress.start(() => {
+      ui.kioskPinModal = isKiosk() ? 'unlock' : 'set';
     });
   }
 
+  function cancelSettingsPress(): void {
+    themePress.cancel();
+    kioskPress.cancel();
+  }
+
   function handleSettingsClick(): void {
-    if (settingsPress.didFire()) return;
+    // Read both so neither stale flag leaks into the next tap.
+    const themeFired = themePress.didFire();
+    const kioskFired = kioskPress.didFire();
+    if (themeFired || kioskFired) return;
+    if (isKiosk()) return;
     ui.settingsOpen = !ui.settingsOpen;
   }
 
@@ -191,14 +211,14 @@
       class="settings-wrap"
       role="presentation"
       onpointerdown={startSettingsPress}
-      onpointerup={settingsPress.cancel}
-      onpointercancel={settingsPress.cancel}
-      onpointerleave={settingsPress.cancel}
+      onpointerup={cancelSettingsPress}
+      onpointercancel={cancelSettingsPress}
+      onpointerleave={cancelSettingsPress}
     >
       <IconButton
         icon={settingsIcon}
-        label="Settings (long-press to flip theme)"
-        title="Settings (long-press to flip theme)"
+        label={settingsLabel}
+        title={settingsLabel}
         pressed={ui.settingsOpen}
         onclick={handleSettingsClick}
       />
