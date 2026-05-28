@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import CalendarDownloadMenu from './CalendarDownloadMenu.svelte';
-  import { ui, config, events, pushLog, deleteScratchpadEvent } from '../lib/state.svelte';
+  import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
   import { SCRATCHPAD_FEED_ID, type FindReplaceRule, type StyleVariant } from '../lib/types';
@@ -22,6 +22,8 @@
   let pendingDeleteUid: string | null = null;
 
   const isScratch = $derived(ui.modalEvent?.feedId === SCRATCHPAD_FEED_ID);
+  // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
+  const locked = $derived(isKiosk());
 
   function clearConfirmTimer(): void {
     if (confirmTimer) {
@@ -103,6 +105,7 @@
   });
 
   function addFilterFromEvent(): void {
+    if (isKiosk()) return;
     const sel = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() ?? '' : '';
     const newRule = makeRule({ find: sel });
     config.rules = [...config.rules, newRule];
@@ -131,6 +134,7 @@
   }
 
   function openRuleInSettings(rule: FindReplaceRule): void {
+    if (isKiosk()) return;
     returnEvent = ui.modalEvent;
     ui.settingsAutoEditRuleId = rule.id;
     ui.settingsScrollToRuleId = rule.id;
@@ -293,7 +297,7 @@
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
     {@const raw = events.rawByUid[ev.uid] ?? null}
-    <article>
+    <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={close} />
@@ -329,59 +333,61 @@
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
-      <footer class="modal-footer">
-        <div class="source-slot">
-          {#if isScratch}
-            <button
-              type="button"
-              class="action-btn delete-btn"
-              class:confirming={confirmDelete}
-              class:done={doneDelete}
-              title={doneDelete ? 'Tap to cancel deletion' : undefined}
-              onclick={onDeleteClick}
-            >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
-          {/if}
-          {#if showSource}
-            <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
-            >+ Filter</button>
-            {#if matchedRules.length > 0}
+      {#if !locked}
+        <footer class="modal-footer">
+          <div class="source-slot">
+            {#if isScratch}
+              <button
+                type="button"
+                class="action-btn delete-btn"
+                class:confirming={confirmDelete}
+                class:done={doneDelete}
+                title={doneDelete ? 'Tap to cancel deletion' : undefined}
+                onclick={onDeleteClick}
+              >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+            {/if}
+            {#if showSource}
+              <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
+              >+ Filter</button>
+              {#if matchedRules.length > 0}
+                <button type="button" class="filter-count" data-mono
+                  aria-pressed={showSource}
+                  title="Hide source view"
+                  onclick={() => (showSource = !showSource)}
+                >{matchedRules.length}</button>
+              {/if}
+            {:else if matchedRules.length > 0}
               <button type="button" class="filter-count" data-mono
                 aria-pressed={showSource}
-                title="Hide source view"
                 onclick={() => (showSource = !showSource)}
-              >{matchedRules.length}</button>
+              >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
             {/if}
-          {:else if matchedRules.length > 0}
-            <button type="button" class="filter-count" data-mono
-              aria-pressed={showSource}
-              onclick={() => (showSource = !showSource)}
-            >{matchedRules.length} filter{matchedRules.length === 1 ? '' : 's'}</button>
-          {/if}
-        </div>
-        <div class="copy-slot">
-          {#if !showSource}
-            <CalendarDownloadMenu events={[ev]} />
-          {/if}
-          {#if raw}
+          </div>
+          <div class="copy-slot">
+            {#if !showSource}
+              <CalendarDownloadMenu events={[ev]} />
+            {/if}
+            {#if raw}
+              <button
+                type="button"
+                class="raw-toggle"
+                aria-pressed={showSource}
+                onclick={() => (showSource = !showSource)}
+                title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+                aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
+              >{'{ }'}</button>
+            {/if}
+            {#if isScratch}
+              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
+            {/if}
             <button
               type="button"
-              class="raw-toggle"
-              aria-pressed={showSource}
-              onclick={() => (showSource = !showSource)}
-              title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-              aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
-            >{'{ }'}</button>
-          {/if}
-          {#if isScratch}
-            <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
-          {/if}
-          <button
-            type="button"
-            class="action-btn"
-            onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
-          >COPY</button>
-        </div>
-      </footer>
+              class="action-btn"
+              onclick={() => void copyText(showSource && raw ? raw : buildDetails(ev), showSource && raw ? 'data' : 'details')}
+            >COPY</button>
+          </div>
+        </footer>
+      {/if}
     </article>
   {/if}
 </dialog>
@@ -461,6 +467,13 @@
   }
   .action-btn:hover {
     background: var(--paper-2);
+  }
+  /* Kiosk mode: read-only — block text selection / copy. */
+  .locked,
+  .locked * {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
   .delete-btn {
     border-color: var(--accent);

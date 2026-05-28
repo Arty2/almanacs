@@ -18,6 +18,10 @@ Shows your calendars side-by-side as horizontal rows along a continuous timeline
 - **Calendars** — add, reorder, and configure ICS feeds
 - **Refresh interval** — 30 min / 1 h / 4 h
 
+## Kiosk mode
+
+For wall displays and shared screens. Long-press the gear icon (~3s) to set a 4-digit PIN; the icon becomes a padlock and the app locks into a read-only view — settings, calendar/filter editing, the events tray, and all downloads/exports are disabled, while browsing, search, and collapsing/expanding calendar rows still work. Long-press the padlock (~3s) to bring up the unlock modal; the correct PIN clears the lock. The PIN survives reloads (so the screen stays locked), and the **Copy link** button produces a share link that, when opened, prompts to import the setup and then lands locked.
+
 ## Credit
 
 Dialectic Acheiropoieton of Heracles Papatheodorou and Claude.

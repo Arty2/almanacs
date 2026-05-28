@@ -9,8 +9,8 @@
   } from '../lib/calendar-links';
   import type { ParsedEvent } from '../lib/types';
 
-  type Props = { events: ParsedEvent[] };
-  const { events }: Props = $props();
+  type Props = { events: ParsedEvent[]; disabled?: boolean };
+  const { events, disabled = false }: Props = $props();
 
   let open = $state(false);
   let root: HTMLDivElement | undefined = $state();
@@ -66,6 +66,7 @@
     aria-expanded={open}
     aria-label="Add to calendar"
     title="Add to calendar"
+    {disabled}
     onclick={() => (open = !open)}
   >
     <Icon name="arrow-bar-down" size={16} />
@@ -104,10 +105,15 @@
     color: var(--ink);
     cursor: pointer;
   }
-  .cal-dl-trigger:hover,
+  .cal-dl-trigger:hover:not(:disabled),
   .cal-dl-trigger[aria-expanded='true'] {
     background: var(--ink);
     color: var(--paper);
+  }
+  .cal-dl-trigger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-style: dashed;
   }
   .cal-dl-menu {
     position: absolute;

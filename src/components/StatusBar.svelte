@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, ui, effectiveFeedTz } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
@@ -37,12 +37,22 @@
     return () => clearTimeout(t);
   });
 
+  // Kiosk mode keeps the tray collapsed and inert.
+  $effect(() => {
+    if (isKiosk()) {
+      height = COLLAPSED_HEIGHT;
+      ui.statusExpanded = false;
+      clearSelection();
+    }
+  });
+
   function maxHeight(): number {
     if (typeof window === 'undefined') return 400;
     return Math.round(window.innerHeight * (MAX_HEIGHT_VH / 100));
   }
 
   function startDrag(e: PointerEvent): void {
+    if (isKiosk()) return;
     dragging = true;
     pointerMoved = false;
     dragStartY = e.clientY;
@@ -97,6 +107,7 @@
   }
 
   function toggleExpand(): void {
+    if (isKiosk()) return;
     if (expanded) {
       height = COLLAPSED_HEIGHT;
       ui.statusExpanded = false;
@@ -528,9 +539,13 @@
         <span class="dot" aria-hidden="true"></span>
         <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
       </span>
-      <span class="toggle" aria-hidden="true">
-        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
-      </span>
+      {#if !isKiosk()}
+        <span class="toggle" aria-hidden="true">
+          <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+        </span>
+      {:else}
+        <span aria-hidden="true"></span>
+      {/if}
       <span class="sel-right">
         <span class="sel-count">{selection.uids.size} selected</span>
         <button
@@ -564,9 +579,13 @@
         <span class="dot" aria-hidden="true"></span>
         <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
       </span>
-      <span class="toggle" aria-hidden="true">
-        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
-      </span>
+      {#if !isKiosk()}
+        <span class="toggle" aria-hidden="true">
+          <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+        </span>
+      {:else}
+        <span aria-hidden="true"></span>
+      {/if}
       <span class="status-line">
         {#if nextEventLabel && !expanded}
           <span class="next-event">{nextEventLabel}</span>
@@ -715,7 +734,7 @@
         >Filter</button>
         <span class="event-counter" data-mono>{visibleEventCount} / {totalEventCount}</span>
         <span class="copy-spacer"></span>
-        <CalendarDownloadMenu events={trayEvents} />
+        <CalendarDownloadMenu events={trayEvents} disabled={isKiosk()} />
         <button
           type="button"
           class="copy-btn"

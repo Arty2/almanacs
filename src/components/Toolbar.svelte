@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
-  import { zoom, search, ui, config, focus } from '../lib/state.svelte';
+  import { zoom, search, ui, config, focus, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
@@ -91,27 +91,65 @@
 
   const dateLabel = $derived(formatDate(today.value, config.dateFormat, config.locale));
 
-  const settingsPress = createLongPress();
-  let settingsIcon = $state('settings');
+  // One hold, two outcomes: released between 500ms and 3s flips the theme (on
+  // release, not mid-hold); holding to 3s locks/unlocks kiosk instead.
+  const THEME_PRESS_MS = 500;
+  const kioskPress = createLongPress(3000);
+  let pressStart = 0;
+  let suppressClick = false;
+  let tempIcon = $state<string | null>(null);
   let iconTimer: ReturnType<typeof setTimeout> | null = null;
+  const settingsIcon = $derived(tempIcon ?? (isKiosk() ? 'lock' : 'settings'));
+  const settingsLabel = $derived(
+    isKiosk()
+      ? 'Kiosk locked (long-press 3s to unlock)'
+      : 'Settings (long-press: flip theme; hold 3s to lock)',
+  );
 
-  function startSettingsPress(e: PointerEvent): void {
-    const target = e.currentTarget as HTMLElement;
-    settingsPress.start(() => {
-      const effective =
-        config.theme === 'auto'
-          ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-          : config.theme;
-      config.theme = effective === 'dark' ? 'light' : 'dark';
-      target.blur();
-      settingsIcon = config.theme === 'dark' ? 'moon' : 'sun';
-      if (iconTimer) clearTimeout(iconTimer);
-      iconTimer = setTimeout(() => { settingsIcon = 'settings'; }, 2000);
+  function flipTheme(target: HTMLElement | null): void {
+    const effective =
+      config.theme === 'auto'
+        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : config.theme;
+    config.theme = effective === 'dark' ? 'light' : 'dark';
+    target?.blur();
+    tempIcon = config.theme === 'dark' ? 'moon' : 'sun';
+    if (iconTimer) clearTimeout(iconTimer);
+    iconTimer = setTimeout(() => { tempIcon = null; }, 2000);
+  }
+
+  function startSettingsPress(): void {
+    pressStart = Date.now();
+    suppressClick = false;
+    kioskPress.start(() => {
+      suppressClick = true;
+      ui.kioskPinModal = isKiosk() ? 'unlock' : 'set';
     });
   }
 
+  function endSettingsPress(e: PointerEvent): void {
+    const elapsed = Date.now() - pressStart;
+    const kioskFired = kioskPress.didFire();
+    kioskPress.cancel();
+    // Held to the lock threshold: kiosk modal already handled it — never flip.
+    if (kioskFired) return;
+    // Released after a deliberate hold but before the lock: flip the theme now.
+    if (elapsed >= THEME_PRESS_MS) {
+      flipTheme(e.currentTarget as HTMLElement);
+      suppressClick = true;
+    }
+  }
+
+  function abortSettingsPress(): void {
+    kioskPress.cancel();
+  }
+
   function handleSettingsClick(): void {
-    if (settingsPress.didFire()) return;
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
+    if (isKiosk()) return;
     ui.settingsOpen = !ui.settingsOpen;
   }
 
@@ -178,37 +216,41 @@
   </nav>
   <span class="spacer"></span>
   <span class="toolbar-right" bind:this={rightGroupEl}>
-    <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
-      <IconButton
-        icon="refresh"
-        label={refreshTitle}
-        title={refreshTitle}
-        disabled={refreshDisabled}
-        onclick={() => void handleRefresh()}
-      />
-    </span>
+    {#if !isKiosk()}
+      <span class="refresh-wrap" data-spinning={ui.loading ? 'true' : null}>
+        <IconButton
+          icon="refresh"
+          label={refreshTitle}
+          title={refreshTitle}
+          disabled={refreshDisabled}
+          onclick={() => void handleRefresh()}
+        />
+      </span>
+    {/if}
     <span
       class="settings-wrap"
       role="presentation"
       onpointerdown={startSettingsPress}
-      onpointerup={settingsPress.cancel}
-      onpointercancel={settingsPress.cancel}
-      onpointerleave={settingsPress.cancel}
+      onpointerup={endSettingsPress}
+      onpointercancel={abortSettingsPress}
+      onpointerleave={abortSettingsPress}
     >
       <IconButton
         icon={settingsIcon}
-        label="Settings (long-press to flip theme)"
-        title="Settings (long-press to flip theme)"
+        label={settingsLabel}
+        title={settingsLabel}
         pressed={ui.settingsOpen}
         onclick={handleSettingsClick}
       />
     </span>
-    <IconButton
-      icon="search"
-      label="Search events"
-      pressed={search.open}
-      onclick={toggleSearch}
-    />
+    {#if !isKiosk()}
+      <IconButton
+        icon="search"
+        label="Search events"
+        pressed={search.open}
+        onclick={toggleSearch}
+      />
+    {/if}
   </span>
 </header>
 
