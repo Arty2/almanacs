@@ -141,6 +141,7 @@
   }
   .cal-dl-item[aria-disabled='true'] {
     color: var(--ink-muted);
+    opacity: 0.4;
     cursor: default;
     pointer-events: none;
   }

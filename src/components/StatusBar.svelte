@@ -520,29 +520,30 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span class="toggle" aria-hidden="true">
-        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
-      </span>
       <span
         class="status-chip"
         data-online={online.value ? 'true' : null}
         title={online.value ? 'Online' : 'Offline'}
       >
-        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
         <span class="dot" aria-hidden="true"></span>
+        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
       </span>
-      <span class="spacer"></span>
-      <span class="sel-count">{selection.uids.size} selected</span>
-      <button
-        type="button"
-        class="clear-sel"
-        aria-label="Clear selection"
-        title="Clear selection"
-        onpointerdown={(e) => e.stopPropagation()}
-        onclick={clearSelection}
-      >
-        <Icon name="close" size={16} />
-      </button>
+      <span class="toggle" aria-hidden="true">
+        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
+      </span>
+      <span class="sel-right">
+        <span class="sel-count">{selection.uids.size} selected</span>
+        <button
+          type="button"
+          class="clear-sel"
+          aria-label="Clear selection"
+          title="Clear selection"
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={clearSelection}
+        >
+          <Icon name="close" size={16} />
+        </button>
+      </span>
     </div>
   {:else}
     <button
@@ -555,16 +556,16 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span class="toggle" aria-hidden="true">
-        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
-      </span>
       <span
         class="status-chip"
         data-online={online.value ? 'true' : null}
         title={online.value ? 'Online' : 'Offline'}
       >
-        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
         <span class="dot" aria-hidden="true"></span>
+        <span class="status-text">{showVersion ? `v${__APP_VERSION__}` : (online.value ? 'ONLINE' : 'OFFLINE')}</span>
+      </span>
+      <span class="toggle" aria-hidden="true">
+        <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
       </span>
       <span class="status-line">
         {#if nextEventLabel && !expanded}
@@ -758,7 +759,7 @@
   }
   .handle {
     display: grid;
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.6em;
     height: 28px;
@@ -774,6 +775,7 @@
   .status-line {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 0.6em;
     overflow: hidden;
     font-size: var(--fs-12);
@@ -809,14 +811,22 @@
   .toggle {
     display: inline-flex;
     align-items: center;
+    justify-self: center;
     color: var(--ink);
   }
   .selection-head {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.5em;
     cursor: pointer;
     touch-action: none;
+  }
+  .sel-right {
+    display: inline-flex;
+    align-items: center;
+    justify-self: end;
+    gap: 0.5em;
   }
   .clear-sel {
     display: inline-flex;
@@ -835,9 +845,6 @@
     font-size: var(--fs-12);
     letter-spacing: 0.04em;
     white-space: nowrap;
-  }
-  .spacer {
-    flex: 1;
   }
 
   /* Tray */
