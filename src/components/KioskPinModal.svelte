@@ -80,6 +80,17 @@
     ui.kioskPinModal = null;
   }
 
+  // Bottom-left button. In set mode it reads CLOSE once a full PIN is in (the
+  // app auto-locks at the 4th digit) and just dismisses; while the PIN is
+  // incomplete it reads CANCEL and also clears any PIN committed this session,
+  // returning the app to unlocked. In unlock mode it always just closes.
+  function cancelButton(): void {
+    if (mode !== 'unlock' && !complete) {
+      config.kioskPin = null;
+    }
+    ui.kioskPinModal = null;
+  }
+
   // Swipe-up to dismiss, matching EventModal.
   function onDialogPointerDown(e: PointerEvent): void {
     if (dismissing) return;
@@ -185,7 +196,7 @@
       </div>
       {#if error}<p class="error" role="alert">{error}</p>{/if}
       <div class="actions">
-        <button type="button" class="cancel" onclick={cancel}>Cancel</button>
+        <button type="button" class="cancel" onclick={cancelButton}>{mode !== 'unlock' && complete ? 'Close' : 'Cancel'}</button>
         <span class="actions-right">
           {#if mode === 'unlock'}
             <button type="button" class="primary" disabled={!complete} onclick={doUnlock}>Unlock</button>
@@ -262,7 +273,8 @@
     box-sizing: border-box;
   }
   .pin-box:focus {
-    outline: none;
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
     background: var(--paper-2);
   }
   .error {
