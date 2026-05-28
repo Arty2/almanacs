@@ -169,14 +169,9 @@
   {#if mode}
     <article>
       <header>
-        <h2>{mode === 'unlock' ? 'Unlock kiosk' : 'Set kiosk PIN'}</h2>
+        <h2>{mode === 'unlock' ? 'Unlock Kiosk Mode' : 'Set PIN for Kiosk Mode'}</h2>
         <IconButton icon="close" label="Close" variant="ghost" onclick={cancel} />
       </header>
-      <p class="hint">
-        {mode === 'unlock'
-          ? 'Enter your 4-digit PIN to exit kiosk mode.'
-          : 'Choose a 4-digit PIN. The app locks into a read-only view until unlocked.'}
-      </p>
       <div class="pin-row">
         {#each digits as digit, i (i)}
           <input
@@ -248,11 +243,6 @@
   h2 {
     margin: 0;
     font-size: 1.05em;
-  }
-  .hint {
-    margin: 0 0 1em 0;
-    font-size: var(--fs-12);
-    color: var(--ink-muted);
   }
   .pin-row {
     display: flex;

@@ -4,7 +4,7 @@
   import RulesEditor from './RulesEditor.svelte';
   import { config, ui, zoom, events, effectiveFeedTz, pushLog } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
-  import { exportConfig, importConfig, defaultConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
+  import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
   import { makeRule } from '../lib/rules';
   import {
@@ -51,8 +51,6 @@
   let doneDeleteFeedTimer: ReturnType<typeof setTimeout> | null = null;
   let confirmReset = $state(false);
   let confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
-  let doneReset = $state(false);
-  let doneResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   function onPanelPointerDown(e: PointerEvent): void {
     if (dismissing) return;
@@ -531,14 +529,13 @@
     confirmResetTimer = null;
     const d = defaultConfig();
     applyImported(d);
+    config.kioskPin = d.kioskPin;
     clearForm();
-    void onRefresh();
-    doneReset = true;
-    if (doneResetTimer) clearTimeout(doneResetTimer);
-    doneResetTimer = setTimeout(() => {
-      doneReset = false;
-      doneResetTimer = null;
-    }, CONFIRM_WINDOW_MS);
+    // Persist the reset synchronously (the autosave is debounced), drop any
+    // view/marker URL state, and reload so the app comes up fresh on today.
+    saveConfig($state.snapshot(config) as typeof config);
+    if (typeof history !== 'undefined') history.replaceState(null, '', location.pathname);
+    if (typeof location !== 'undefined') location.reload();
   }
 
   const themeOptions: { id: Theme; label: string }[] = [
@@ -1174,10 +1171,8 @@
           type="button"
           class="danger"
           class:confirming={confirmReset}
-          class:done={doneReset}
-          disabled={doneReset}
           onclick={resetAndClear}
-        >{doneReset ? 'Reset ✓' : confirmReset ? 'Reset ?' : 'Reset'}</button>
+        >{confirmReset ? 'Reset ?' : 'Reset'}</button>
         <input
           bind:this={fileInput}
           type="file"
@@ -1618,12 +1613,6 @@
   .config-actions .danger.confirming {
     background: var(--accent);
     color: var(--paper);
-  }
-  .config-actions .danger.done {
-    background: var(--paper);
-    color: var(--ink);
-    border-color: var(--ink);
-    cursor: default;
   }
   .error {
     margin: 0;
