@@ -89,6 +89,10 @@ export type Theme = 'light' | 'dark' | 'auto';
 
 export type Motion = 'auto' | 'reduced' | 'full';
 
+// Feedback for taps/holds: 'auto' vibrates where supported (else a tap sound),
+// 'sound' always plays the tap sound, 'vibration' vibrates only, 'off' neither.
+export type Haptics = 'auto' | 'sound' | 'vibration' | 'both' | 'off';
+
 export type FontSize = 10 | 12 | 14 | 16 | 18 | 20;
 
 export type Locale = 'en' | 'el';
@@ -121,6 +125,7 @@ export type AppConfig = {
   schemaVersion: number;
   theme: Theme;
   motion: Motion;
+  haptics: Haptics;
   fontSize: FontSize;
   locale: Locale;
   dateFormat: DateFormat;

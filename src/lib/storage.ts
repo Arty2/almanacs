@@ -5,6 +5,7 @@ import type {
   FeedCategory,
   FindReplaceRule,
   FontSize,
+  Haptics,
   Motion,
   ParsedEvent,
   StyleVariant,
@@ -104,6 +105,7 @@ export function defaultConfig(): AppConfig {
     schemaVersion: SCHEMA_VERSION,
     theme: 'auto',
     motion: 'auto',
+    haptics: 'auto',
     fontSize: 14,
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
@@ -132,6 +134,19 @@ function normalizeTheme(value: unknown): Theme {
 
 function normalizeMotion(value: unknown): Motion {
   if (value === 'auto' || value === 'reduced' || value === 'full') return value;
+  return 'auto';
+}
+
+function normalizeHaptics(value: unknown): Haptics {
+  if (
+    value === 'auto' ||
+    value === 'sound' ||
+    value === 'vibration' ||
+    value === 'both' ||
+    value === 'off'
+  ) {
+    return value;
+  }
   return 'auto';
 }
 
@@ -265,6 +280,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     schemaVersion: SCHEMA_VERSION,
     theme: normalizeTheme(parsed.theme),
     motion: normalizeMotion(parsed.motion),
+    haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),
     fontSize: normalizeFontSize(parsed.fontSize),
     locale: (parsed.locale as AppConfig['locale']) ?? base.locale,
     dateFormat: normalizeDateFormat(parsed.dateFormat),

@@ -6,6 +6,12 @@
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
   import { createLongPress, loading } from '../lib/haptics';
+  import {
+    primeTimelineAudio,
+    suspendTimelineAudio,
+    playCountdownTone,
+    countdownToneIndex,
+  } from '../lib/timeline-music';
   import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
@@ -54,6 +60,7 @@
   function handleYearClick(): void {
     if (yearPress.didFire()) return;
     onZoom('year');
+    if (ui.musicSweeping) jumpToToday();
   }
 
   function handleYearDblClick(): void {
@@ -79,6 +86,59 @@
 
   function clearTempMarker(): void {
     window.dispatchEvent(new CustomEvent('cal:clear-temp-marker'));
+  }
+
+  // Easter egg: hold the date button through a three-beat countdown — "ding,
+  // dung, dong" at 1s/2s/3s — and on the third beat the timeline starts playing
+  // as music automatically (hold again to stop). Enabling ascends the chime;
+  // disabling plays it in reverse. Once on, the date icon becomes a bell. Audio
+  // is primed on pointerdown so the countdown beeps are audible within the user
+  // gesture (Firefox and iOS Safari require this); an unused quick tap releases
+  // the context again so jump-to-today leaves no audio on.
+  const HOLD_STEP_MS = 1000;
+  const HOLD_STEPS = 3;
+  let holdTimers: ReturnType<typeof setTimeout>[] = [];
+  let holdActivated = false;
+  let suppressTitleClick = false;
+  const titleIcon = $derived(ui.timelineMusic ? 'bell' : 'today');
+
+  function clearHoldTimers(): void {
+    for (const t of holdTimers) clearTimeout(t);
+    holdTimers = [];
+  }
+
+  function startTitlePress(): void {
+    suppressTitleClick = false;
+    holdActivated = false;
+    // Direction is fixed at press start: ascending to enable, reversed to
+    // disable. Only this hold flips the flag, so the captured value stays valid.
+    const enabling = !ui.timelineMusic;
+    primeTimelineAudio();
+    for (let beat = 1; beat <= HOLD_STEPS; beat++) {
+      holdTimers.push(
+        setTimeout(() => {
+          playCountdownTone(countdownToneIndex(beat, enabling, HOLD_STEPS));
+          if (beat === HOLD_STEPS) {
+            holdActivated = true;
+            suppressTitleClick = true;
+            ui.timelineMusic = enabling;
+          }
+        }, beat * HOLD_STEP_MS),
+      );
+    }
+  }
+
+  function endTitlePress(): void {
+    clearHoldTimers();
+    if (!holdActivated && !ui.timelineMusic) suspendTimelineAudio();
+  }
+
+  function handleTitleClick(): void {
+    if (suppressTitleClick) {
+      suppressTitleClick = false;
+      return;
+    }
+    jumpToToday();
   }
 
   function toggleSearch(): void {
@@ -180,12 +240,16 @@
   <button
     class="title"
     type="button"
-    onclick={jumpToToday}
+    onclick={handleTitleClick}
     ondblclick={clearTempMarker}
+    onpointerdown={startTitlePress}
+    onpointerup={endTitlePress}
+    onpointercancel={endTitlePress}
+    onpointerleave={endTitlePress}
     aria-label="Jump to today (double-click to clear marker)"
     title="Jump to today"
   >
-    <Icon name="today" size={18} />
+    <Icon name={titleIcon} size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
   </button>
   <nav aria-label="Zoom" bind:this={zoomNavEl}>
@@ -209,7 +273,7 @@
           type="button"
           aria-pressed={zoom.value === z.id}
           title="{z.label} · double-tap to jump to today"
-          onclick={() => { onZoom(z.id); }}
+          onclick={() => { onZoom(z.id); if (ui.musicSweeping) jumpToToday(); }}
           ondblclick={() => zoomToToday(z.id)}
         >{z.label}</button>
       {/if}

@@ -31,6 +31,22 @@ describe('config import/export', () => {
     expect(() => importConfig('not json')).toThrow();
   });
 
+  it('defaults haptics to auto and round-trips a valid value', () => {
+    expect(defaultConfig().haptics).toBe('auto');
+    const cfg = { ...defaultConfig(), haptics: 'sound' as const };
+    expect(importConfig(exportConfig(cfg)).haptics).toBe('sound');
+  });
+
+  it('falls back to auto for an invalid haptics value', () => {
+    const bad = JSON.stringify({ ...defaultConfig(), haptics: 'bogus' });
+    expect(importConfig(bad).haptics).toBe('auto');
+  });
+
+  it('migrates a legacy baptism value to haptics', () => {
+    const legacy = JSON.stringify({ ...defaultConfig(), haptics: undefined, baptism: 'vibration' });
+    expect(importConfig(legacy).haptics).toBe('vibration');
+  });
+
   it('throws on wrong schema version', () => {
     const bad = JSON.stringify({ schemaVersion: 999, feeds: [] });
     expect(() => importConfig(bad)).toThrow(/schema/i);

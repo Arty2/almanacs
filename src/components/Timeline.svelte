@@ -4,13 +4,27 @@
   import Row from './Row.svelte';
   import { zoom, search, config, focus, ui, displayEventsFor, effectiveFeedTz } from '../lib/state.svelte';
   import { getMatches, getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
-  import { computePxPerDay, dateToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
+  import { computePxPerDay, dateToPx, msToPx, pxToDate, LANE_HEIGHT, ROW_PADDING_PX, assignLanes } from '../lib/layout';
   import type { CalendarFeed, DisplayEvent, LaneEvent, StyleVariant, Zoom } from '../lib/types';
   import { MS_PER_DAY, ticksBetween, addDays } from '../lib/time';
   import { isWeekend, tzOffsetMinutesVsDisplay } from '../lib/format';
   import { pinchZoom } from '../lib/pinch';
   import { wheelZoom } from '../lib/wheel-zoom';
   import { clock } from '../lib/clock.svelte';
+  import { untrack } from 'svelte';
+  import {
+    activeLanesAt,
+    crossings,
+    uniqueVoices,
+    sweepDurationMs,
+    laneToFrequency,
+    voiceStep,
+    playBell,
+    playWhistle,
+    primeTimelineAudio,
+    suspendTimelineAudio,
+    type LaneSpan,
+  } from '../lib/timeline-music';
 
   const RIGHT_PAD_PX = 280;
 
@@ -258,6 +272,179 @@
   let scrollEl: HTMLElement | undefined = $state();
   let didCenter = false;
 
+  // --- Timeline music Easter egg (armed by the 5s hold on the date button) ---
+  // Events in expanded rows become notes: each row gets its own base pitch (by
+  // its display order) and the collision sub-lane steps up from there, so every
+  // row sounds distinct. All-day events sound too (holiday calendars are
+  // entirely all-day). Collapsed rows carry no laneEvents, so they stay silent.
+  // Returns early while the egg is off so it never subscribes to layout state
+  // (orderedFeeds/rowLanes) and never recomputes on zoom/scroll/refresh.
+  const NO_SPANS: LaneSpan[] = [];
+  const timedLaneSpans = $derived.by<LaneSpan[]>(() => {
+    if (!ui.timelineMusic) return NO_SPANS;
+    const spans: LaneSpan[] = [];
+    let row = 0;
+    for (const feed of orderedFeeds) {
+      for (const ev of rowLanes[feed.id]?.laneEvents ?? []) {
+        spans.push({
+          key: feed.id + ':' + ev.uid + ':' + ev.start.getTime(),
+          startMs: ev.start.getTime(),
+          endMs: ev.end.getTime(),
+          lane: voiceStep(row, ev.lane),
+        });
+      }
+      row++;
+    }
+    return spans;
+  });
+
+  const SWEEP_MS = 5333;
+  const SWEEP_VIEWPORTS = 3;
+  // Constant pace: one screenful every MS_PER_VIEWPORT, so the sweep keeps the
+  // same feel whether it covers three screens or the whole multi-year timeline.
+  const MS_PER_VIEWPORT = SWEEP_MS / SWEEP_VIEWPORTS;
+  // Most distinct bells/whistles to fire in a single sound batch — a dense
+  // holiday stretch would otherwise stack into static.
+  const MAX_VOICES_PER_STEP = 4;
+  // Sounds are emitted on this real-time grid, not every frame: rapidly-entered
+  // voices collapse into one deduped batch, which keeps the fast sweep from
+  // stacking thousands of oscillators into a screech.
+  const SWEEP_SOUND_GAP_MS = 80;
+  // Keep audio alive past a bell's tail (~1.1s) when disabling, so the final
+  // beat of the reversed countdown rings out instead of being cut by suspend().
+  const BELL_TAIL_MS = 1300;
+  let sweepRaf = 0;
+  let sweepRunning = false;
+  // Marker visibility is reactive; its position is set imperatively each frame
+  // (see startSweep) so it stays glued to the natively-scrolling content with no
+  // reactive-flush lag that would otherwise make it jitter.
+  let sweepActive = $state(false);
+  let sweepMarkerEl = $state<HTMLDivElement | undefined>(undefined);
+  let ambientSet = new Map<string, number>();
+  let ambientSeeded = false;
+  let ambientNow = -1;
+
+  // One accelerated pass of a virtual playhead, starting at the current left
+  // edge and travelling all the way to the end of the timeline, ringing a bell
+  // on each event it enters and a whistle as it leaves. The viewport follows the
+  // marker (kept centered on screen). When the sweep reaches the end it glides
+  // back to the current date. Seeded with whatever's already under the start so
+  // we only sound events the playhead actively crosses into.
+  function startSweep(): void {
+    cancelAnimationFrame(sweepRaf);
+    if (!scrollEl) {
+      sweepRunning = false;
+      return;
+    }
+    const vw = scrollEl.clientWidth;
+    const startLeft = scrollEl.scrollLeft;
+    const startMs = pxToDate(startLeft, rangeStart, pxPerDay).getTime();
+    const endMs = pxToDate(totalWidth, rangeStart, pxPerDay).getTime();
+    const durationMs = sweepDurationMs(totalWidth - startLeft, vw, MS_PER_VIEWPORT);
+    // Timeline-ms advanced per real-ms; the playhead is integrated by this rate
+    // each frame (below) rather than from absolute elapsed time.
+    const speed = durationMs > 0 ? (endMs - startMs) / durationMs : endMs - startMs;
+    const spans = timedLaneSpans;
+    let prev = activeLanesAt(startMs, spans);
+    let ph = startMs;
+    let tPrev = performance.now();
+    let lastSoundT = tPrev;
+    sweepRunning = true;
+    sweepActive = true;
+    ui.musicSweeping = true;
+    const step = (tNow: number): void => {
+      // Integrate the playhead with a clamped per-frame delta: a delayed or
+      // background-throttled frame just slows the sweep instead of jumping the
+      // centred line forward to "catch up".
+      const dt = Math.min(tNow - tPrev, 48);
+      tPrev = tNow;
+      ph = Math.min(endMs, ph + speed * dt);
+      // Emit sounds on a real-time grid, advancing `prev` only when we sound, so
+      // voices entered between grid points collapse into one deduped batch
+      // instead of firing every frame and stacking into static. The O(n) active
+      // scan only runs on the grid (~12/s), not every frame.
+      if (tNow - lastSoundT >= SWEEP_SOUND_GAP_MS) {
+        const next = activeLanesAt(ph, spans);
+        const { entered, exited } = crossings(prev, next);
+        for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
+        for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
+        prev = next;
+        lastSoundT = tNow;
+      }
+      const px = msToPx(ph, rangeStart, pxPerDay);
+      // Only the timeline scrolls; the line is sticky-pinned to the scrollport
+      // (CSS) and merely translated to its on-screen position. It ramps from the
+      // left edge to centre over the first half-viewport (the content can't
+      // scroll back past the start), then holds dead-centre — immobile — while
+      // the timeline scrolls beneath it.
+      const scroll = Math.max(startLeft, px - vw / 2);
+      if (scrollEl) scrollEl.scrollLeft = scroll;
+      if (sweepMarkerEl) sweepMarkerEl.style.transform = `translateX(${px - scroll}px)`;
+      if (ph < endMs) {
+        sweepRaf = requestAnimationFrame(step);
+      } else {
+        sweepRunning = false;
+        sweepActive = false;
+        ui.musicSweeping = false;
+        ambientSeeded = false; // hand off to the ambient effect's next tick
+        jumpToToday(); // glide back to the current date
+      }
+    };
+    sweepRaf = requestAnimationFrame(step);
+  }
+
+  // Stop the sweep but keep the egg on: cancel the animation, drop the marker,
+  // and hand off to ambient mode (reseed silently so it doesn't chime everything
+  // already under the playhead). Used when a nav button is tapped mid-sweep.
+  function stopSweep(): void {
+    if (!sweepRunning && !sweepActive) return;
+    cancelAnimationFrame(sweepRaf);
+    sweepRunning = false;
+    sweepActive = false;
+    ui.musicSweeping = false;
+    ambientSeeded = false;
+  }
+
+  // Activate/deactivate. untrack keeps the sweep's reads of zoom/scroll state
+  // from making this effect restart the sweep whenever the view changes.
+  $effect(() => {
+    if (!ui.timelineMusic) return;
+    primeTimelineAudio();
+    untrack(() => startSweep());
+    return () => {
+      cancelAnimationFrame(sweepRaf);
+      sweepRunning = false;
+      sweepActive = false;
+      ui.musicSweeping = false;
+      ambientSet = new Map();
+      ambientSeeded = false;
+      ambientNow = -1;
+      suspendTimelineAudio(BELL_TAIL_MS);
+    };
+  });
+
+  // Ambient mode after the sweep: real wall-clock time (ticks each minute)
+  // sounds events as it crosses them. Reseeds silently on data reloads so only
+  // genuine time advances chime.
+  $effect(() => {
+    if (!ui.timelineMusic) return;
+    const now = clock.now;
+    const spans = timedLaneSpans;
+    if (sweepRunning) return;
+    const next = activeLanesAt(now, spans);
+    if (!ambientSeeded || now === ambientNow) {
+      ambientSet = next;
+      ambientSeeded = true;
+      ambientNow = now;
+      return;
+    }
+    const { entered, exited } = crossings(ambientSet, next);
+    for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
+    for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
+    ambientSet = next;
+    ambientNow = now;
+  });
+
   // The current-time marker is an SVG dashed path that bends per row so it
   // marks the current local time of each row's timezone on the shared date
   // grid. Row vertical extents are measured from the DOM (row height isn't
@@ -317,10 +504,12 @@
   });
 
   let scrollLeft = $state(0);
+  // Track scroll/viewport for the virtualization window below. Kept to plain
+  // state reads — no CSS custom properties: writing an inherited custom prop on
+  // the scroll container each frame would invalidate the whole pill/row subtree's
+  // style and stutter the scroll in Chrome.
   function updateViewportVars(): void {
     if (!scrollEl) return;
-    scrollEl.style.setProperty('--scroll-left', scrollEl.scrollLeft + 'px');
-    scrollEl.style.setProperty('--viewport-w', scrollEl.clientWidth + 'px');
     viewportWidth = scrollEl.clientWidth;
     scrollLeft = scrollEl.scrollLeft;
   }
@@ -378,15 +567,33 @@
 
   $effect(() => {
     if (!scrollEl || didCenter) return;
-    if (totalWidth <= 0) return;
+    // Wait for the real viewport width: until it's measured, pxPerDay (and so
+    // todayPx) use the static fallback scale, which for fit-whole-span zooms
+    // lands today far to the left. The effect re-runs once width is known.
+    if (viewportWidth <= 0 || totalWidth <= 0) return;
     // Open on today unless a temporary marker (e.g. from a shared #d= fragment)
     // remembers a previous position.
     const targetPx =
       ui.tempMarkerMs != null
         ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)
         : todayPx;
-    scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
-    didCenter = true;
+    const el = scrollEl;
+    const want = Math.max(0, targetPx - el.clientWidth / 2);
+    // Firefox Android applies the .scroll-content width after this effect runs,
+    // so a synchronous scrollLeft is clamped to 0 and lost. Apply across a few
+    // frames and only latch once it sticks (or the content is wide enough to
+    // honour it), so the first paint lands on today on every browser.
+    let tries = 0;
+    const apply = (): void => {
+      el.scrollLeft = want;
+      const landed = Math.abs(el.scrollLeft - want) <= 1;
+      if (landed || el.scrollWidth - el.clientWidth >= want || tries++ >= 10) {
+        didCenter = true;
+        return;
+      }
+      requestAnimationFrame(apply);
+    };
+    apply();
   });
 
   // Month zoom: nudge the viewport so the today line stays centered as
@@ -410,11 +617,38 @@
     scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
   });
 
+  // Jump-to-today requests from the toolbar's date/zoom buttons. Tapping these
+  // mid-sweep stops the sweep (egg stays on) before recentering on today.
   $effect(() => {
     if (typeof window === 'undefined') return;
-    const handler = (): void => jumpToToday();
+    const handler = (): void => {
+      stopSweep();
+      jumpToToday();
+    };
     window.addEventListener('cal:jump-today', handler);
     return () => window.removeEventListener('cal:jump-today', handler);
+  });
+
+  // Recenter on the current date when the tab returns from the background after
+  // an inactivity period. clock.now / today.value are refreshed by their own
+  // visibility listeners; defer one frame so todayPx reflects them.
+  const BACKGROUND_RECENTER_MS = 60_000;
+  let hiddenAt = 0;
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const onVis = (): void => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (hiddenAt && Date.now() - hiddenAt > BACKGROUND_RECENTER_MS) {
+        stopSweep();
+        requestAnimationFrame(() => jumpToToday());
+      }
+      hiddenAt = 0;
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   });
 
   $effect(() => {
@@ -653,6 +887,14 @@
   style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
+    {#if sweepActive}
+      <!-- Zero-size sticky anchor pinned to the scrollport's left edge; the sweep
+           loop translateX()es it to the play line's on-screen position. Its inner
+           bar is absolutely positioned, so the anchor adds no layout. -->
+      <div class="music-sweep" bind:this={sweepMarkerEl} aria-hidden="true">
+        <i style="height: {contentHeight}px"></i>
+      </div>
+    {/if}
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
       {#if ui.tempMarkerMs != null}
@@ -771,6 +1013,28 @@
     overflow: visible;
     z-index: 6;
     pointer-events: none;
+  }
+  .music-sweep {
+    /* Sticky-pinned to the scrollport's left edge so it stays put while the
+       timeline scrolls; the sweep loop translateX()es it to its on-screen
+       position (and holds it dead-centre once reached). Zero-size so it adds no
+       layout; the visible bar inside is absolutely positioned. */
+    position: sticky;
+    left: 0;
+    width: 0;
+    height: 0;
+    z-index: 8;
+    pointer-events: none;
+    will-change: transform;
+  }
+  .music-sweep > i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    opacity: 0.85;
   }
   .temp-line {
     position: absolute;

@@ -24,6 +24,7 @@
     type FeedCategory,
     type FindReplaceRule,
     type FontSize,
+    type Haptics,
     type Locale,
     type Motion,
     type StyleVariant,
@@ -368,6 +369,7 @@
     config.refreshIntervalMs = next.refreshIntervalMs;
     config.theme = next.theme;
     config.motion = next.motion;
+    config.haptics = next.haptics;
     config.fontSize = next.fontSize;
     config.locale = next.locale;
     config.dateFormat = next.dateFormat;
@@ -553,6 +555,13 @@
     { id: 'reduced', label: 'Disabled' },
     { id: 'full', label: 'Enabled' },
   ];
+  const hapticsOptions: { id: Haptics; label: string }[] = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'sound', label: 'Sound Only' },
+    { id: 'vibration', label: 'Vibration Only' },
+    { id: 'both', label: 'Sound & Vibration' },
+    { id: 'off', label: 'Disabled' },
+  ];
   const DEFAULT_FONT_SIZE: FontSize = 14;
   const fontSizeOptions: { id: FontSize; label: string }[] = [
     { id: 10, label: '10px' },
@@ -707,6 +716,7 @@
     <div class="panel-body">
     <details class="group">
       <summary><h3>Appearance</h3></summary>
+      <div class="group-body">
       <div class="field">
         <label for="theme-select">Theme</label>
         <select id="theme-select" bind:value={config.theme}>
@@ -720,6 +730,14 @@
         <select id="motion-select" bind:value={config.motion}>
           {#each motionOptions as m (m.id)}
             <option value={m.id}>{m.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="haptics-select">Haptics</label>
+        <select id="haptics-select" bind:value={config.haptics}>
+          {#each hapticsOptions as b (b.id)}
+            <option value={b.id}>{b.label}</option>
           {/each}
         </select>
       </div>
@@ -789,10 +807,12 @@
           <span>{formatTzNowLabel('local')}</span>
         </div>
       </div>
+      </div>
     </details>
 
     <details class="group">
       <summary><h3>Boundaries</h3></summary>
+      <div class="group-body">
       <div class="field">
         <span class="field-label">Week starts</span>
         <div class="segmented" role="radiogroup" aria-label="Week starts on">
@@ -853,6 +873,7 @@
           type="time"
           bind:value={config.eveningLimit}
         />
+      </div>
       </div>
     </details>
 
@@ -1357,6 +1378,15 @@
   }
   details.group {
     margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  /* Fields live in their own flex container so the gap falls between them.
+     A <details>'s open content is wrapped by Chrome in an anonymous box, so a
+     gap on details.group itself would only space the summary from that box, not
+     the fields within it (Firefox has no such box — hence the inconsistency). */
+  .group-body {
     display: flex;
     flex-direction: column;
     gap: 0.6em;
