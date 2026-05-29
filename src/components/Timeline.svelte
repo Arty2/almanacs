@@ -299,7 +299,7 @@
     return spans;
   });
 
-  const SWEEP_MS = 14000;
+  const SWEEP_MS = 8000;
   const SWEEP_VIEWPORTS = 3;
   // Constant pace: one screenful every MS_PER_VIEWPORT, so the sweep keeps the
   // same feel whether it covers three screens or the whole multi-year timeline.
