@@ -372,10 +372,14 @@
         lastSoundT = tNow;
       }
       const px = dateToPx(new Date(ph), rangeStart, pxPerDay);
-      // Move the scroll and the marker together, synchronously, so the marker
-      // stays glued to the centered playhead. Never scroll back past the start.
-      if (scrollEl) scrollEl.scrollLeft = Math.max(startLeft, px - vw / 2);
-      if (sweepMarkerEl) sweepMarkerEl.style.left = px + 'px';
+      // Only the timeline scrolls; the line is sticky-pinned to the scrollport
+      // (CSS) and merely translated to its on-screen position. It ramps from the
+      // left edge to centre over the first half-viewport (the content can't
+      // scroll back past the start), then holds dead-centre — immobile — while
+      // the timeline scrolls beneath it.
+      const scroll = Math.max(startLeft, px - vw / 2);
+      if (scrollEl) scrollEl.scrollLeft = scroll;
+      if (sweepMarkerEl) sweepMarkerEl.style.transform = `translateX(${px - scroll}px)`;
       if (ph < endMs) {
         sweepRaf = requestAnimationFrame(step);
       } else {
@@ -868,6 +872,14 @@
   style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
 >
   <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
+    {#if sweepActive}
+      <!-- Zero-size sticky anchor pinned to the scrollport's left edge; the sweep
+           loop translateX()es it to the play line's on-screen position. Its inner
+           bar is absolutely positioned, so the anchor adds no layout. -->
+      <div class="music-sweep" bind:this={sweepMarkerEl} aria-hidden="true">
+        <i style="height: {contentHeight}px"></i>
+      </div>
+    {/if}
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
       {#if ui.tempMarkerMs != null}
@@ -922,9 +934,6 @@
         stroke-dasharray="4 4"
       />
     </svg>
-    {#if sweepActive}
-      <div class="music-sweep" bind:this={sweepMarkerEl} aria-hidden="true"></div>
-    {/if}
     {#if ui.tempMarkerMs != null}
       <button
         type="button"
@@ -991,12 +1000,23 @@
     pointer-events: none;
   }
   .music-sweep {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
+    /* Sticky-pinned to the scrollport's left edge so it stays put while the
+       timeline scrolls; the sweep loop translateX()es it to its on-screen
+       position (and holds it dead-centre once reached). Zero-size so it adds no
+       layout; the visible bar inside is absolutely positioned. */
+    position: sticky;
+    left: 0;
+    width: 0;
+    height: 0;
     z-index: 8;
     pointer-events: none;
+    will-change: transform;
+  }
+  .music-sweep > i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 2px;
     background: var(--accent);
     box-shadow: 0 0 6px var(--accent);
     opacity: 0.85;
