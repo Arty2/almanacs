@@ -6,7 +6,12 @@
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
   import { createLongPress, loading } from '../lib/haptics';
-  import { primeTimelineAudio, suspendTimelineAudio, playCountdownTone } from '../lib/timeline-music';
+  import {
+    primeTimelineAudio,
+    suspendTimelineAudio,
+    playCountdownTone,
+    countdownToneIndex,
+  } from '../lib/timeline-music';
   import { clock } from '../lib/clock.svelte';
   import type { Zoom } from '../lib/types';
 
@@ -84,10 +89,11 @@
 
   // Easter egg: hold the date button through a three-beat countdown — "ding,
   // dung, dong" at 1s/2s/3s — and on the third beat the timeline starts playing
-  // as music automatically (hold again to stop). Once on, the date icon becomes
-  // a bell. Audio is primed on pointerdown so the countdown beeps are audible
-  // within the user gesture (Firefox and iOS Safari require this); an unused
-  // quick tap releases the context again so jump-to-today leaves no audio on.
+  // as music automatically (hold again to stop). Enabling ascends the chime;
+  // disabling plays it in reverse. Once on, the date icon becomes a bell. Audio
+  // is primed on pointerdown so the countdown beeps are audible within the user
+  // gesture (Firefox and iOS Safari require this); an unused quick tap releases
+  // the context again so jump-to-today leaves no audio on.
   const HOLD_STEP_MS = 1000;
   const HOLD_STEPS = 3;
   let holdTimers: ReturnType<typeof setTimeout>[] = [];
@@ -103,17 +109,20 @@
   function startTitlePress(): void {
     suppressTitleClick = false;
     holdActivated = false;
+    // Direction is fixed at press start: ascending to enable, reversed to
+    // disable. Only this hold flips the flag, so the captured value stays valid.
+    const enabling = !ui.timelineMusic;
     primeTimelineAudio();
-    for (let step = 1; step <= HOLD_STEPS; step++) {
+    for (let beat = 1; beat <= HOLD_STEPS; beat++) {
       holdTimers.push(
         setTimeout(() => {
-          playCountdownTone(step - 1);
-          if (step === HOLD_STEPS) {
+          playCountdownTone(countdownToneIndex(beat, enabling, HOLD_STEPS));
+          if (beat === HOLD_STEPS) {
             holdActivated = true;
             suppressTitleClick = true;
-            ui.timelineMusic = !ui.timelineMusic;
+            ui.timelineMusic = enabling;
           }
-        }, step * HOLD_STEP_MS),
+        }, beat * HOLD_STEP_MS),
       );
     }
   }

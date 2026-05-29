@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   pentatonicSemitone,
   laneToFrequency,
+  voiceStep,
   activeLanesAt,
   crossings,
+  countdownToneIndex,
   COUNTDOWN_HZ,
   type LaneSpan,
 } from './timeline-music';
@@ -36,6 +38,40 @@ describe('laneToFrequency', () => {
   });
 });
 
+describe('voiceStep', () => {
+  it('is the base step for the first row, first lane', () => {
+    expect(voiceStep(0, 0)).toBe(0);
+  });
+
+  it('gives later rows higher steps so rows sound distinct', () => {
+    expect(voiceStep(2, 0)).toBeGreaterThan(voiceStep(0, 0));
+    expect(laneToFrequency(voiceStep(2, 0))).toBeGreaterThan(laneToFrequency(voiceStep(0, 0)));
+  });
+
+  it('steps up within a row by its collision sub-lane', () => {
+    expect(voiceStep(1, 1)).toBeGreaterThan(voiceStep(1, 0));
+  });
+
+  it('clamps negatives to the root', () => {
+    expect(voiceStep(-2, -3)).toBe(0);
+  });
+});
+
+describe('countdownToneIndex', () => {
+  it('ascends through the chime when enabling', () => {
+    expect([1, 2, 3].map((b) => countdownToneIndex(b, true, 3))).toEqual([0, 1, 2]);
+  });
+
+  it('reverses the chime when disabling', () => {
+    expect([1, 2, 3].map((b) => countdownToneIndex(b, false, 3))).toEqual([2, 1, 0]);
+  });
+
+  it('clamps the beat into range', () => {
+    expect(countdownToneIndex(0, true, 3)).toBe(0);
+    expect(countdownToneIndex(9, true, 3)).toBe(2);
+  });
+});
+
 describe('activeLanesAt', () => {
   const spans: LaneSpan[] = [
     { key: 'a', startMs: 100, endMs: 200, lane: 0, allDay: false },
@@ -43,17 +79,17 @@ describe('activeLanesAt', () => {
     { key: 'c', startMs: 0, endMs: 1000, lane: 2, allDay: true },
   ];
 
-  it('returns timed events under the playhead with their lane', () => {
-    expect(activeLanesAt(160, spans)).toEqual(new Map([['a', 0], ['b', 1]]));
+  it('returns events under the playhead with their voice', () => {
+    expect(activeLanesAt(160, spans)).toEqual(new Map([['a', 0], ['b', 1], ['c', 2]]));
   });
 
-  it('ignores all-day events', () => {
-    expect(activeLanesAt(500, spans).has('c')).toBe(false);
+  it('sounds all-day events too', () => {
+    expect(activeLanesAt(500, spans)).toEqual(new Map([['c', 2]]));
   });
 
   it('is half-open: active at start, inactive at end', () => {
-    expect(activeLanesAt(100, spans)).toEqual(new Map([['a', 0]]));
-    expect(activeLanesAt(200, spans)).toEqual(new Map([['b', 1]]));
+    expect(activeLanesAt(100, spans)).toEqual(new Map([['a', 0], ['c', 2]]));
+    expect(activeLanesAt(200, spans)).toEqual(new Map([['b', 1], ['c', 2]]));
   });
 });
 

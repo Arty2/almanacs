@@ -1,41 +1,53 @@
 // Timeline music Easter egg: a tiny Web Audio synth plus pure helpers that turn
-// the calendar into a "chart for music". As a playhead crosses into a timed
-// event a bell rings; as it leaves, a whistle answers. Pitch is derived from
-// the event's collision sub-lane, stepped through a major-pentatonic scale so
-// stacked lanes always sound consonant.
+// the calendar into a "chart for music". As a playhead crosses into an event a
+// bell rings; as it leaves, a whistle answers. Pitch is a "voice" derived from
+// the event's row and collision sub-lane (see voiceStep), stepped through a
+// major-pentatonic scale so every row sounds distinct yet consonant.
 
 // Major pentatonic, in semitones above the root.
 const PENTATONIC = [0, 2, 4, 7, 9];
 
-// Middle C — low enough that octave-wrapped deep lanes stay musical.
+// Middle C — low enough that octave-wrapped deep voices stay musical.
 const BASE_HZ = 261.626;
 
-export function pentatonicSemitone(lane: number): number {
-  const n = Math.max(0, Math.floor(lane));
+// Pentatonic degrees to step up per calendar row, so adjacent rows sound a
+// distinct note. The collision sub-lane then steps up from the row's base.
+const ROW_STRIDE = 1;
+
+export function pentatonicSemitone(step: number): number {
+  const n = Math.max(0, Math.floor(step));
   const octave = Math.floor(n / PENTATONIC.length);
   const degree = n % PENTATONIC.length;
   return PENTATONIC[degree]! + 12 * octave;
 }
 
-export function laneToFrequency(lane: number, base = BASE_HZ): number {
-  return base * Math.pow(2, pentatonicSemitone(lane) / 12);
+// A "voice" is the scale step a span sounds at: each row starts ROW_STRIDE
+// degrees above the previous, and stacked (overlapping) events step up from
+// there via their collision sub-lane.
+export function voiceStep(row: number, lane: number): number {
+  return Math.max(0, Math.floor(row)) * ROW_STRIDE + Math.max(0, Math.floor(lane));
+}
+
+export function laneToFrequency(step: number, base = BASE_HZ): number {
+  return base * Math.pow(2, pentatonicSemitone(step) / 12);
 }
 
 export type LaneSpan = {
   key: string;
   startMs: number;
   endMs: number;
+  // The voice this span sounds at (row + sub-lane, see voiceStep), not the raw
+  // collision lane.
   lane: number;
   allDay: boolean;
 };
 
-// Which timed events the playhead sits inside at instant `ms`, keyed by span
-// with its lane. All-day events never sound. Half-open [start, end) so an event
-// stops being active exactly at its end.
+// Which events the playhead sits inside at instant `ms`, keyed by span with its
+// voice. All-day events sound too (holiday calendars are entirely all-day).
+// Half-open [start, end) so an event stops being active exactly at its end.
 export function activeLanesAt(ms: number, spans: LaneSpan[]): Map<string, number> {
   const out = new Map<string, number>();
   for (const s of spans) {
-    if (s.allDay) continue;
     if (ms >= s.startMs && ms < s.endMs) out.set(s.key, s.lane);
   }
   return out;
@@ -58,6 +70,14 @@ export function crossings(
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+let suspendTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelPendingSuspend(): void {
+  if (suspendTimer) {
+    clearTimeout(suspendTimer);
+    suspendTimer = null;
+  }
+}
 
 function audioCtor(): typeof AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -73,6 +93,8 @@ function audioCtor(): typeof AudioContext | null {
 // fires. Firefox in particular keeps the context suspended until a gesture
 // resumes it.
 export function primeTimelineAudio(): void {
+  // A quick re-enable cancels any suspend still waiting out a bell's tail.
+  cancelPendingSuspend();
   const Ctor = audioCtor();
   if (!Ctor) return;
   if (!ctx) {
@@ -86,8 +108,23 @@ export function primeTimelineAudio(): void {
   if (ctx.state !== 'running') void ctx.resume();
 }
 
-export function suspendTimelineAudio(): void {
-  if (ctx && ctx.state === 'running') void ctx.suspend();
+// Suspend the context to release audio when the egg is off. `delayMs` lets a
+// final note (e.g. the last beat of the disable countdown) ring out before the
+// context freezes — suspend() would otherwise cut it mid-tail.
+export function suspendTimelineAudio(delayMs = 0): void {
+  cancelPendingSuspend();
+  if (!ctx) return;
+  const doSuspend = (): void => {
+    if (ctx && ctx.state === 'running') void ctx.suspend();
+  };
+  if (delayMs <= 0) {
+    doSuspend();
+    return;
+  }
+  suspendTimer = setTimeout(() => {
+    suspendTimer = null;
+    doSuspend();
+  }, delayMs);
 }
 
 // Inharmonic partials give the strike a bell-like, slightly metallic ring.
@@ -152,6 +189,14 @@ export function playWhistle(freq: number): void {
 // Ascending major triad (C5, E5, G5) for the activation countdown: "ding,
 // dung, dong" as the hold arms, the third coinciding with auto-start.
 export const COUNTDOWN_HZ = [523.25, 659.25, 783.99];
+
+// Which COUNTDOWN_HZ index a beat plays. Enabling ascends (0,1,2); disabling
+// descends (2,1,0) so the chime mirrors itself when turning the egg off.
+// `beat` is 1-based.
+export function countdownToneIndex(beat: number, enabling: boolean, steps = COUNTDOWN_HZ.length): number {
+  const b = Math.max(1, Math.min(steps, Math.floor(beat)));
+  return enabling ? b - 1 : steps - b;
+}
 
 export function playCountdownTone(step: number): void {
   const i = Math.max(0, Math.min(COUNTDOWN_HZ.length - 1, Math.floor(step)));

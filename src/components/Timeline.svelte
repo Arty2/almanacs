@@ -16,6 +16,7 @@
     activeLanesAt,
     crossings,
     laneToFrequency,
+    voiceStep,
     playBell,
     playWhistle,
     primeTimelineAudio,
@@ -270,31 +271,37 @@
   let didCenter = false;
 
   // --- Timeline music Easter egg (armed by the 5s hold on the date button) ---
-  // Timed events in expanded rows become notes; their collision sub-lane picks
-  // the pitch. Collapsed rows carry no laneEvents, so they stay silent.
+  // Events in expanded rows become notes: each row gets its own base pitch (by
+  // its display order) and the collision sub-lane steps up from there, so every
+  // row sounds distinct. All-day events sound too (holiday calendars are
+  // entirely all-day). Collapsed rows carry no laneEvents, so they stay silent.
   // Returns early while the egg is off so it never subscribes to layout state
   // (orderedFeeds/rowLanes) and never recomputes on zoom/scroll/refresh.
   const NO_SPANS: LaneSpan[] = [];
   const timedLaneSpans = $derived.by<LaneSpan[]>(() => {
     if (!ui.timelineMusic) return NO_SPANS;
     const spans: LaneSpan[] = [];
+    let row = 0;
     for (const feed of orderedFeeds) {
       for (const ev of rowLanes[feed.id]?.laneEvents ?? []) {
-        if (ev.allDay) continue;
         spans.push({
           key: feed.id + ':' + ev.uid + ':' + ev.start.getTime(),
           startMs: ev.start.getTime(),
           endMs: ev.end.getTime(),
-          lane: ev.lane,
-          allDay: false,
+          lane: voiceStep(row, ev.lane),
+          allDay: ev.allDay,
         });
       }
+      row++;
     }
     return spans;
   });
 
   const SWEEP_MS = 14000;
   const SWEEP_VIEWPORTS = 3;
+  // Keep audio alive past a bell's tail (~1.1s) when disabling, so the final
+  // beat of the reversed countdown rings out instead of being cut by suspend().
+  const BELL_TAIL_MS = 1300;
   let sweepRaf = 0;
   let sweepRunning = false;
   let sweepPlayheadPx = $state<number | null>(null);
@@ -358,7 +365,7 @@
       ambientSet = new Map();
       ambientSeeded = false;
       ambientNow = -1;
-      suspendTimelineAudio();
+      suspendTimelineAudio(BELL_TAIL_MS);
     };
   });
 
