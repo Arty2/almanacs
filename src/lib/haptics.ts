@@ -41,21 +41,25 @@ function playTick(pattern: number | number[]): void {
   }
 }
 
-// One percussive blip: a quick triangle tick with a fast decay. Pitched up around
-// 1 kHz and at a higher level so it's clearly audible on phone speakers (a low,
-// quiet ping was inaudible there — small speakers can't reproduce sub-200 Hz).
+// One soft percussive thump, like a fingertip tap rather than an electronic beep:
+// a warm sine whose pitch drops fast from ~190 Hz to ~70 Hz (the pitch-drop is
+// what reads as a "thump"). A higher level and a little length keep it audible on
+// phone speakers, which can't reproduce a quiet sub-bass blip.
 function clickAt(ctx: AudioContext, at: number): void {
   const osc = ctx.createOscillator();
-  osc.type = 'triangle';
-  osc.frequency.value = 1000;
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(190, at);
+  osc.frequency.exponentialRampToValueAtTime(70, at + 0.07);
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, at);
-  env.gain.linearRampToValueAtTime(0.3, at + 0.003);
-  env.gain.exponentialRampToValueAtTime(0.0008, at + 0.05);
+  env.gain.linearRampToValueAtTime(0.4, at + 0.005);
+  env.gain.exponentialRampToValueAtTime(0.0008, at + 0.13);
+  // Settle to true zero before stopping so the thump itself doesn't end on a click.
+  env.gain.linearRampToValueAtTime(0, at + 0.15);
   osc.connect(env);
   env.connect(ctx.destination);
   osc.start(at);
-  osc.stop(at + 0.07);
+  osc.stop(at + 0.16);
 }
 
 // Feedback for a tap/hold. The Haptics setting decides whether that's a

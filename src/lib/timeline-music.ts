@@ -97,7 +97,13 @@ export function sweepDurationMs(remainingPx: number, viewportPx: number, msPerVi
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+// The output bus, hoisted so suspend can fade it to silence before freezing the
+// context (a hard suspend mid-tail clicks/crackles).
+let out: GainNode | null = null;
 let suspendTimer: ReturnType<typeof setTimeout> | null = null;
+
+const OUT_LEVEL = 0.26; // output level, leaves headroom under the limiter
+const SUSPEND_FADE = 0.08; // fade-to-silence before suspend, to avoid a stop glitch
 
 function cancelPendingSuspend(): void {
   if (suspendTimer) {
@@ -146,8 +152,8 @@ export function primeTimelineAudio(): void {
     // a dense sweep of overlapping bells from summing past 0 dBFS into clipping.
     master = ctx.createGain();
     master.gain.value = 1;
-    const out = ctx.createGain();
-    out.gain.value = 0.26; // output level, leaves headroom under the limiter
+    out = ctx.createGain();
+    out.gain.value = OUT_LEVEL;
     const limiter = ctx.createDynamicsCompressor();
     limiter.threshold.value = -8;
     limiter.knee.value = 0;
@@ -165,6 +171,11 @@ export function primeTimelineAudio(): void {
     out.connect(limiter);
     limiter.connect(ctx.destination);
   }
+  // Restore the output level in case a suspend fade was mid-flight when re-enabled.
+  if (out) {
+    out.gain.cancelScheduledValues(ctx.currentTime);
+    out.gain.setValueAtTime(OUT_LEVEL, ctx.currentTime);
+  }
   if (ctx.state !== 'running') void ctx.resume();
 }
 
@@ -174,16 +185,29 @@ export function primeTimelineAudio(): void {
 export function suspendTimelineAudio(delayMs = 0): void {
   cancelPendingSuspend();
   if (!ctx) return;
-  const doSuspend = (): void => {
-    if (ctx && ctx.state === 'running') void ctx.suspend();
+  // Fade the output to silence, then freeze the context one fade later. The fade
+  // means the hard suspend lands on silence instead of cutting a ringing note or
+  // the reverb tail into a click/crackle.
+  const begin = (): void => {
+    if (!ctx || ctx.state !== 'running') return;
+    if (out) {
+      const t = ctx.currentTime;
+      out.gain.cancelScheduledValues(t);
+      out.gain.setValueAtTime(out.gain.value, t);
+      out.gain.linearRampToValueAtTime(0, t + SUSPEND_FADE);
+    }
+    suspendTimer = setTimeout(() => {
+      suspendTimer = null;
+      if (ctx && ctx.state === 'running') void ctx.suspend();
+    }, SUSPEND_FADE * 1000 + 30);
   };
   if (delayMs <= 0) {
-    doSuspend();
+    begin();
     return;
   }
   suspendTimer = setTimeout(() => {
     suspendTimer = null;
-    doSuspend();
+    begin();
   }, delayMs);
 }
 
@@ -217,6 +241,9 @@ export function playBell(freq: number): void {
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(1, now + 0.003); // sharp attack = metallic ting
   env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
+  // Ramp the remainder to true zero before the oscillators stop, so the note ends
+  // on silence rather than truncating a non-zero waveform into a click.
+  env.gain.linearRampToValueAtTime(0, now + dur + 0.04);
   for (const p of BELL_PARTIALS) {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -243,6 +270,8 @@ export function playWhistle(freq: number): void {
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(0.6, now + 0.03);
   env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
+  // Settle to true zero before stopping, so the note doesn't end on a click.
+  env.gain.linearRampToValueAtTime(0, now + dur + 0.04);
   osc.connect(env);
   env.connect(master);
   osc.start(now);
