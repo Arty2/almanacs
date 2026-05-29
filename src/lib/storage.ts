@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  Baptism,
   CalendarColor,
   CalendarFeed,
   FeedCategory,
@@ -104,6 +105,7 @@ export function defaultConfig(): AppConfig {
     schemaVersion: SCHEMA_VERSION,
     theme: 'auto',
     motion: 'auto',
+    baptism: 'auto',
     fontSize: 14,
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
@@ -132,6 +134,11 @@ function normalizeTheme(value: unknown): Theme {
 
 function normalizeMotion(value: unknown): Motion {
   if (value === 'auto' || value === 'reduced' || value === 'full') return value;
+  return 'auto';
+}
+
+function normalizeBaptism(value: unknown): Baptism {
+  if (value === 'auto' || value === 'sound' || value === 'vibration' || value === 'off') return value;
   return 'auto';
 }
 
@@ -265,6 +272,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     schemaVersion: SCHEMA_VERSION,
     theme: normalizeTheme(parsed.theme),
     motion: normalizeMotion(parsed.motion),
+    baptism: normalizeBaptism(parsed.baptism),
     fontSize: normalizeFontSize(parsed.fontSize),
     locale: (parsed.locale as AppConfig['locale']) ?? base.locale,
     dateFormat: normalizeDateFormat(parsed.dateFormat),

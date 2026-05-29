@@ -15,6 +15,8 @@
   import {
     activeLanesAt,
     crossings,
+    uniqueVoices,
+    sweepDurationMs,
     laneToFrequency,
     voiceStep,
     playBell,
@@ -299,6 +301,12 @@
 
   const SWEEP_MS = 14000;
   const SWEEP_VIEWPORTS = 3;
+  // Constant pace: one screenful every MS_PER_VIEWPORT, so the sweep keeps the
+  // same feel whether it covers three screens or the whole multi-year timeline.
+  const MS_PER_VIEWPORT = SWEEP_MS / SWEEP_VIEWPORTS;
+  // Most distinct bells/whistles to fire on a single frame — a dense holiday
+  // stretch would otherwise stack into static.
+  const MAX_VOICES_PER_STEP = 6;
   // Keep audio alive past a bell's tail (~1.1s) when disabling, so the final
   // beat of the reversed countdown rings out instead of being cut by suspend().
   const BELL_TAIL_MS = 1300;
@@ -310,8 +318,8 @@
   let ambientNow = -1;
 
   // One accelerated pass of a virtual playhead, starting at the current left
-  // edge and travelling several screenfuls rightward, ringing a bell on each
-  // timed event it enters and a whistle as it leaves. The viewport follows the
+  // edge and travelling all the way to the end of the timeline, ringing a bell
+  // on each event it enters and a whistle as it leaves. The viewport follows the
   // marker (kept a third of the way in, so upcoming events scroll into view
   // ahead of it). Seeded with whatever's already under the start so we only
   // sound events the playhead actively crosses into.
@@ -324,18 +332,20 @@
     const vw = scrollEl.clientWidth;
     const startLeft = scrollEl.scrollLeft;
     const startMs = pxToDate(startLeft, rangeStart, pxPerDay).getTime();
-    const endMs = pxToDate(startLeft + vw * SWEEP_VIEWPORTS, rangeStart, pxPerDay).getTime();
+    const endMs = pxToDate(totalWidth, rangeStart, pxPerDay).getTime();
+    const durationMs = sweepDurationMs(totalWidth - startLeft, vw, MS_PER_VIEWPORT);
     const spans = timedLaneSpans;
     let prev = activeLanesAt(startMs, spans);
     const t0 = performance.now();
     sweepRunning = true;
     const step = (tNow: number): void => {
-      const t = Math.min(1, (tNow - t0) / SWEEP_MS);
+      const t = Math.min(1, (tNow - t0) / durationMs);
       const ph = startMs + (endMs - startMs) * t;
       const next = activeLanesAt(ph, spans);
       const { entered, exited } = crossings(prev, next);
-      for (const e of entered) playBell(laneToFrequency(e.lane));
-      for (const e of exited) playWhistle(laneToFrequency(e.lane));
+      // De-dup to distinct pitches per frame so dense stretches don't crackle.
+      for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
+      for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
       prev = next;
       const px = dateToPx(new Date(ph), rangeStart, pxPerDay);
       sweepPlayheadPx = px;
@@ -385,8 +395,8 @@
       return;
     }
     const { entered, exited } = crossings(ambientSet, next);
-    for (const e of entered) playBell(laneToFrequency(e.lane));
-    for (const e of exited) playWhistle(laneToFrequency(e.lane));
+    for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
+    for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
     ambientSet = next;
     ambientNow = now;
   });
@@ -511,7 +521,10 @@
 
   $effect(() => {
     if (!scrollEl || didCenter) return;
-    if (totalWidth <= 0) return;
+    // Wait for the real viewport width: until it's measured, pxPerDay (and so
+    // todayPx) use the static fallback scale, which for fit-whole-span zooms
+    // lands today far to the left. The effect re-runs once width is known.
+    if (viewportWidth <= 0 || totalWidth <= 0) return;
     // Open on today unless a temporary marker (e.g. from a shared #d= fragment)
     // remembers a previous position.
     const targetPx =

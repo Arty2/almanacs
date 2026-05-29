@@ -5,8 +5,11 @@ import {
   voiceStep,
   activeLanesAt,
   crossings,
+  uniqueVoices,
+  sweepDurationMs,
   countdownToneIndex,
   COUNTDOWN_HZ,
+  type Crossing,
   type LaneSpan,
 } from './timeline-music';
 
@@ -106,5 +109,39 @@ describe('crossings', () => {
   it('reports nothing when the active set is unchanged', () => {
     const set = new Map([['a', 0]]);
     expect(crossings(set, new Map(set))).toEqual({ entered: [], exited: [] });
+  });
+});
+
+describe('uniqueVoices', () => {
+  const cs = (lanes: number[]): Crossing[] => lanes.map((lane, i) => ({ key: 'k' + i, lane }));
+
+  it('collapses repeated voices to one, in first-seen order', () => {
+    expect(uniqueVoices(cs([2, 2, 0, 2, 0, 5]))).toEqual([2, 0, 5]);
+  });
+
+  it('caps the number of distinct voices', () => {
+    expect(uniqueVoices(cs([0, 1, 2, 3, 4, 5, 6, 7]), 3)).toEqual([0, 1, 2]);
+  });
+
+  it('is empty for no crossings', () => {
+    expect(uniqueVoices([])).toEqual([]);
+  });
+});
+
+describe('sweepDurationMs', () => {
+  it('scales with the distance left to cover', () => {
+    expect(sweepDurationMs(1000, 100, 4000)).toBeCloseTo(40000, 5);
+  });
+
+  it('holds a constant pace per viewport', () => {
+    expect(sweepDurationMs(200, 100, 4000)).toBeCloseTo(8000, 5);
+  });
+
+  it('floors to a minimum so a near-the-end start still animates', () => {
+    expect(sweepDurationMs(5, 100, 4000, 600)).toBe(600);
+  });
+
+  it('returns the minimum when the viewport is unmeasured', () => {
+    expect(sweepDurationMs(1000, 0, 4000, 600)).toBe(600);
   });
 });

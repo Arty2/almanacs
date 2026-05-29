@@ -31,6 +31,17 @@ describe('config import/export', () => {
     expect(() => importConfig('not json')).toThrow();
   });
 
+  it('defaults baptism to auto and round-trips a valid value', () => {
+    expect(defaultConfig().baptism).toBe('auto');
+    const cfg = { ...defaultConfig(), baptism: 'sound' as const };
+    expect(importConfig(exportConfig(cfg)).baptism).toBe('sound');
+  });
+
+  it('falls back to auto for an invalid baptism value', () => {
+    const bad = JSON.stringify({ ...defaultConfig(), baptism: 'bogus' });
+    expect(importConfig(bad).baptism).toBe('auto');
+  });
+
   it('throws on wrong schema version', () => {
     const bad = JSON.stringify({ schemaVersion: 999, feeds: [] });
     expect(() => importConfig(bad)).toThrow(/schema/i);

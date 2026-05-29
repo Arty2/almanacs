@@ -2,7 +2,9 @@
 // the calendar into a "chart for music". As a playhead crosses into an event a
 // bell rings; as it leaves, a whistle answers. Pitch is a "voice" derived from
 // the event's row and collision sub-lane (see voiceStep), stepped through a
-// major-pentatonic scale so every row sounds distinct yet consonant.
+// major-pentatonic scale so every row sounds distinct yet consonant. The output
+// runs through a feedback-delay echo and a limiter for a softer tail and to keep
+// dense passages from clipping.
 
 // Major pentatonic, in semitones above the root.
 const PENTATONIC = [0, 2, 4, 7, 9];
@@ -68,6 +70,31 @@ export function crossings(
   return { entered, exited };
 }
 
+// Collapse a batch of crossings to the distinct voices (pitches) they sound,
+// in first-seen order, capped at `max`. A dense stretch — many same-row, hence
+// same-voice, events entering on one frame — would otherwise stack dozens of
+// identical oscillators and overload into static; one bell per distinct pitch
+// is all you can hear anyway.
+export function uniqueVoices(crossingList: Crossing[], max = 6): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const c of crossingList) {
+    if (seen.has(c.lane)) continue;
+    seen.add(c.lane);
+    out.push(c.lane);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+// How long a sweep should take to cover `remainingPx`, holding a constant pace
+// of `msPerViewport` per screenful so velocity feels the same at any zoom or
+// start position. Floored so a near-the-end start still animates briefly.
+export function sweepDurationMs(remainingPx: number, viewportPx: number, msPerViewport: number, minMs = 600): number {
+  if (viewportPx <= 0) return minMs;
+  return Math.max(minMs, (Math.max(0, remainingPx) / viewportPx) * msPerViewport);
+}
+
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let suspendTimer: ReturnType<typeof setTimeout> | null = null;
@@ -99,11 +126,30 @@ export function primeTimelineAudio(): void {
   if (!Ctor) return;
   if (!ctx) {
     ctx = new Ctor();
+    // Notes connect here. Graph: master → (dry) out, and master → feedback delay
+    // → out for an echo tail. A limiter before destination keeps a dense sweep
+    // of overlapping bells from summing past 0 dBFS into clipping/static.
     master = ctx.createGain();
-    master.gain.value = 0.32;
-    const comp = ctx.createDynamicsCompressor();
-    master.connect(comp);
-    comp.connect(ctx.destination);
+    master.gain.value = 1;
+    const out = ctx.createGain();
+    out.gain.value = 0.26; // output level, leaves headroom under the limiter
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -8;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.25;
+    const delay = ctx.createDelay(1);
+    delay.delayTime.value = 0.19;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.3;
+    master.connect(out); // dry
+    master.connect(delay); // echo send
+    delay.connect(feedback);
+    feedback.connect(delay); // repeats, decaying by the feedback gain
+    delay.connect(out);
+    out.connect(limiter);
+    limiter.connect(ctx.destination);
   }
   if (ctx.state !== 'running') void ctx.resume();
 }
