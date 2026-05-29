@@ -41,19 +41,21 @@ function playTick(pattern: number | number[]): void {
   }
 }
 
-// One subtle percussive blip: a quick triangle ping with a fast decay.
+// One percussive blip: a quick triangle tick with a fast decay. Pitched up around
+// 1 kHz and at a higher level so it's clearly audible on phone speakers (a low,
+// quiet ping was inaudible there — small speakers can't reproduce sub-200 Hz).
 function clickAt(ctx: AudioContext, at: number): void {
   const osc = ctx.createOscillator();
   osc.type = 'triangle';
-  osc.frequency.value = 180;
+  osc.frequency.value = 1000;
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, at);
-  env.gain.linearRampToValueAtTime(0.09, at + 0.004);
-  env.gain.exponentialRampToValueAtTime(0.0008, at + 0.045);
+  env.gain.linearRampToValueAtTime(0.3, at + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.0008, at + 0.05);
   osc.connect(env);
   env.connect(ctx.destination);
   osc.start(at);
-  osc.stop(at + 0.06);
+  osc.stop(at + 0.07);
 }
 
 // Feedback for a tap/hold. The Haptics setting decides whether that's a
