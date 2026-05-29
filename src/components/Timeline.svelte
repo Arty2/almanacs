@@ -312,7 +312,11 @@
   const BELL_TAIL_MS = 1300;
   let sweepRaf = 0;
   let sweepRunning = false;
-  let sweepPlayheadPx = $state<number | null>(null);
+  // Marker visibility is reactive; its position is set imperatively each frame
+  // (see startSweep) so it stays glued to the natively-scrolling content with no
+  // reactive-flush lag that would otherwise make it jitter.
+  let sweepActive = $state(false);
+  let sweepMarkerEl = $state<HTMLDivElement | undefined>(undefined);
   let ambientSet = new Map<string, number>();
   let ambientSeeded = false;
   let ambientNow = -1;
@@ -338,6 +342,7 @@
     let prev = activeLanesAt(startMs, spans);
     const t0 = performance.now();
     sweepRunning = true;
+    sweepActive = true;
     const step = (tNow: number): void => {
       const t = Math.min(1, (tNow - t0) / durationMs);
       const ph = startMs + (endMs - startMs) * t;
@@ -348,14 +353,15 @@
       for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
       prev = next;
       const px = dateToPx(new Date(ph), rangeStart, pxPerDay);
-      sweepPlayheadPx = px;
-      // Follow the marker, centered; never scroll back past where the sweep began.
+      // Move the scroll and the marker together, synchronously, so the marker
+      // stays glued to the centered playhead. Never scroll back past the start.
       if (scrollEl) scrollEl.scrollLeft = Math.max(startLeft, px - vw / 2);
+      if (sweepMarkerEl) sweepMarkerEl.style.left = px + 'px';
       if (t < 1) {
         sweepRaf = requestAnimationFrame(step);
       } else {
         sweepRunning = false;
-        sweepPlayheadPx = null;
+        sweepActive = false;
         ambientSeeded = false; // hand off to the ambient effect's next tick
         jumpToToday(); // glide back to the current date
       }
@@ -372,7 +378,7 @@
     return () => {
       cancelAnimationFrame(sweepRaf);
       sweepRunning = false;
-      sweepPlayheadPx = null;
+      sweepActive = false;
       ambientSet = new Map();
       ambientSeeded = false;
       ambientNow = -1;
@@ -854,8 +860,8 @@
         stroke-dasharray="4 4"
       />
     </svg>
-    {#if sweepPlayheadPx != null}
-      <div class="music-sweep" style="left: {sweepPlayheadPx}px" aria-hidden="true"></div>
+    {#if sweepActive}
+      <div class="music-sweep" bind:this={sweepMarkerEl} aria-hidden="true"></div>
     {/if}
     {#if ui.tempMarkerMs != null}
       <button

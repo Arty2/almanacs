@@ -187,9 +187,10 @@ export function suspendTimelineAudio(delayMs = 0): void {
   }, delayMs);
 }
 
-// Inharmonic partials give the strike a bell-like, metallic ring; the upper
-// non-integer partials are what make it clang rather than chime.
+// Inharmonic partials give the strike a bell-like, metallic ring: the sub-octave
+// "hum" partial adds bass weight, the upper non-integer partials make it clang.
 const BELL_PARTIALS = [
+  { mult: 0.5, gain: 0.6 },
   { mult: 1, gain: 1 },
   { mult: 2.76, gain: 0.5 },
   { mult: 5.4, gain: 0.3 },
