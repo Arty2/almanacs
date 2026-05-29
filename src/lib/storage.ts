@@ -1,11 +1,11 @@
 import type {
   AppConfig,
-  Baptism,
   CalendarColor,
   CalendarFeed,
   FeedCategory,
   FindReplaceRule,
   FontSize,
+  Haptics,
   Motion,
   ParsedEvent,
   StyleVariant,
@@ -105,7 +105,7 @@ export function defaultConfig(): AppConfig {
     schemaVersion: SCHEMA_VERSION,
     theme: 'auto',
     motion: 'auto',
-    baptism: 'auto',
+    haptics: 'auto',
     fontSize: 14,
     locale: 'en',
     dateFormat: 'YYYY-MM-DD',
@@ -137,7 +137,7 @@ function normalizeMotion(value: unknown): Motion {
   return 'auto';
 }
 
-function normalizeBaptism(value: unknown): Baptism {
+function normalizeHaptics(value: unknown): Haptics {
   if (value === 'auto' || value === 'sound' || value === 'vibration' || value === 'off') return value;
   return 'auto';
 }
@@ -272,7 +272,7 @@ function migrate(parsed: Record<string, unknown>): AppConfig {
     schemaVersion: SCHEMA_VERSION,
     theme: normalizeTheme(parsed.theme),
     motion: normalizeMotion(parsed.motion),
-    baptism: normalizeBaptism(parsed.baptism),
+    haptics: normalizeHaptics(parsed.haptics ?? parsed.baptism),
     fontSize: normalizeFontSize(parsed.fontSize),
     locale: (parsed.locale as AppConfig['locale']) ?? base.locale,
     dateFormat: normalizeDateFormat(parsed.dateFormat),

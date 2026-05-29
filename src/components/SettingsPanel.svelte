@@ -18,13 +18,13 @@
   import { longPress, panelOpen } from '../lib/haptics';
   import {
     CALENDAR_COLORS,
-    type Baptism,
     type CalendarColor,
     type CalendarFeed,
     type DateFormat,
     type FeedCategory,
     type FindReplaceRule,
     type FontSize,
+    type Haptics,
     type Locale,
     type Motion,
     type StyleVariant,
@@ -369,7 +369,7 @@
     config.refreshIntervalMs = next.refreshIntervalMs;
     config.theme = next.theme;
     config.motion = next.motion;
-    config.baptism = next.baptism;
+    config.haptics = next.haptics;
     config.fontSize = next.fontSize;
     config.locale = next.locale;
     config.dateFormat = next.dateFormat;
@@ -555,7 +555,7 @@
     { id: 'reduced', label: 'Disabled' },
     { id: 'full', label: 'Enabled' },
   ];
-  const baptismOptions: { id: Baptism; label: string }[] = [
+  const hapticsOptions: { id: Haptics; label: string }[] = [
     { id: 'auto', label: 'Auto' },
     { id: 'sound', label: 'Sound Only' },
     { id: 'vibration', label: 'Vibration Only' },
@@ -732,9 +732,9 @@
         </select>
       </div>
       <div class="field">
-        <label for="baptism-select">Baptism</label>
-        <select id="baptism-select" bind:value={config.baptism}>
-          {#each baptismOptions as b (b.id)}
+        <label for="haptics-select">Haptics</label>
+        <select id="haptics-select" bind:value={config.haptics}>
+          {#each hapticsOptions as b (b.id)}
             <option value={b.id}>{b.label}</option>
           {/each}
         </select>

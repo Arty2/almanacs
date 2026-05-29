@@ -51,12 +51,12 @@ function clickAt(ctx: AudioContext, at: number): void {
   osc.stop(at + 0.06);
 }
 
-// Feedback for a tap/hold. The Baptism setting decides whether that's a
+// Feedback for a tap/hold. The Haptics setting decides whether that's a
 // vibration, a tap sound, or both-or-neither: 'auto' uses vibration where the
 // device supports it (else the sound, for Safari/Firefox), 'sound' always plays
 // the sound, 'vibration' vibrates only, 'off' does nothing.
 function buzz(pattern: number | number[]): void {
-  const mode = config.baptism;
+  const mode = config.haptics;
   if (mode === 'off') return;
   const vibrates = mode === 'vibration' || (mode === 'auto' && canVibrate());
   const sounds = mode === 'sound' || (mode === 'auto' && !canVibrate());
