@@ -342,35 +342,63 @@
     const startMs = pxToDate(startLeft, rangeStart, pxPerDay).getTime();
     const endMs = pxToDate(totalWidth, rangeStart, pxPerDay).getTime();
     const durationMs = sweepDurationMs(totalWidth - startLeft, vw, MS_PER_VIEWPORT);
+    // Timeline-ms advanced per real-ms; the playhead is integrated by this rate
+    // each frame (below) rather than from absolute elapsed time.
+    const speed = durationMs > 0 ? (endMs - startMs) / durationMs : endMs - startMs;
     const spans = timedLaneSpans;
     let prev = activeLanesAt(startMs, spans);
-    const t0 = performance.now();
+    let ph = startMs;
+    let tPrev = performance.now();
+    let lastSoundT = tPrev;
     sweepRunning = true;
     sweepActive = true;
+    ui.musicSweeping = true;
     const step = (tNow: number): void => {
-      const t = Math.min(1, (tNow - t0) / durationMs);
-      const ph = startMs + (endMs - startMs) * t;
+      // Integrate the playhead with a clamped per-frame delta: a delayed or
+      // background-throttled frame just slows the sweep instead of jumping the
+      // centred line forward to "catch up".
+      const dt = Math.min(tNow - tPrev, 48);
+      tPrev = tNow;
+      ph = Math.min(endMs, ph + speed * dt);
       const next = activeLanesAt(ph, spans);
-      const { entered, exited } = crossings(prev, next);
-      // De-dup to distinct pitches per frame so dense stretches don't crackle.
-      for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
-      for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
-      prev = next;
+      // Emit sounds on a real-time grid, advancing `prev` only when we sound, so
+      // voices entered between grid points collapse into one deduped batch
+      // instead of firing every frame and stacking into static.
+      if (tNow - lastSoundT >= SWEEP_SOUND_GAP_MS) {
+        const { entered, exited } = crossings(prev, next);
+        for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
+        for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
+        prev = next;
+        lastSoundT = tNow;
+      }
       const px = dateToPx(new Date(ph), rangeStart, pxPerDay);
       // Move the scroll and the marker together, synchronously, so the marker
       // stays glued to the centered playhead. Never scroll back past the start.
       if (scrollEl) scrollEl.scrollLeft = Math.max(startLeft, px - vw / 2);
       if (sweepMarkerEl) sweepMarkerEl.style.left = px + 'px';
-      if (t < 1) {
+      if (ph < endMs) {
         sweepRaf = requestAnimationFrame(step);
       } else {
         sweepRunning = false;
         sweepActive = false;
+        ui.musicSweeping = false;
         ambientSeeded = false; // hand off to the ambient effect's next tick
         jumpToToday(); // glide back to the current date
       }
     };
     sweepRaf = requestAnimationFrame(step);
+  }
+
+  // Stop the sweep but keep the egg on: cancel the animation, drop the marker,
+  // and hand off to ambient mode (reseed silently so it doesn't chime everything
+  // already under the playhead). Used when a nav button is tapped mid-sweep.
+  function stopSweep(): void {
+    if (!sweepRunning && !sweepActive) return;
+    cancelAnimationFrame(sweepRaf);
+    sweepRunning = false;
+    sweepActive = false;
+    ui.musicSweeping = false;
+    ambientSeeded = false;
   }
 
   // Activate/deactivate. untrack keeps the sweep's reads of zoom/scroll state
@@ -570,11 +598,38 @@
     scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
   });
 
+  // Jump-to-today requests from the toolbar's date/zoom buttons. Tapping these
+  // mid-sweep stops the sweep (egg stays on) before recentering on today.
   $effect(() => {
     if (typeof window === 'undefined') return;
-    const handler = (): void => jumpToToday();
+    const handler = (): void => {
+      stopSweep();
+      jumpToToday();
+    };
     window.addEventListener('cal:jump-today', handler);
     return () => window.removeEventListener('cal:jump-today', handler);
+  });
+
+  // Recenter on the current date when the tab returns from the background after
+  // an inactivity period. clock.now / today.value are refreshed by their own
+  // visibility listeners; defer one frame so todayPx reflects them.
+  const BACKGROUND_RECENTER_MS = 60_000;
+  let hiddenAt = 0;
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const onVis = (): void => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (hiddenAt && Date.now() - hiddenAt > BACKGROUND_RECENTER_MS) {
+        stopSweep();
+        requestAnimationFrame(() => jumpToToday());
+      }
+      hiddenAt = 0;
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   });
 
   $effect(() => {
