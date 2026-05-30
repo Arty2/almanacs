@@ -44,6 +44,9 @@ export type LaneSpan = {
   // The voice this span sounds at (row + sub-lane, see voiceStep), not the raw
   // collision lane.
   lane: number;
+  // The raw collision lane within the row (0-based), which fixes the event
+  // pill's vertical position. The seek line bows to this lane's pill centre.
+  subLane: number;
 };
 
 // Which events the playhead sits inside at instant `ms`, keyed by span with its
@@ -67,17 +70,19 @@ export function activeFeedsAt(ms: number, spans: LaneSpan[]): Set<string> {
   return out;
 }
 
-// Which rows the playhead SWEPT ACROSS between `fromMs` and `toMs` — i.e. any
-// event whose [start, end) overlaps that interval. The sweep moves fast (days
-// per frame), so a row is "touched" if the playhead passed through any of its
-// events this frame, not only if it's sitting inside one at the instant `toMs`.
-// This is what plucks the elastic string as the line races by.
-export function sweptFeeds(fromMs: number, toMs: number, spans: LaneSpan[]): Set<string> {
+// Which rows the playhead SWEPT ACROSS between `fromMs` and `toMs`, mapped to the
+// collision lane of a crossed event in that row — i.e. any event whose
+// [start, end) overlaps that interval. The sweep moves fast (days per frame), so
+// a row is "touched" if the playhead passed through any of its events this frame,
+// not only if it's sitting inside one at the instant `toMs`. This is what plucks
+// the elastic string; the lane tells it which pill (vertically) to bow toward —
+// the last-crossed event wins when several in one row are swept on one frame.
+export function sweptLanes(fromMs: number, toMs: number, spans: LaneSpan[]): Map<string, number> {
   const lo = Math.min(fromMs, toMs);
   const hi = Math.max(fromMs, toMs);
-  const out = new Set<string>();
+  const out = new Map<string, number>();
   for (const s of spans) {
-    if (s.startMs < hi && s.endMs > lo) out.add(s.feedId);
+    if (s.startMs < hi && s.endMs > lo) out.set(s.feedId, s.subLane);
   }
   return out;
 }

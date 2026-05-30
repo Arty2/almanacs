@@ -5,7 +5,7 @@ import {
   voiceStep,
   activeLanesAt,
   activeFeedsAt,
-  sweptFeeds,
+  sweptLanes,
   crossings,
   uniqueVoices,
   sweepDurationMs,
@@ -79,9 +79,9 @@ describe('countdownToneIndex', () => {
 
 describe('activeLanesAt', () => {
   const spans: LaneSpan[] = [
-    { key: 'a', feedId: 'f1', startMs: 100, endMs: 200, lane: 0 },
-    { key: 'b', feedId: 'f1', startMs: 150, endMs: 300, lane: 1 },
-    { key: 'c', feedId: 'f2', startMs: 0, endMs: 1000, lane: 2 },
+    { key: 'a', feedId: 'f1', startMs: 100, endMs: 200, lane: 0, subLane: 0 },
+    { key: 'b', feedId: 'f1', startMs: 150, endMs: 300, lane: 1, subLane: 1 },
+    { key: 'c', feedId: 'f2', startMs: 0, endMs: 1000, lane: 2, subLane: 0 },
   ];
 
   it('returns events under the playhead with their voice', () => {
@@ -100,9 +100,9 @@ describe('activeLanesAt', () => {
 
 describe('activeFeedsAt', () => {
   const spans: LaneSpan[] = [
-    { key: 'a', feedId: 'f1', startMs: 100, endMs: 200, lane: 0 },
-    { key: 'b', feedId: 'f1', startMs: 150, endMs: 300, lane: 1 },
-    { key: 'c', feedId: 'f2', startMs: 0, endMs: 1000, lane: 2 },
+    { key: 'a', feedId: 'f1', startMs: 100, endMs: 200, lane: 0, subLane: 0 },
+    { key: 'b', feedId: 'f1', startMs: 150, endMs: 300, lane: 1, subLane: 1 },
+    { key: 'c', feedId: 'f2', startMs: 0, endMs: 1000, lane: 2, subLane: 0 },
   ];
 
   it('collapses overlapping events to their distinct rows', () => {
@@ -119,29 +119,37 @@ describe('activeFeedsAt', () => {
   });
 });
 
-describe('sweptFeeds', () => {
+describe('sweptLanes', () => {
   const spans: LaneSpan[] = [
-    { key: 'a', feedId: 'f1', startMs: 100, endMs: 110, lane: 0 },
-    { key: 'b', feedId: 'f2', startMs: 500, endMs: 510, lane: 1 },
+    { key: 'a', feedId: 'f1', startMs: 100, endMs: 110, lane: 0, subLane: 2 },
+    { key: 'b', feedId: 'f2', startMs: 500, endMs: 510, lane: 1, subLane: 0 },
   ];
 
   it('catches a short event the playhead jumps clean over in one frame', () => {
     // Sits inside neither at the instant 200 or 300, but the interval crosses f1.
     expect(activeFeedsAt(200, spans)).toEqual(new Set());
-    expect(sweptFeeds(95, 200, spans)).toEqual(new Set(['f1']));
+    expect(sweptLanes(95, 200, spans)).toEqual(new Map([['f1', 2]]));
   });
 
-  it('collects every row swept across a wide interval', () => {
-    expect(sweptFeeds(0, 1000, spans)).toEqual(new Set(['f1', 'f2']));
+  it('collects every row swept across a wide interval with its collision lane', () => {
+    expect(sweptLanes(0, 1000, spans)).toEqual(new Map([['f1', 2], ['f2', 0]]));
   });
 
   it('is order-independent and half-open at the far edge', () => {
-    expect(sweptFeeds(200, 95, spans)).toEqual(new Set(['f1']));
-    expect(sweptFeeds(110, 500, spans)).toEqual(new Set()); // ends/starts excluded
+    expect(sweptLanes(200, 95, spans)).toEqual(new Map([['f1', 2]]));
+    expect(sweptLanes(110, 500, spans)).toEqual(new Map()); // ends/starts excluded
+  });
+
+  it('the last-crossed event in a row wins the lane', () => {
+    const two: LaneSpan[] = [
+      { key: 'a', feedId: 'f1', startMs: 100, endMs: 110, lane: 0, subLane: 0 },
+      { key: 'b', feedId: 'f1', startMs: 200, endMs: 210, lane: 0, subLane: 3 },
+    ];
+    expect(sweptLanes(0, 1000, two)).toEqual(new Map([['f1', 3]]));
   });
 
   it('is empty across a gap with no events', () => {
-    expect(sweptFeeds(110, 500, spans)).toEqual(new Set());
+    expect(sweptLanes(110, 500, spans)).toEqual(new Map());
   });
 });
 

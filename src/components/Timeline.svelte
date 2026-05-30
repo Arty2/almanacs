@@ -14,7 +14,7 @@
   import { untrack } from 'svelte';
   import {
     activeLanesAt,
-    sweptFeeds,
+    sweptLanes,
     crossings,
     uniqueVoices,
     sweepDurationMs,
@@ -293,6 +293,7 @@
           startMs: ev.start.getTime(),
           endMs: ev.end.getTime(),
           lane: voiceStep(row, ev.lane),
+          subLane: ev.lane,
         });
       }
       row++;
@@ -338,6 +339,10 @@
   let bendPos: number[] = [];
   let bendVel: number[] = [];
   let bendHold: number[] = [];
+  // The y the pluck bows toward for each row: the vertical centre of the pill the
+  // playhead last crossed in that row (updated on each pluck), so the bow's peak
+  // sits on the event rather than at the row's geometric middle.
+  let bendLaneY: number[] = [];
   let ambientSet = new Map<string, number>();
   let ambientSeeded = false;
   let ambientNow = -1;
@@ -355,7 +360,7 @@
   // the string dragged along and pinned only at the very top and bottom. Multiple
   // plucks superimpose; the line is sampled densely so it reads as a single smooth
   // curve. Springs overshoot (under-damped) so the string twangs back with a bounce.
-  function sweepBendPath(swept: Set<string>, dt: number): string {
+  function sweepBendPath(swept: Map<string, number>, dt: number): string {
     const bands = rowBands;
     const H = contentHeight;
     const X = SWEEP_SVG_LEFT; // x of the tight line in the SVG's user space
@@ -364,16 +369,24 @@
       bendPos = new Array(bands.length).fill(0);
       bendVel = new Array(bands.length).fill(0);
       bendHold = new Array(bands.length).fill(0);
+      // Default each row's pluck point to its body centre until a pill is crossed.
+      bendLaneY = bands.map((b) => b.bodyTop + (b.top + b.height - b.bodyTop) / 2);
     }
-    // Integrate per-row springs and record each row's pluck point (its vertical
-    // centre, where the event meets the string) and current amplitude.
+    // Integrate per-row springs and record each row's pluck point (the centre of
+    // the crossed event's pill) and current amplitude.
     const peaks: { y: number; amp: number }[] = [];
     let maxAbs = 0;
     for (let i = 0; i < bands.length; i++) {
       const band = bands[i]!;
       // Refresh the hold each frame the playhead is sweeping across this row's
       // events; the spring is pulled out while any hold remains, then releases.
-      if (swept.has(band.feedId)) bendHold[i] = BEND_HOLD_S;
+      const sweptLane = swept.get(band.feedId);
+      if (sweptLane !== undefined) {
+        bendHold[i] = BEND_HOLD_S;
+        // Bow toward the crossed pill's vertical centre: pills are laid out at
+        // `lane * laneH + rowPad` inside the row-body and are laneH tall.
+        bendLaneY[i] = band.bodyTop + sweptLane * laneH + rowPad + laneH / 2;
+      }
       const held = bendHold[i]! > 0;
       if (held) bendHold[i]! = Math.max(0, bendHold[i]! - dt);
       const target = held ? BEND_AMP_PX : 0;
@@ -381,22 +394,22 @@
       const accel = (target - bendPos[i]!) * BEND_STIFFNESS - bendVel[i]! * BEND_DAMPING;
       bendVel[i]! += accel * dt;
       bendPos[i]! += bendVel[i]! * dt;
-      peaks.push({ y: band.top + band.height / 2, amp: bendPos[i]! });
+      peaks.push({ y: bendLaneY[i]!, amp: bendPos[i]! });
       maxAbs = Math.max(maxAbs, Math.abs(bendPos[i]!));
     }
     if (maxAbs < 0.4) return `M ${X} 0 L ${X} ${H}`; // settled: a tight straight line
     // The line is ONE plucked string spanning the WHOLE height: pinned (zero
     // deflection) at the very top (y=0) and bottom (y=H) of the content, bowing
     // as a single smooth curve in between. Each row's spring amplitude contributes
-    // a basis that is 1 at that row's centre and falls to 0 at the two ends, so
-    // the bow's peak sits at whichever event the playhead is crossing while the
-    // rest of the string is dragged along; concurrent rows superimpose into one
-    // continuous bow. Deflection is leftward (X - …).
+    // a basis that is 1 at the crossed pill's centre and falls to 0 at the two
+    // ends, so the bow's peak sits on whichever event the playhead is crossing
+    // while the rest of the string is dragged along; concurrent rows superimpose
+    // into one continuous bow. Deflection is leftward (X - …).
     const deflectAt = (y: number): number => {
       let x = 0;
       for (const p of peaks) {
         if (p.amp === 0) continue;
-        // Half-cosine ramps: 0 at y=0, 1 at the row centre, 0 at y=H — so every
+        // Half-cosine ramps: 0 at y=0, 1 at the pill centre, 0 at y=H — so every
         // pluck stretches the entire string rather than a local band.
         const u =
           y <= p.y
@@ -493,6 +506,7 @@
     bendPos = [];
     bendVel = [];
     bendHold = [];
+    bendLaneY = [];
     sweepRunning = true;
     sweepActive = true;
     ui.musicSweeping = true;
@@ -516,7 +530,7 @@
       // Pluck every row the playhead swept across THIS frame (interval overlap),
       // not just rows it's sitting inside at this instant — the sweep covers days
       // per frame, so short events would otherwise be missed entirely.
-      const swept = sweptFeeds(phPrev, ph, spans);
+      const swept = sweptLanes(phPrev, ph, spans);
       // Sound every frame so all bells for events crossed on the same frame
       // strike together, rather than being spread across a throttle grid. The
       // uniqueVoices dedupe still caps how many distinct pitches fire at once, and
@@ -608,7 +622,10 @@
   // marks the current local time of each row's timezone on the shared date
   // grid. Row vertical extents are measured from the DOM (row height isn't
   // reliably derivable from constants), then the bend math runs reactively.
-  let rowBands = $state<{ feedId: string; top: number; height: number }[]>([]);
+  // `top`/`height` span the whole row section (sticky header included); `bodyTop`
+  // is the absolute top of the inner `.row-body`, where event pills are laid out,
+  // so the pluck can land on a pill's centre rather than the section's centre.
+  let rowBands = $state<{ feedId: string; top: number; height: number; bodyTop: number }[]>([]);
   let contentHeight = $state(0);
 
   $effect(() => {
@@ -629,11 +646,15 @@
       }
       const base = rowsEl.offsetTop;
       const sections = rowsEl.querySelectorAll<HTMLElement>(':scope > section.row');
-      const bands: { feedId: string; top: number; height: number }[] = [];
+      const bands: { feedId: string; top: number; height: number; bodyTop: number }[] = [];
       for (const s of sections) {
         const feedId = s.dataset.feedId;
         if (!feedId) continue;
-        bands.push({ feedId, top: base + s.offsetTop, height: s.offsetHeight });
+        const top = base + s.offsetTop;
+        // The row-body sits below the sticky row header; pills are positioned
+        // relative to it. (Collapsed rows have no body — fall back to the section.)
+        const body = s.querySelector<HTMLElement>(':scope > .row-body');
+        bands.push({ feedId, top, height: s.offsetHeight, bodyTop: body ? top + body.offsetTop : top });
       }
       rowBands = bands;
     });
