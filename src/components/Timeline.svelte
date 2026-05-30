@@ -26,6 +26,7 @@
     primeTimelineAudio,
     suspendTimelineAudio,
     type LaneSpan,
+    type Crossing,
   } from '../lib/timeline-music';
 
   const RIGHT_PAD_PX = 280;
@@ -312,12 +313,22 @@
   // Constant pace: one screenful every MS_PER_VIEWPORT, so the sweep keeps the
   // same feel whether it covers three screens or the whole multi-year timeline.
   const MS_PER_VIEWPORT = SWEEP_MS / SWEEP_VIEWPORTS;
-  // Most distinct bells/whistles to fire on a single frame — a dense holiday
-  // stretch would otherwise stack identical oscillators into static.
-  const MAX_VOICES_PER_STEP = 4;
   // Keep audio alive past a bell's tail (~1.1s) when disabling, so the final
   // beat of the reversed countdown rings out instead of being cut by suspend().
   const BELL_TAIL_MS = 1300;
+
+  // Strike a batch of crossings as one polyphonic chord: every distinct pitch
+  // plays at the same instant (no throttle, nothing dropped). Identical pitches
+  // are merged — stacking the same note only adds loudness, not harmony. The
+  // per-note level is equal-power normalized (1/sqrt(n)) so a fat chord sums to
+  // roughly the loudness of a single note instead of getting louder with density.
+  function ringChord(batch: Crossing[], play: (freq: number, level: number) => void): void {
+    const voices = uniqueVoices(batch, Infinity);
+    if (voices.length === 0) return;
+    const level = 1 / Math.sqrt(voices.length);
+    for (const v of voices) play(laneToFrequency(v), level);
+  }
+
   let sweepRaf = 0;
   let sweepRunning = false;
   // Marker visibility is reactive; its position is set imperatively each frame
@@ -550,14 +561,13 @@
       // not just rows it's sitting inside at this instant — the sweep covers days
       // per frame, so short events would otherwise be missed entirely.
       const swept = sweptLanes(phPrev, ph, spans);
-      // Sound every frame so all bells for events crossed on the same frame
-      // strike together, rather than being spread across a throttle grid. The
-      // uniqueVoices dedupe still caps how many distinct pitches fire at once, and
-      // the long bell tail fade keeps the density clean.
+      // Sound every frame as a chord: all events crossed on this frame strike
+      // together (no throttle, nothing dropped), gain-normalized so density
+      // doesn't increase loudness.
       const next = activeLanesAt(ph, spans);
       const { entered, exited } = crossings(prev, next);
-      for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
-      for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
+      ringChord(entered, playBell);
+      ringChord(exited, playWhistle);
       prev = next;
       const px = msToPx(ph, rangeStart, pxPerDay);
       // Only the timeline scrolls; the line is sticky-pinned to the scrollport
@@ -635,8 +645,8 @@
       return;
     }
     const { entered, exited } = crossings(ambientSet, next);
-    for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
-    for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
+    ringChord(entered, playBell);
+    ringChord(exited, playWhistle);
     ambientSet = next;
     ambientNow = now;
   });
