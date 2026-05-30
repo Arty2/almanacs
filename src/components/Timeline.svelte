@@ -305,13 +305,9 @@
   // Constant pace: one screenful every MS_PER_VIEWPORT, so the sweep keeps the
   // same feel whether it covers three screens or the whole multi-year timeline.
   const MS_PER_VIEWPORT = SWEEP_MS / SWEEP_VIEWPORTS;
-  // Most distinct bells/whistles to fire in a single sound batch — a dense
-  // holiday stretch would otherwise stack into static.
+  // Most distinct bells/whistles to fire on a single frame — a dense holiday
+  // stretch would otherwise stack identical oscillators into static.
   const MAX_VOICES_PER_STEP = 4;
-  // Sounds are emitted on this real-time grid, not every frame: rapidly-entered
-  // voices collapse into one deduped batch, which keeps the fast sweep from
-  // stacking thousands of oscillators into a screech.
-  const SWEEP_SOUND_GAP_MS = 80;
   // Keep audio alive past a bell's tail (~1.1s) when disabling, so the final
   // beat of the reversed countdown rings out instead of being cut by suspend().
   const BELL_TAIL_MS = 1300;
@@ -335,10 +331,6 @@
   const BEND_AMP_PX = 16;
   const BEND_STIFFNESS = 240;
   const BEND_DAMPING = 16;
-  // Vertical reach (px) of a pluck's bump above and below its row centre. The
-  // deflection is local to this band and flat beyond, so the line doesn't bow
-  // through the empty space below the last event row.
-  const BEND_REACH = 90;
   // How long (s) a row stays pulled out after the playhead sweeps past one of
   // its events, so a fast single-frame pass still yields a full visible pluck
   // before the spring releases and twangs back.
@@ -354,7 +346,7 @@
   // End-of-sweep flourish: when the sweep reaches the timeline's end the whole
   // screen fades to black, the view snaps to today while hidden, then fades back
   // in already centred. '' = no overlay, 'out' = going black, 'in' = fading back.
-  const FADE_MS = 450;
+  const FADE_MS = 3000;
   let sweepFade = $state<'' | 'in' | 'out'>('');
   let fadeTimers: ReturnType<typeof setTimeout>[] = [];
 
@@ -396,32 +388,40 @@
       maxAbs = Math.max(maxAbs, Math.abs(bendPos[i]!));
     }
     if (maxAbs < 0.4) return `M ${X} 0 L ${X} ${H}`; // settled: a tight straight line
-    // Deflection of the string at height y: sum of each pluck's displacement.
-    // Each pluck is a LOCAL bump — it peaks at its own row centre and eases back
-    // to the tight line within BEND_REACH px above and below (raised-cosine, so
-    // it's smooth with no kink), staying flat beyond. Confining the bump this way
-    // stops the line bowing through the empty space below the last event row.
-    // Subtracted from X so the bow goes to the LEFT.
+    // The line is ONE plucked string across the rows: straight above the first
+    // row and below the last, bowing as a single smooth curve between, pinned
+    // (zero deflection) at both ends of the rows region so it meets the straight
+    // segments with no kink. Each row's spring amplitude contributes a basis that
+    // is 1 at that row's centre and falls to 0 at the rows-region ends, so the
+    // bow's peak sits at whichever event the playhead is crossing; concurrent
+    // rows superimpose into one continuous bow. Deflection is leftward (X - …).
+    const top0 = bands[0]!.top;
+    const last = bands[bands.length - 1]!;
+    const botN = last.top + last.height;
+    const span = Math.max(1, botN - top0);
     const deflectAt = (y: number): number => {
       let x = 0;
       for (const p of peaks) {
         if (p.amp === 0) continue;
-        const dist = Math.abs(y - p.y);
-        if (dist >= BEND_REACH) continue;
-        // Raised cosine: 1 at the peak, 0 at +/-BEND_REACH, flat tangent at both.
-        x += p.amp * (0.5 + 0.5 * Math.cos((Math.PI * dist) / BEND_REACH));
+        // Half-cosine ramps: 0 at top0, 1 at the row centre, 0 at botN — so every
+        // pluck spans the whole rows region rather than a fixed local radius.
+        const u =
+          y <= p.y
+            ? (y - top0) / Math.max(1, p.y - top0)
+            : (botN - y) / Math.max(1, botN - p.y);
+        x += p.amp * (0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, u))));
       }
       return X - x;
     };
-    // Sample the deflection densely down the whole height and join the points
-    // with a smooth Catmull-Rom-ish path so the line is a single continuous
-    // curve — bending everywhere, pinned only at the two ends.
-    const STEP = 14; // px between samples
-    const ys: number[] = [0];
-    for (let y = STEP; y < H; y += STEP) ys.push(y);
-    ys.push(H);
+    // Sample the bow densely across the rows region only; above and below it is a
+    // straight vertical. Join the samples with Catmull-Rom → cubic Bézier so the
+    // bow is a single smooth curve.
+    const STEP = Math.max(8, span / 24);
+    const ys: number[] = [top0];
+    for (let y = top0 + STEP; y < botN; y += STEP) ys.push(y);
+    ys.push(botN);
     const pts = ys.map((y) => ({ x: deflectAt(y), y }));
-    let d = `M ${pts[0]!.x.toFixed(2)} ${pts[0]!.y.toFixed(2)}`;
+    let d = `M ${X} 0 L ${X.toFixed(2)} ${top0.toFixed(2)}`;
     for (let i = 0; i < pts.length - 1; i++) {
       const p0 = pts[i === 0 ? 0 : i - 1]!;
       const p1 = pts[i]!;
@@ -434,6 +434,7 @@
       const c2y = p2.y - (p3.y - p1.y) / 6;
       d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
     }
+    d += ` L ${X} ${H}`; // straight below the last row
     return d;
   }
 
@@ -488,7 +489,6 @@
     let prev = activeLanesAt(startMs, spans);
     let ph = startMs;
     let tPrev = performance.now();
-    let lastSoundT = tPrev;
     // Reset the bend springs so the line starts tight.
     bendPos = [];
     bendVel = [];
@@ -517,18 +517,15 @@
       // not just rows it's sitting inside at this instant — the sweep covers days
       // per frame, so short events would otherwise be missed entirely.
       const swept = sweptFeeds(phPrev, ph, spans);
-      // Emit sounds on a real-time grid, advancing `prev` only when we sound, so
-      // voices entered between grid points collapse into one deduped batch
-      // instead of firing every frame and stacking into static. The O(n) active
-      // scan only runs on the grid (~12/s), not every frame.
-      if (tNow - lastSoundT >= SWEEP_SOUND_GAP_MS) {
-        const next = activeLanesAt(ph, spans);
-        const { entered, exited } = crossings(prev, next);
-        for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
-        for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
-        prev = next;
-        lastSoundT = tNow;
-      }
+      // Sound every frame so all bells for events crossed on the same frame
+      // strike together, rather than being spread across a throttle grid. The
+      // uniqueVoices dedupe still caps how many distinct pitches fire at once, and
+      // the long bell tail fade keeps the density clean.
+      const next = activeLanesAt(ph, spans);
+      const { entered, exited } = crossings(prev, next);
+      for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
+      for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
+      prev = next;
       const px = msToPx(ph, rangeStart, pxPerDay);
       // Only the timeline scrolls; the line is sticky-pinned to the scrollport
       // (CSS) and merely translated to its on-screen position. It ramps from the

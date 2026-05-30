@@ -260,18 +260,27 @@ function ready(): boolean {
   return true;
 }
 
+// Tail shaping shared by bell and whistle: when the ringing body ends at tBody,
+// a TAIL_FADE_S linear ramp to true zero begins, and TAIL_SILENCE_S of guaranteed
+// silence follows before the oscillators stop. Because the fade reaches zero
+// (TAIL_FADE_S) well before the stop (TAIL_SILENCE_S later), the waveform is
+// already flat at stop time, so there is no end-click.
+const TAIL_FADE_S = 0.5; // volume fade-out, starts when the silence window starts
+const TAIL_SILENCE_S = 0.6; // silence held before the oscillators stop
+
 export function playBell(freq: number): void {
   if (!ready() || !ctx || !master) return;
   const now = ctx.currentTime + 0.02;
   const dur = 1.8; // long ring so bells sustain and reverberate into each other
+  const tBody = now + dur;
   const env = ctx.createGain();
   env.connect(master);
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(1, now + 0.003); // sharp attack = metallic ting
-  env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
-  // Ramp the remainder to true zero before the oscillators stop, so the note ends
-  // on silence rather than truncating a non-zero waveform into a click.
-  env.gain.linearRampToValueAtTime(0, now + dur + 0.04);
+  env.gain.exponentialRampToValueAtTime(0.0008, tBody);
+  // At the body's end, fade linearly to true zero over TAIL_FADE_S, then hold
+  // silence for the rest of TAIL_SILENCE_S before stopping — no end-click.
+  env.gain.linearRampToValueAtTime(0, tBody + TAIL_FADE_S);
   for (const p of BELL_PARTIALS) {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -281,7 +290,7 @@ export function playBell(freq: number): void {
     osc.connect(pg);
     pg.connect(env);
     osc.start(now);
-    osc.stop(now + dur + 0.05);
+    osc.stop(tBody + TAIL_SILENCE_S);
   }
 }
 
@@ -294,16 +303,18 @@ export function playWhistle(freq: number): void {
   // A short upward glide reads as a whistle rather than a plain beep.
   osc.frequency.setValueAtTime(freq * 0.92, now);
   osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + dur);
+  const tBody = now + dur;
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(0.6, now + 0.03);
-  env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
-  // Settle to true zero before stopping, so the note doesn't end on a click.
-  env.gain.linearRampToValueAtTime(0, now + dur + 0.04);
+  env.gain.exponentialRampToValueAtTime(0.0008, tBody);
+  // Same tail as the bell: fade to true zero over TAIL_FADE_S from the body's
+  // end, then hold silence to the stop — no end-click.
+  env.gain.linearRampToValueAtTime(0, tBody + TAIL_FADE_S);
   osc.connect(env);
   env.connect(master);
   osc.start(now);
-  osc.stop(now + dur + 0.05);
+  osc.stop(tBody + TAIL_SILENCE_S);
 }
 
 // Ascending major triad (C5, E5, G5) for the activation countdown: "ding,
