@@ -12,6 +12,7 @@
   import { wheelZoom } from '../lib/wheel-zoom';
   import { clock } from '../lib/clock.svelte';
   import { untrack } from 'svelte';
+  import { fade } from 'svelte/transition';
   import {
     activeLanesAt,
     sweptLanes,
@@ -346,12 +347,16 @@
   let ambientSet = new Map<string, number>();
   let ambientSeeded = false;
   let ambientNow = -1;
-  // End-of-sweep flourish: when the sweep reaches the timeline's end the whole
-  // screen fades to black, the view snaps to today while hidden, then fades back
-  // in already centred. '' = no overlay, 'out' = going black, 'in' = fading back.
-  const FADE_MS = 3000;
-  let sweepFade = $state<'' | 'in' | 'out'>('');
-  let fadeTimers: ReturnType<typeof setTimeout>[] = [];
+  // End-of-sweep flourish: a 1s fade to black begins FADE_MS before the seeker
+  // reaches the end (so it's fully black right as it arrives); at full black the
+  // view snaps to today, then a 1s fade back in reveals it already centred. The
+  // fade is driven by Svelte's `transition:fade` on the overlay, which reliably
+  // animates the mount/unmount — hand-rolled opacity toggling raced the reactive
+  // scheduler and never painted the start state, so it cut instead of faded.
+  const FADE_MS = 1000;
+  let showBlackout = $state(false);
+  // Once-guard so the loop fires the fade exactly once per sweep (reset per run).
+  let fadeStarted = false;
 
   // Advance each row's pluck spring by dt seconds (pulled out while the row is
   // active, back to zero otherwise) and return an SVG path for the whole line as
@@ -442,37 +447,26 @@
     return d;
   }
 
-  // Cancel any in-flight fade and hide the overlay immediately. Called when the
-  // sweep is interrupted or the egg is toggled so a black screen can't get stuck.
+  // Cancel any in-flight fade and clear the overlay. Called when the sweep is
+  // interrupted or the egg is toggled so a black screen can't get stuck — setting
+  // showBlackout false reverses an in-progress fade-to-black back out (≤1s).
   function clearFade(): void {
-    for (const t of fadeTimers) clearTimeout(t);
-    fadeTimers = [];
-    sweepFade = '';
+    showBlackout = false;
+    fadeStarted = false;
   }
 
-  // The end-of-sweep flourish: fade the whole screen to black, snap to today
-  // while hidden (instant, so the scroll-back is never seen), then fade back in
-  // already centred. Only the natural end of the sweep calls this.
-  function finishSweep(): void {
-    clearFade();
-    sweepFade = 'in'; // mount the overlay transparent (base opacity 0)
-    // The overlay must actually PAINT at opacity 0 before we switch it to 1, or
-    // the browser coalesces 0→1 into one style with nothing to transition from
-    // (this is why the fade-out looked like an instant cut). A single rAF still
-    // runs before that first paint; a *nested* rAF runs after it, so the
-    // opacity:1 change then animates over FADE_MS.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => { sweepFade = 'out'; });
-    });
-    fadeTimers.push(
-      setTimeout(() => {
-        // Fully black now: recenter on today instantly (not the smooth
-        // jumpToToday()) so the scroll-back is hidden, then fade back in.
-        if (scrollEl) scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
-        requestAnimationFrame(() => { sweepFade = 'in'; }); // 1 → 0, fade back in
-        fadeTimers.push(setTimeout(() => { sweepFade = ''; }, FADE_MS));
-      }, FADE_MS),
-    );
+  // Fires when the overlay has finished fading to full black (transition:fade
+  // introend). The single, definitive end of the flourish: cancel the sweep loop
+  // (so no stray frame overwrites the jump), recenter on today INSTANTLY while
+  // black, then drop the overlay to fade back in already centred.
+  function finishBlackout(): void {
+    cancelAnimationFrame(sweepRaf);
+    sweepRunning = false;
+    sweepActive = false;
+    ui.musicSweeping = false;
+    ambientSeeded = false;
+    if (scrollEl) scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
+    showBlackout = false; // fade back in from black over FADE_MS
   }
 
   // One accelerated pass of a virtual playhead, starting at the current left
@@ -507,6 +501,7 @@
     bendVel = [];
     bendHold = [];
     bendLaneY = [];
+    fadeStarted = false;
     sweepRunning = true;
     sweepActive = true;
     ui.musicSweeping = true;
@@ -527,6 +522,14 @@
       tPrev = tNow;
       const phPrev = ph;
       ph = Math.min(endMs, ph + speed * dtMs);
+      // Begin the fade to black FADE_MS (real time) before the seeker reaches the
+      // end — speed*FADE_MS is the timeline-ms it covers in that last second — so
+      // it's fully black right as it arrives. The seeker keeps running (and
+      // sounding) underneath. finishBlackout (the fade's introend) owns the rest.
+      if (!fadeStarted && ph >= endMs - speed * FADE_MS) {
+        fadeStarted = true;
+        showBlackout = true;
+      }
       // Pluck every row the playhead swept across THIS frame (interval overlap),
       // not just rows it's sitting inside at this instant — the sweep covers days
       // per frame, so short events would otherwise be missed entirely.
@@ -554,11 +557,15 @@
       if (ph < endMs) {
         sweepRaf = requestAnimationFrame(step);
       } else {
+        // Reached the end. The fade-to-black is already in progress (started
+        // FADE_MS ago); finishBlackout() does the snap + fade-back when it turns
+        // fully black, so just stop the loop here. (If for some reason the fade
+        // never armed — e.g. no events at all — fall back to finishing now.)
         sweepRunning = false;
         sweepActive = false;
         ui.musicSweeping = false;
         ambientSeeded = false; // hand off to the ambient effect's next tick
-        finishSweep(); // fade to black, snap to today while hidden, fade back in
+        if (!fadeStarted) finishBlackout();
       }
     };
     sweepRaf = requestAnimationFrame(step);
@@ -1146,8 +1153,13 @@
   </div>
 </main>
 
-{#if sweepFade}
-  <div class="sweep-fade" data-state={sweepFade} style="--sweep-fade-ms: {FADE_MS}ms" aria-hidden="true"></div>
+{#if showBlackout}
+  <div
+    class="sweep-fade"
+    transition:fade={{ duration: FADE_MS }}
+    onintroend={finishBlackout}
+    aria-hidden="true"
+  ></div>
 {/if}
 
 <style>
@@ -1238,11 +1250,8 @@
     z-index: 9999;
     background: #000;
     pointer-events: none;
-    opacity: 0;
-    transition: opacity var(--sweep-fade-ms, 450ms) ease;
-  }
-  .sweep-fade[data-state='out'] {
-    opacity: 1;
+    /* opacity is animated by Svelte's transition:fade (mount = fade to black,
+       unmount = fade back in), so no static opacity/transition here. */
   }
   .temp-line {
     position: absolute;
