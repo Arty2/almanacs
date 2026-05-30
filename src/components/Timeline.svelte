@@ -355,6 +355,9 @@
   // scheduler and never painted the start state, so it cut instead of faded.
   const FADE_MS = 1000;
   let showBlackout = $state(false);
+  // Fade-to-black duration, set per sweep to the time the seeker takes to cross
+  // the trailing pad (date end → true end). The fade-back-in keeps FADE_MS.
+  let fadeOutMs = $state(FADE_MS);
   // Once-guard so the loop fires the fade exactly once per sweep (reset per run).
   let fadeStarted = false;
 
@@ -492,6 +495,14 @@
     // Timeline-ms advanced per real-ms; the playhead is integrated by this rate
     // each frame (below) rather than from absolute elapsed time.
     const speed = durationMs > 0 ? (endMs - startMs) / durationMs : endMs - startMs;
+    // The fade to black begins when the seeker reaches the END OF THE DATED
+    // timeline (totalWidth) and lasts exactly as long as the seeker takes to
+    // cross the trailing RIGHT_PAD_PX — so it's fully black right as the seeker
+    // hits the true right edge (endPx). fadeStartMs is clamped to the start in
+    // case the view is already inside the pad when the sweep is armed.
+    const dateEndMs = pxToDate(totalWidth, rangeStart, pxPerDay).getTime();
+    const fadeStartMs = Math.max(dateEndMs, startMs);
+    fadeOutMs = speed > 0 ? Math.max(150, (endMs - fadeStartMs) / speed) : FADE_MS;
     const spans = timedLaneSpans;
     let prev = activeLanesAt(startMs, spans);
     let ph = startMs;
@@ -522,11 +533,11 @@
       tPrev = tNow;
       const phPrev = ph;
       ph = Math.min(endMs, ph + speed * dtMs);
-      // Begin the fade to black FADE_MS (real time) before the seeker reaches the
-      // end — speed*FADE_MS is the timeline-ms it covers in that last second — so
-      // it's fully black right as it arrives. The seeker keeps running (and
-      // sounding) underneath. finishBlackout (the fade's introend) owns the rest.
-      if (!fadeStarted && ph >= endMs - speed * FADE_MS) {
+      // Begin the fade to black when the seeker reaches the dated timeline's end;
+      // it lasts fadeOutMs (the pad-crossing time) so it's fully black right as
+      // the seeker hits the true edge. The seeker keeps running (and sounding)
+      // underneath. finishBlackout (the fade's introend) owns the rest.
+      if (!fadeStarted && ph >= fadeStartMs) {
         fadeStarted = true;
         showBlackout = true;
       }
@@ -1156,7 +1167,8 @@
 {#if showBlackout}
   <div
     class="sweep-fade"
-    transition:fade={{ duration: FADE_MS }}
+    in:fade={{ duration: fadeOutMs }}
+    out:fade={{ duration: FADE_MS }}
     onintroend={finishBlackout}
     aria-hidden="true"
   ></div>
