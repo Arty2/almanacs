@@ -4,6 +4,7 @@ import {
   laneToFrequency,
   voiceStep,
   activeLanesAt,
+  activeFeedsAt,
   crossings,
   uniqueVoices,
   sweepDurationMs,
@@ -77,9 +78,9 @@ describe('countdownToneIndex', () => {
 
 describe('activeLanesAt', () => {
   const spans: LaneSpan[] = [
-    { key: 'a', startMs: 100, endMs: 200, lane: 0 },
-    { key: 'b', startMs: 150, endMs: 300, lane: 1 },
-    { key: 'c', startMs: 0, endMs: 1000, lane: 2 },
+    { key: 'a', feedId: 'f1', startMs: 100, endMs: 200, lane: 0 },
+    { key: 'b', feedId: 'f1', startMs: 150, endMs: 300, lane: 1 },
+    { key: 'c', feedId: 'f2', startMs: 0, endMs: 1000, lane: 2 },
   ];
 
   it('returns events under the playhead with their voice', () => {
@@ -93,6 +94,27 @@ describe('activeLanesAt', () => {
   it('is half-open: active at start, inactive at end', () => {
     expect(activeLanesAt(100, spans)).toEqual(new Map([['a', 0], ['c', 2]]));
     expect(activeLanesAt(200, spans)).toEqual(new Map([['b', 1], ['c', 2]]));
+  });
+});
+
+describe('activeFeedsAt', () => {
+  const spans: LaneSpan[] = [
+    { key: 'a', feedId: 'f1', startMs: 100, endMs: 200, lane: 0 },
+    { key: 'b', feedId: 'f1', startMs: 150, endMs: 300, lane: 1 },
+    { key: 'c', feedId: 'f2', startMs: 0, endMs: 1000, lane: 2 },
+  ];
+
+  it('collapses overlapping events to their distinct rows', () => {
+    expect(activeFeedsAt(160, spans)).toEqual(new Set(['f1', 'f2']));
+  });
+
+  it('is half-open and drops rows once their events end', () => {
+    expect(activeFeedsAt(500, spans)).toEqual(new Set(['f2']));
+    expect(activeFeedsAt(200, spans)).toEqual(new Set(['f1', 'f2']));
+  });
+
+  it('is empty when the playhead sits in a gap', () => {
+    expect(activeFeedsAt(-1, spans)).toEqual(new Set());
   });
 });
 

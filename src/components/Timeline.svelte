@@ -14,6 +14,7 @@
   import { untrack } from 'svelte';
   import {
     activeLanesAt,
+    activeFeedsAt,
     crossings,
     uniqueVoices,
     sweepDurationMs,
@@ -288,6 +289,7 @@
       for (const ev of rowLanes[feed.id]?.laneEvents ?? []) {
         spans.push({
           key: feed.id + ':' + ev.uid + ':' + ev.start.getTime(),
+          feedId: feed.id,
           startMs: ev.start.getTime(),
           endMs: ev.end.getTime(),
           lane: voiceStep(row, ev.lane),
@@ -320,9 +322,58 @@
   // reactive-flush lag that would otherwise make it jitter.
   let sweepActive = $state(false);
   let sweepMarkerEl = $state<HTMLDivElement | undefined>(undefined);
+  let sweepPathEl = $state<SVGPathElement | undefined>(undefined);
+  // How far (px) the line bows sideways when crossing an event, and the spring
+  // that pulls each row's bend back to a tight line — under-damped so it
+  // overshoots and bounces before settling.
+  const BEND_AMP_PX = 14;
+  const BEND_STIFFNESS = 240;
+  const BEND_DAMPING = 16;
+  // Per-row bend offset + velocity, indexed parallel to rowBands; integrated
+  // each frame toward a target (BEND_AMP_PX while the row is active, else 0).
+  let bendPos: number[] = [];
+  let bendVel: number[] = [];
   let ambientSet = new Map<string, number>();
   let ambientSeeded = false;
   let ambientNow = -1;
+
+  // Advance each row's bend spring by dt seconds toward its target (bowed while
+  // the row is active, straight otherwise) and return an SVG path that bulges
+  // sideways at the bent rows with smooth control points, snapping tight where
+  // the bend has settled to zero. The vertical line lives in the marker's own
+  // 0-origin space; x=0 is the tight line, positive x bows right.
+  function sweepBendPath(activeFeeds: Set<string>, dt: number): string {
+    const bands = rowBands;
+    if (bands.length === 0) return `M 0 0 L 0 ${contentHeight}`;
+    if (bendPos.length !== bands.length) {
+      bendPos = new Array(bands.length).fill(0);
+      bendVel = new Array(bands.length).fill(0);
+    }
+    const segs = [`M 0 0`, `L 0 ${bands[0]!.top}`];
+    for (let i = 0; i < bands.length; i++) {
+      const band = bands[i]!;
+      const target = activeFeeds.has(band.feedId) ? BEND_AMP_PX : 0;
+      // Critically-ish damped spring (Hooke + viscous damping), integrated
+      // semi-implicitly so it stays stable at variable frame deltas.
+      const accel = (target - bendPos[i]!) * BEND_STIFFNESS - bendVel[i]! * BEND_DAMPING;
+      bendVel[i]! += accel * dt;
+      bendPos[i]! += bendVel[i]! * dt;
+      const x = bendPos[i]!;
+      const top = band.top;
+      const bot = band.top + band.height;
+      const mid = (top + bot) / 2;
+      if (Math.abs(x) < 0.4 && Math.abs(bendVel[i]!) < 0.4) {
+        // Settled: keep it a tight straight segment through this row.
+        segs.push(`L 0 ${bot}`);
+      } else {
+        // Bow out to x at the row's midpoint, back to the tight line by its end.
+        segs.push(`Q ${x} ${top + (mid - top) * 0.5} ${x} ${mid}`);
+        segs.push(`Q ${x} ${bot - (bot - mid) * 0.5} 0 ${bot}`);
+      }
+    }
+    segs.push(`L 0 ${contentHeight}`);
+    return segs.join(' ');
+  }
 
   // One accelerated pass of a virtual playhead, starting at the current left
   // edge and travelling all the way to the end of the timeline, ringing a bell
@@ -346,9 +397,13 @@
     const speed = durationMs > 0 ? (endMs - startMs) / durationMs : endMs - startMs;
     const spans = timedLaneSpans;
     let prev = activeLanesAt(startMs, spans);
+    let activeFeeds = activeFeedsAt(startMs, spans);
     let ph = startMs;
     let tPrev = performance.now();
     let lastSoundT = tPrev;
+    // Reset the bend springs so the line starts tight.
+    bendPos = [];
+    bendVel = [];
     sweepRunning = true;
     sweepActive = true;
     ui.musicSweeping = true;
@@ -356,9 +411,9 @@
       // Integrate the playhead with a clamped per-frame delta: a delayed or
       // background-throttled frame just slows the sweep instead of jumping the
       // centred line forward to "catch up".
-      const dt = Math.min(tNow - tPrev, 48);
+      const dtMs = Math.min(tNow - tPrev, 48);
       tPrev = tNow;
-      ph = Math.min(endMs, ph + speed * dt);
+      ph = Math.min(endMs, ph + speed * dtMs);
       // Emit sounds on a real-time grid, advancing `prev` only when we sound, so
       // voices entered between grid points collapse into one deduped batch
       // instead of firing every frame and stacking into static. The O(n) active
@@ -369,6 +424,7 @@
         for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
         for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
         prev = next;
+        activeFeeds = activeFeedsAt(ph, spans);
         lastSoundT = tNow;
       }
       const px = msToPx(ph, rangeStart, pxPerDay);
@@ -380,6 +436,8 @@
       const scroll = Math.max(startLeft, px - vw / 2);
       if (scrollEl) scrollEl.scrollLeft = scroll;
       if (sweepMarkerEl) sweepMarkerEl.style.transform = `translateX(${px - scroll}px)`;
+      // Bend the line at the rows it's crossing; springs settle it back tight.
+      if (sweepPathEl) sweepPathEl.setAttribute('d', sweepBendPath(activeFeeds, dtMs / 1000));
       if (ph < endMs) {
         sweepRaf = requestAnimationFrame(step);
       } else {
@@ -892,7 +950,9 @@
            loop translateX()es it to the play line's on-screen position. Its inner
            bar is absolutely positioned, so the anchor adds no layout. -->
       <div class="music-sweep" bind:this={sweepMarkerEl} aria-hidden="true">
-        <i style="height: {contentHeight}px"></i>
+        <svg class="music-sweep-svg" width="1" height={contentHeight} aria-hidden="true">
+          <path bind:this={sweepPathEl} d="M 0 0 L 0 {contentHeight}" fill="none" />
+        </svg>
       </div>
     {/if}
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
@@ -1027,14 +1087,22 @@
     pointer-events: none;
     will-change: transform;
   }
-  .music-sweep > i {
+  .music-sweep-svg {
     position: absolute;
     left: 0;
     top: 0;
-    width: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 6px var(--accent);
+    width: 1px;
+    /* The bend (and its bounce overshoot) draws outside this 1px box on both
+       sides; overflow:visible lets the whole bowed path render. */
+    overflow: visible;
     opacity: 0.85;
+    filter: drop-shadow(0 0 6px var(--accent));
+  }
+  .music-sweep-svg path {
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
   }
   .temp-line {
     position: absolute;

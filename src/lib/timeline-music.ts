@@ -36,6 +36,9 @@ export function laneToFrequency(step: number, base = BASE_HZ): number {
 
 export type LaneSpan = {
   key: string;
+  // The calendar row (feed) this span belongs to, so the seek line can bow at
+  // the rows it's currently crossing.
+  feedId: string;
   startMs: number;
   endMs: number;
   // The voice this span sounds at (row + sub-lane, see voiceStep), not the raw
@@ -50,6 +53,16 @@ export function activeLanesAt(ms: number, spans: LaneSpan[]): Map<string, number
   const out = new Map<string, number>();
   for (const s of spans) {
     if (ms >= s.startMs && ms < s.endMs) out.set(s.key, s.lane);
+  }
+  return out;
+}
+
+// Which rows (feeds) have an event under the playhead at `ms` — the seek line
+// bows at these. Half-open like activeLanesAt.
+export function activeFeedsAt(ms: number, spans: LaneSpan[]): Set<string> {
+  const out = new Set<string>();
+  for (const s of spans) {
+    if (ms >= s.startMs && ms < s.endMs) out.add(s.feedId);
   }
   return out;
 }
