@@ -12,8 +12,10 @@
   import { wheelZoom } from '../lib/wheel-zoom';
   import { clock } from '../lib/clock.svelte';
   import { untrack } from 'svelte';
+  import { fade } from 'svelte/transition';
   import {
     activeLanesAt,
+    sweptLanes,
     crossings,
     uniqueVoices,
     sweepDurationMs,
@@ -271,6 +273,11 @@
 
   let scrollEl: HTMLElement | undefined = $state();
   let didCenter = false;
+  // Reactive sibling of didCenter: drives the first-paint reveal. The scroll
+  // content is held invisible until the first centre lands, so Firefox Android
+  // (which paints before measuring the viewport width) doesn't show a left→centre
+  // jump as the centering effect snaps scrollLeft on the next frame.
+  let centered = $state(false);
 
   // --- Timeline music Easter egg (armed by the 5s hold on the date button) ---
   // Events in expanded rows become notes: each row gets its own base pitch (by
@@ -288,9 +295,11 @@
       for (const ev of rowLanes[feed.id]?.laneEvents ?? []) {
         spans.push({
           key: feed.id + ':' + ev.uid + ':' + ev.start.getTime(),
+          feedId: feed.id,
           startMs: ev.start.getTime(),
           endMs: ev.end.getTime(),
           lane: voiceStep(row, ev.lane),
+          subLane: ev.lane,
         });
       }
       row++;
@@ -303,13 +312,9 @@
   // Constant pace: one screenful every MS_PER_VIEWPORT, so the sweep keeps the
   // same feel whether it covers three screens or the whole multi-year timeline.
   const MS_PER_VIEWPORT = SWEEP_MS / SWEEP_VIEWPORTS;
-  // Most distinct bells/whistles to fire in a single sound batch — a dense
-  // holiday stretch would otherwise stack into static.
+  // Most distinct bells/whistles to fire on a single frame — a dense holiday
+  // stretch would otherwise stack identical oscillators into static.
   const MAX_VOICES_PER_STEP = 4;
-  // Sounds are emitted on this real-time grid, not every frame: rapidly-entered
-  // voices collapse into one deduped batch, which keeps the fast sweep from
-  // stacking thousands of oscillators into a screech.
-  const SWEEP_SOUND_GAP_MS = 80;
   // Keep audio alive past a bell's tail (~1.1s) when disabling, so the final
   // beat of the reversed countdown rings out instead of being cut by suspend().
   const BELL_TAIL_MS = 1300;
@@ -320,16 +325,164 @@
   // reactive-flush lag that would otherwise make it jitter.
   let sweepActive = $state(false);
   let sweepMarkerEl = $state<HTMLDivElement | undefined>(undefined);
+  let sweepPathEl = $state<SVGPathElement | undefined>(undefined);
+  // The straight line is drawn at this x inside the SVG's user space; the SVG box
+  // is offset left by the same amount so on-screen position is unchanged. This
+  // leaves room to the left for the leftward bend.
+  const SWEEP_SVG_LEFT = 50;
+  // How far left (px) a single event plucks the string at its touch point, and
+  // the spring that pulls each pluck back to zero — under-damped so it overshoots
+  // and twangs before settling.
+  const BEND_AMP_PX = 12;
+  const BEND_STIFFNESS = 520;
+  const BEND_DAMPING = 24;
+  // How long (s) a row stays pulled out after the playhead sweeps past one of
+  // its events, so a fast single-frame pass still yields a full visible pluck
+  // before the spring releases and twangs back.
+  const BEND_HOLD_S = 0.09;
+  // Per-row pluck amplitude + velocity + remaining hold, indexed parallel to
+  // rowBands; integrated each frame toward a target (BEND_AMP_PX while held).
+  let bendPos: number[] = [];
+  let bendVel: number[] = [];
+  let bendHold: number[] = [];
+  // The y the pluck bows toward for each row: the vertical centre of the pill the
+  // playhead last crossed in that row (updated on each pluck), so the bow's peak
+  // sits on the event rather than at the row's geometric middle.
+  let bendLaneY: number[] = [];
   let ambientSet = new Map<string, number>();
   let ambientSeeded = false;
   let ambientNow = -1;
+  // End-of-sweep flourish: a 1s fade to black begins FADE_MS before the seeker
+  // reaches the end (so it's fully black right as it arrives); at full black the
+  // view snaps to today, then a 1s fade back in reveals it already centred. The
+  // fade is driven by Svelte's `transition:fade` on the overlay, which reliably
+  // animates the mount/unmount — hand-rolled opacity toggling raced the reactive
+  // scheduler and never painted the start state, so it cut instead of faded.
+  const FADE_MS = 1000;
+  let showBlackout = $state(false);
+  // Fade-to-black duration, set per sweep to the time the seeker takes to cross
+  // the trailing pad (date end → true end). The fade-back-in keeps FADE_MS.
+  let fadeOutMs = $state(FADE_MS);
+  // Once-guard so the loop fires the fade exactly once per sweep (reset per run).
+  let fadeStarted = false;
+
+  // Advance each row's pluck spring by dt seconds (pulled out while the row is
+  // active, back to zero otherwise) and return an SVG path for the whole line as
+  // one continuous elastic string spanning the full height. Each active event
+  // pulls the string to the LEFT with its peak at the row it touches, the rest of
+  // the string dragged along and pinned only at the very top and bottom. Multiple
+  // plucks superimpose; the line is sampled densely so it reads as a single smooth
+  // curve. Springs overshoot (under-damped) so the string twangs back with a bounce.
+  function sweepBendPath(swept: Map<string, number>, dt: number): string {
+    const bands = rowBands;
+    const H = contentHeight;
+    const X = SWEEP_SVG_LEFT; // x of the tight line in the SVG's user space
+    if (bands.length === 0) return `M ${X} 0 L ${X} ${H}`;
+    if (bendPos.length !== bands.length) {
+      bendPos = new Array(bands.length).fill(0);
+      bendVel = new Array(bands.length).fill(0);
+      bendHold = new Array(bands.length).fill(0);
+      // Default each row's pluck point to its body centre until a pill is crossed.
+      bendLaneY = bands.map((b) => b.bodyTop + (b.top + b.height - b.bodyTop) / 2);
+    }
+    // Integrate per-row springs and record each row's pluck point (the centre of
+    // the crossed event's pill) and current amplitude.
+    const peaks: { y: number; amp: number }[] = [];
+    let maxAbs = 0;
+    for (let i = 0; i < bands.length; i++) {
+      const band = bands[i]!;
+      // Refresh the hold each frame the playhead is sweeping across this row's
+      // events; the spring is pulled out while any hold remains, then releases.
+      const sweptLane = swept.get(band.feedId);
+      if (sweptLane !== undefined) {
+        bendHold[i] = BEND_HOLD_S;
+        // Bow toward the crossed pill's vertical centre: pills are laid out at
+        // `lane * laneH + rowPad` inside the row-body and are laneH tall.
+        bendLaneY[i] = band.bodyTop + sweptLane * laneH + rowPad + laneH / 2;
+      }
+      const held = bendHold[i]! > 0;
+      if (held) bendHold[i]! = Math.max(0, bendHold[i]! - dt);
+      const target = held ? BEND_AMP_PX : 0;
+      // Hooke + viscous damping, semi-implicit Euler (stable at variable deltas).
+      const accel = (target - bendPos[i]!) * BEND_STIFFNESS - bendVel[i]! * BEND_DAMPING;
+      bendVel[i]! += accel * dt;
+      bendPos[i]! += bendVel[i]! * dt;
+      peaks.push({ y: bendLaneY[i]!, amp: bendPos[i]! });
+      maxAbs = Math.max(maxAbs, Math.abs(bendPos[i]!));
+    }
+    if (maxAbs < 0.4) return `M ${X} 0 L ${X} ${H}`; // settled: a tight straight line
+    // The line is ONE plucked string spanning the WHOLE height: pinned (zero
+    // deflection) at the very top (y=0) and bottom (y=H) of the content, bowing
+    // as a single smooth curve in between. Each row's spring amplitude contributes
+    // a basis that is 1 at the crossed pill's centre and falls to 0 at the two
+    // ends, so the bow's peak sits on whichever event the playhead is crossing
+    // while the rest of the string is dragged along; concurrent rows superimpose
+    // into one continuous bow. Deflection is leftward (X - …).
+    const deflectAt = (y: number): number => {
+      let x = 0;
+      for (const p of peaks) {
+        if (p.amp === 0) continue;
+        // Half-cosine ramps: 0 at y=0, 1 at the pill centre, 0 at y=H — so every
+        // pluck stretches the entire string rather than a local band.
+        const u =
+          y <= p.y
+            ? y / Math.max(1, p.y)
+            : (H - y) / Math.max(1, H - p.y);
+        x += p.amp * (0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, u))));
+      }
+      return X - x;
+    };
+    // Sample the bow densely down the full height. Join the samples with
+    // Catmull-Rom → cubic Bézier so the bow is a single smooth curve.
+    const STEP = Math.max(8, H / 48);
+    const ys: number[] = [0];
+    for (let y = STEP; y < H; y += STEP) ys.push(y);
+    ys.push(H);
+    const pts = ys.map((y) => ({ x: deflectAt(y), y }));
+    let d = `M ${pts[0]!.x.toFixed(2)} ${pts[0]!.y.toFixed(2)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i === 0 ? 0 : i - 1]!;
+      const p1 = pts[i]!;
+      const p2 = pts[i + 1]!;
+      const p3 = pts[i + 2 < pts.length ? i + 2 : pts.length - 1]!;
+      // Catmull-Rom → cubic Bézier control points for a smooth interpolation.
+      const c1x = p1.x + (p2.x - p0.x) / 6;
+      const c1y = p1.y + (p2.y - p0.y) / 6;
+      const c2x = p2.x - (p3.x - p1.x) / 6;
+      const c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+    }
+    return d;
+  }
+
+  // Cancel any in-flight fade and clear the overlay. Called when the sweep is
+  // interrupted or the egg is toggled so a black screen can't get stuck — setting
+  // showBlackout false reverses an in-progress fade-to-black back out (≤1s).
+  function clearFade(): void {
+    showBlackout = false;
+    fadeStarted = false;
+  }
+
+  // Fires when the overlay has finished fading to full black (transition:fade
+  // introend). The single, definitive end of the flourish: cancel the sweep loop
+  // (so no stray frame overwrites the jump), recenter on today INSTANTLY while
+  // black, then drop the overlay to fade back in already centred.
+  function finishBlackout(): void {
+    cancelAnimationFrame(sweepRaf);
+    sweepRunning = false;
+    sweepActive = false;
+    ui.musicSweeping = false;
+    ambientSeeded = false;
+    if (scrollEl) scrollEl.scrollLeft = Math.max(0, todayPx - scrollEl.clientWidth / 2);
+    showBlackout = false; // fade back in from black over FADE_MS
+  }
 
   // One accelerated pass of a virtual playhead, starting at the current left
   // edge and travelling all the way to the end of the timeline, ringing a bell
   // on each event it enters and a whistle as it leaves. The viewport follows the
-  // marker (kept centered on screen). When the sweep reaches the end it glides
-  // back to the current date. Seeded with whatever's already under the start so
-  // we only sound events the playhead actively crosses into.
+  // marker (kept centered on screen). When the sweep reaches the end the screen
+  // fades to black and returns to today. Seeded with whatever's already under the
+  // start so we only sound events the playhead actively crosses into.
   function startSweep(): void {
     cancelAnimationFrame(sweepRaf);
     if (!scrollEl) {
@@ -339,38 +492,73 @@
     const vw = scrollEl.clientWidth;
     const startLeft = scrollEl.scrollLeft;
     const startMs = pxToDate(startLeft, rangeStart, pxPerDay).getTime();
-    const endMs = pxToDate(totalWidth, rangeStart, pxPerDay).getTime();
-    const durationMs = sweepDurationMs(totalWidth - startLeft, vw, MS_PER_VIEWPORT);
+    // Sweep all the way to the true right edge of the scroll content — the
+    // RIGHT_PAD_PX trailing pad included — not just the last dated pixel.
+    const endPx = totalWidth + RIGHT_PAD_PX;
+    const endMs = pxToDate(endPx, rangeStart, pxPerDay).getTime();
+    const durationMs = sweepDurationMs(endPx - startLeft, vw, MS_PER_VIEWPORT);
     // Timeline-ms advanced per real-ms; the playhead is integrated by this rate
     // each frame (below) rather than from absolute elapsed time.
     const speed = durationMs > 0 ? (endMs - startMs) / durationMs : endMs - startMs;
+    // The fade to black begins when the seeker reaches the END OF THE DATED
+    // timeline (totalWidth) and lasts exactly as long as the seeker takes to
+    // cross the trailing RIGHT_PAD_PX — so it's fully black right as the seeker
+    // hits the true right edge (endPx). fadeStartMs is clamped to the start in
+    // case the view is already inside the pad when the sweep is armed.
+    const dateEndMs = pxToDate(totalWidth, rangeStart, pxPerDay).getTime();
+    const fadeStartMs = Math.max(dateEndMs, startMs);
+    fadeOutMs = speed > 0 ? Math.max(150, (endMs - fadeStartMs) / speed) : FADE_MS;
     const spans = timedLaneSpans;
     let prev = activeLanesAt(startMs, spans);
     let ph = startMs;
     let tPrev = performance.now();
-    let lastSoundT = tPrev;
+    // Reset the bend springs so the line starts tight.
+    bendPos = [];
+    bendVel = [];
+    bendHold = [];
+    bendLaneY = [];
+    fadeStarted = false;
     sweepRunning = true;
     sweepActive = true;
     ui.musicSweeping = true;
     const step = (tNow: number): void => {
+      // Pause entirely while the tab is backgrounded: don't advance the playhead
+      // or sound anything, just keep the RAF alive so it resumes on return. (Some
+      // browsers still tick RAF at ~1Hz when hidden, which would otherwise creep
+      // the sweep — and could even finish it, firing the fade — out of view.)
+      if (typeof document !== 'undefined' && document.hidden) {
+        tPrev = tNow;
+        sweepRaf = requestAnimationFrame(step);
+        return;
+      }
       // Integrate the playhead with a clamped per-frame delta: a delayed or
       // background-throttled frame just slows the sweep instead of jumping the
       // centred line forward to "catch up".
-      const dt = Math.min(tNow - tPrev, 48);
+      const dtMs = Math.min(tNow - tPrev, 48);
       tPrev = tNow;
-      ph = Math.min(endMs, ph + speed * dt);
-      // Emit sounds on a real-time grid, advancing `prev` only when we sound, so
-      // voices entered between grid points collapse into one deduped batch
-      // instead of firing every frame and stacking into static. The O(n) active
-      // scan only runs on the grid (~12/s), not every frame.
-      if (tNow - lastSoundT >= SWEEP_SOUND_GAP_MS) {
-        const next = activeLanesAt(ph, spans);
-        const { entered, exited } = crossings(prev, next);
-        for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
-        for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
-        prev = next;
-        lastSoundT = tNow;
+      const phPrev = ph;
+      ph = Math.min(endMs, ph + speed * dtMs);
+      // Begin the fade to black when the seeker reaches the dated timeline's end;
+      // it lasts fadeOutMs (the pad-crossing time) so it's fully black right as
+      // the seeker hits the true edge. The seeker keeps running (and sounding)
+      // underneath. finishBlackout (the fade's introend) owns the rest.
+      if (!fadeStarted && ph >= fadeStartMs) {
+        fadeStarted = true;
+        showBlackout = true;
       }
+      // Pluck every row the playhead swept across THIS frame (interval overlap),
+      // not just rows it's sitting inside at this instant — the sweep covers days
+      // per frame, so short events would otherwise be missed entirely.
+      const swept = sweptLanes(phPrev, ph, spans);
+      // Sound every frame so all bells for events crossed on the same frame
+      // strike together, rather than being spread across a throttle grid. The
+      // uniqueVoices dedupe still caps how many distinct pitches fire at once, and
+      // the long bell tail fade keeps the density clean.
+      const next = activeLanesAt(ph, spans);
+      const { entered, exited } = crossings(prev, next);
+      for (const v of uniqueVoices(entered, MAX_VOICES_PER_STEP)) playBell(laneToFrequency(v));
+      for (const v of uniqueVoices(exited, MAX_VOICES_PER_STEP)) playWhistle(laneToFrequency(v));
+      prev = next;
       const px = msToPx(ph, rangeStart, pxPerDay);
       // Only the timeline scrolls; the line is sticky-pinned to the scrollport
       // (CSS) and merely translated to its on-screen position. It ramps from the
@@ -380,14 +568,20 @@
       const scroll = Math.max(startLeft, px - vw / 2);
       if (scrollEl) scrollEl.scrollLeft = scroll;
       if (sweepMarkerEl) sweepMarkerEl.style.transform = `translateX(${px - scroll}px)`;
+      // Pluck the line at the rows it swept across; springs twang it back tight.
+      if (sweepPathEl) sweepPathEl.setAttribute('d', sweepBendPath(swept, dtMs / 1000));
       if (ph < endMs) {
         sweepRaf = requestAnimationFrame(step);
       } else {
+        // Reached the end. The fade-to-black is already in progress (started
+        // FADE_MS ago); finishBlackout() does the snap + fade-back when it turns
+        // fully black, so just stop the loop here. (If for some reason the fade
+        // never armed — e.g. no events at all — fall back to finishing now.)
         sweepRunning = false;
         sweepActive = false;
         ui.musicSweeping = false;
         ambientSeeded = false; // hand off to the ambient effect's next tick
-        jumpToToday(); // glide back to the current date
+        if (!fadeStarted) finishBlackout();
       }
     };
     sweepRaf = requestAnimationFrame(step);
@@ -397,6 +591,7 @@
   // and hand off to ambient mode (reseed silently so it doesn't chime everything
   // already under the playhead). Used when a nav button is tapped mid-sweep.
   function stopSweep(): void {
+    clearFade(); // an interrupt mid-fade must not leave the screen black
     if (!sweepRunning && !sweepActive) return;
     cancelAnimationFrame(sweepRaf);
     sweepRunning = false;
@@ -413,6 +608,7 @@
     untrack(() => startSweep());
     return () => {
       cancelAnimationFrame(sweepRaf);
+      clearFade();
       sweepRunning = false;
       sweepActive = false;
       ui.musicSweeping = false;
@@ -449,7 +645,10 @@
   // marks the current local time of each row's timezone on the shared date
   // grid. Row vertical extents are measured from the DOM (row height isn't
   // reliably derivable from constants), then the bend math runs reactively.
-  let rowBands = $state<{ feedId: string; top: number; height: number }[]>([]);
+  // `top`/`height` span the whole row section (sticky header included); `bodyTop`
+  // is the absolute top of the inner `.row-body`, where event pills are laid out,
+  // so the pluck can land on a pill's centre rather than the section's centre.
+  let rowBands = $state<{ feedId: string; top: number; height: number; bodyTop: number }[]>([]);
   let contentHeight = $state(0);
 
   $effect(() => {
@@ -470,11 +669,15 @@
       }
       const base = rowsEl.offsetTop;
       const sections = rowsEl.querySelectorAll<HTMLElement>(':scope > section.row');
-      const bands: { feedId: string; top: number; height: number }[] = [];
+      const bands: { feedId: string; top: number; height: number; bodyTop: number }[] = [];
       for (const s of sections) {
         const feedId = s.dataset.feedId;
         if (!feedId) continue;
-        bands.push({ feedId, top: base + s.offsetTop, height: s.offsetHeight });
+        const top = base + s.offsetTop;
+        // The row-body sits below the sticky row header; pills are positioned
+        // relative to it. (Collapsed rows have no body — fall back to the section.)
+        const body = s.querySelector<HTMLElement>(':scope > .row-body');
+        bands.push({ feedId, top, height: s.offsetHeight, bodyTop: body ? top + body.offsetTop : top });
       }
       rowBands = bands;
     });
@@ -512,6 +715,24 @@
     if (!scrollEl) return;
     viewportWidth = scrollEl.clientWidth;
     scrollLeft = scrollEl.scrollLeft;
+    scheduleReveal();
+  }
+
+  // Firefox Android reflows the viewport several times right after first paint
+  // (address-bar collapse, late layout), and each width change flows through
+  // pxPerDay -> assignLanes -> row heights, resizing rows vertically. The
+  // centering effect re-asserts the centre on every such change, but if we
+  // revealed on the first width those later resizes would be seen as a vertical
+  // jump. So keep the content hidden until the width has stayed put for a beat,
+  // letting all the row-height settling finish while invisible; then reveal
+  // instantly (no fade — the fade itself read as slowness).
+  let revealTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleReveal(): void {
+    if (centered) return;
+    clearTimeout(revealTimer);
+    revealTimer = setTimeout(() => {
+      centered = true;
+    }, 120);
   }
 
   // Horizontal window (in content px) of what's rendered, with one viewport of
@@ -527,7 +748,9 @@
     lastInteractionMs = Date.now();
   }
   function onScroll(): void {
-    markInteraction();
+    // Don't mark interaction here: this fires for our own programmatic centering
+    // scrolls too, which would prematurely disengage the load-centering gate.
+    // Genuine user input is tracked by the window pointer/touch/wheel/key effect.
     if (rafScheduled) return;
     rafScheduled = true;
     requestAnimationFrame(() => {
@@ -542,7 +765,15 @@
     scrollEl.addEventListener('scroll', onScroll, { passive: true });
     const ro = new ResizeObserver(updateViewportVars);
     ro.observe(scrollEl);
+    // Belt-and-braces: never leave the content hidden if the width never settles
+    // (e.g. a browser that keeps nudging it). scheduleReveal() normally reveals
+    // ~120ms after the last width change, well before this.
+    const revealGuard = setTimeout(() => {
+      centered = true;
+    }, 600);
     return () => {
+      clearTimeout(revealGuard);
+      clearTimeout(revealTimer);
       scrollEl?.removeEventListener('scroll', onScroll);
       ro.disconnect();
     };
@@ -566,34 +797,30 @@
   }
 
   $effect(() => {
-    if (!scrollEl || didCenter) return;
+    if (!scrollEl) return;
     // Wait for the real viewport width: until it's measured, pxPerDay (and so
     // todayPx) use the static fallback scale, which for fit-whole-span zooms
     // lands today far to the left. The effect re-runs once width is known.
     if (viewportWidth <= 0 || totalWidth <= 0) return;
-    // Open on today unless a temporary marker (e.g. from a shared #d= fragment)
-    // remembers a previous position.
+    // Open on today unless a temporary marker (e.g. a shared #d= fragment)
+    // remembers a previous position. Reading these reactively makes this effect
+    // re-run on every width/today change.
     const targetPx =
       ui.tempMarkerMs != null
         ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)
         : todayPx;
-    const el = scrollEl;
-    const want = Math.max(0, targetPx - el.clientWidth / 2);
-    // Firefox Android applies the .scroll-content width after this effect runs,
-    // so a synchronous scrollLeft is clamped to 0 and lost. Apply across a few
-    // frames and only latch once it sticks (or the content is wide enough to
-    // honour it), so the first paint lands on today on every browser.
-    let tries = 0;
-    const apply = (): void => {
-      el.scrollLeft = want;
-      const landed = Math.abs(el.scrollLeft - want) <= 1;
-      if (landed || el.scrollWidth - el.clientWidth >= want || tries++ >= 10) {
-        didCenter = true;
-        return;
-      }
-      requestAnimationFrame(apply);
-    };
-    apply();
+    // Firefox Android reflows the viewport several times after first paint
+    // (address-bar collapse, late content layout); each reflow changes
+    // viewportWidth -> pxPerDay -> todayPx, so a one-shot centre that latches on
+    // the first settle ends up off-centre once a later reflow moves the today
+    // line under a fixed scroll. So re-assert the centre on EVERY width/today
+    // change until the user first interacts with the timeline — never trusting a
+    // single "settled" moment. lastInteractionMs is 0 until a real
+    // pointer/touch/wheel/key gesture (programmatic scrollLeft doesn't set it).
+    if (lastInteractionMs !== 0) return;
+    scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
+    // Mark the initial centre as done so the month-zoom drift recenter can engage.
+    didCenter = true;
   });
 
   // Month zoom: nudge the viewport so the today line stays centered as
@@ -886,13 +1113,15 @@
   data-search-active={searchActive ? 'true' : null}
   style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
 >
-  <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
+  <div class="scroll-content" class:is-centered={centered} style="width: {totalWidth + RIGHT_PAD_PX}px;">
     {#if sweepActive}
       <!-- Zero-size sticky anchor pinned to the scrollport's left edge; the sweep
            loop translateX()es it to the play line's on-screen position. Its inner
            bar is absolutely positioned, so the anchor adds no layout. -->
       <div class="music-sweep" bind:this={sweepMarkerEl} aria-hidden="true">
-        <i style="height: {contentHeight}px"></i>
+        <svg class="music-sweep-svg" width="80" height={contentHeight} aria-hidden="true">
+          <path bind:this={sweepPathEl} d="M {SWEEP_SVG_LEFT} 0 L {SWEEP_SVG_LEFT} {contentHeight}" fill="none" />
+        </svg>
       </div>
     {/if}
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
@@ -964,17 +1193,41 @@
   </div>
 </main>
 
+{#if showBlackout}
+  <div
+    class="sweep-fade"
+    in:fade={{ duration: fadeOutMs }}
+    out:fade={{ duration: FADE_MS }}
+    onintroend={finishBlackout}
+    aria-hidden="true"
+  ></div>
+{/if}
+
 <style>
   #timeline {
     overflow: auto;
     background: var(--paper);
     overscroll-behavior: contain;
     touch-action: pan-x pan-y;
+    /* Firefox's scroll anchoring otherwise shifts our programmatic load-centering
+       as rows/.scroll-content lay out, landing the view right of today. */
+    overflow-anchor: none;
   }
   .scroll-content {
     position: relative;
     min-width: 100%;
     min-height: 100%;
+    overflow-anchor: none;
+    /* Hidden until the viewport width settles and the first centre lands, so
+       Firefox Android (which reflows the width several times after first paint)
+       does all its row-height/centre settling while invisible instead of as a
+       visible jump. Revealed instantly — a fade here read as load slowness.
+       opacity (not display) keeps the element laid out so clientWidth/scrollWidth
+       stay measurable for the centering + lane math while hidden. */
+    opacity: 0;
+  }
+  .scroll-content.is-centered {
+    opacity: 1;
   }
   #time-header {
     position: sticky;
@@ -1025,16 +1278,38 @@
     height: 0;
     z-index: 8;
     pointer-events: none;
-    will-change: transform;
+    /* No will-change: transform — on Firefox Android it promotes this to a
+       composited layer that re-composites with the per-frame translateX but
+       reuses the cached raster, so the path's bend (updated via setAttribute d)
+       never repaints and the seek line stays straight. */
   }
-  .music-sweep > i {
+  .music-sweep-svg {
     position: absolute;
-    left: 0;
+    /* Offset left by SWEEP_SVG_LEFT (50) so the line, drawn at user-x=50, still
+       lands exactly at the playhead, leaving room to its left for the bend.
+       overflow:visible lets the bow extend past the box. */
+    left: -50px;
     top: 0;
-    width: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 6px var(--accent);
+    width: 80px;
+    overflow: visible;
     opacity: 0.85;
+  }
+  .music-sweep-svg path {
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  /* Full-screen blackout for the end-of-sweep flourish. Base opacity 0; 'out'
+     ramps to black, then switching back to 'in' (base 0) fades it away. */
+  .sweep-fade {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #000;
+    pointer-events: none;
+    /* opacity is animated by Svelte's transition:fade (mount = fade to black,
+       unmount = fade back in), so no static opacity/transition here. */
   }
   .temp-line {
     position: absolute;
