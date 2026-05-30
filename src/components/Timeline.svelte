@@ -273,6 +273,11 @@
 
   let scrollEl: HTMLElement | undefined = $state();
   let didCenter = false;
+  // Reactive sibling of didCenter: drives the first-paint reveal. The scroll
+  // content is held invisible until the first centre lands, so Firefox Android
+  // (which paints before measuring the viewport width) doesn't show a left→centre
+  // jump as the centering effect snaps scrollLeft on the next frame.
+  let centered = $state(false);
 
   // --- Timeline music Easter egg (armed by the 5s hold on the date button) ---
   // Events in expanded rows become notes: each row gets its own base pitch (by
@@ -742,7 +747,13 @@
     scrollEl.addEventListener('scroll', onScroll, { passive: true });
     const ro = new ResizeObserver(updateViewportVars);
     ro.observe(scrollEl);
+    // Belt-and-braces: never leave the content hidden if a browser somehow never
+    // reports a viewport width. The centering effect normally reveals first.
+    const revealGuard = setTimeout(() => {
+      centered = true;
+    }, 600);
     return () => {
+      clearTimeout(revealGuard);
       scrollEl?.removeEventListener('scroll', onScroll);
       ro.disconnect();
     };
@@ -790,6 +801,8 @@
     scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
     // Mark the initial centre as done so the month-zoom drift recenter can engage.
     didCenter = true;
+    // Reveal the (now-centred) content; the very first painted frame is centred.
+    centered = true;
   });
 
   // Month zoom: nudge the viewport so the today line stays centered as
@@ -1082,7 +1095,7 @@
   data-search-active={searchActive ? 'true' : null}
   style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
 >
-  <div class="scroll-content" style="width: {totalWidth + RIGHT_PAD_PX}px;">
+  <div class="scroll-content" class:is-centered={centered} style="width: {totalWidth + RIGHT_PAD_PX}px;">
     {#if sweepActive}
       <!-- Zero-size sticky anchor pinned to the scrollport's left edge; the sweep
            loop translateX()es it to the play line's on-screen position. Its inner
@@ -1187,6 +1200,16 @@
     min-width: 100%;
     min-height: 100%;
     overflow-anchor: none;
+    /* Hidden until the first centre lands, so Firefox Android (which paints
+       before measuring the viewport width) doesn't flash a left→centre jump.
+       opacity keeps the element laid out so clientWidth/scrollWidth stay
+       measurable for the centering math. The fade is neutralized to instant
+       under reduced motion by the global data-motion="reduced" rule. */
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .scroll-content.is-centered {
+    opacity: 1;
   }
   #time-header {
     position: sticky;
