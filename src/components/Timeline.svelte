@@ -335,6 +335,10 @@
   const BEND_AMP_PX = 16;
   const BEND_STIFFNESS = 240;
   const BEND_DAMPING = 16;
+  // Vertical reach (px) of a pluck's bump above and below its row centre. The
+  // deflection is local to this band and flat beyond, so the line doesn't bow
+  // through the empty space below the last event row.
+  const BEND_REACH = 90;
   // How long (s) a row stays pulled out after the playhead sweeps past one of
   // its events, so a fast single-frame pass still yields a full visible pluck
   // before the spring releases and twangs back.
@@ -356,11 +360,11 @@
 
   // Advance each row's pluck spring by dt seconds (pulled out while the row is
   // active, back to zero otherwise) and return an SVG path for the whole line as
-  // one continuous elastic string: pinned at the very top and bottom, each active
-  // event pulls a peak to the LEFT at the point where it touches the string, the
-  // deflection easing off as a smooth curve (not a straight taper) all the way to
-  // both pinned ends. Multiple events superimpose; the line is sampled densely so
-  // it reads as a single curve bending throughout, never straight-in-parts.
+  // one continuous elastic string. Each active event pulls a LOCAL bump to the
+  // LEFT centred on the row it touches, easing smoothly back to the tight line
+  // within BEND_REACH px (so the line stays straight where there are no events,
+  // including the empty space below the last row). Multiple bumps superimpose;
+  // the line is sampled densely so it reads as a single smooth curve.
   // Springs overshoot (under-damped) so the string twangs back with a bounce.
   function sweepBendPath(swept: Set<string>, dt: number): string {
     const bands = rowBands;
@@ -392,18 +396,20 @@
       maxAbs = Math.max(maxAbs, Math.abs(bendPos[i]!));
     }
     if (maxAbs < 0.4) return `M ${X} 0 L ${X} ${H}`; // settled: a tight straight line
-    // Deflection of the string at height y: sum of each pluck's displacement,
-    // which peaks at its own y and eases off to the pinned ends (0 and H) with a
-    // smooth (raised-cosine) falloff rather than a straight taper, so the curve
-    // bends continuously instead of forming straight chords. Subtracted from X so
-    // the bow goes to the LEFT.
-    const ease = (u: number): number => 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, u)));
+    // Deflection of the string at height y: sum of each pluck's displacement.
+    // Each pluck is a LOCAL bump — it peaks at its own row centre and eases back
+    // to the tight line within BEND_REACH px above and below (raised-cosine, so
+    // it's smooth with no kink), staying flat beyond. Confining the bump this way
+    // stops the line bowing through the empty space below the last event row.
+    // Subtracted from X so the bow goes to the LEFT.
     const deflectAt = (y: number): number => {
       let x = 0;
       for (const p of peaks) {
         if (p.amp === 0) continue;
-        const u = y <= p.y ? (p.y > 0 ? y / p.y : 0) : H > p.y ? 1 - (y - p.y) / (H - p.y) : 0;
-        x += p.amp * ease(u);
+        const dist = Math.abs(y - p.y);
+        if (dist >= BEND_REACH) continue;
+        // Raised cosine: 1 at the peak, 0 at +/-BEND_REACH, flat tangent at both.
+        x += p.amp * (0.5 + 0.5 * Math.cos((Math.PI * dist) / BEND_REACH));
       }
       return X - x;
     };
@@ -491,6 +497,15 @@
     sweepActive = true;
     ui.musicSweeping = true;
     const step = (tNow: number): void => {
+      // Pause entirely while the tab is backgrounded: don't advance the playhead
+      // or sound anything, just keep the RAF alive so it resumes on return. (Some
+      // browsers still tick RAF at ~1Hz when hidden, which would otherwise creep
+      // the sweep — and could even finish it, firing the fade — out of view.)
+      if (typeof document !== 'undefined' && document.hidden) {
+        tPrev = tNow;
+        sweepRaf = requestAnimationFrame(step);
+        return;
+      }
       // Integrate the playhead with a clamped per-frame delta: a delayed or
       // background-throttled frame just slows the sweep instead of jumping the
       // centred line forward to "catch up".
