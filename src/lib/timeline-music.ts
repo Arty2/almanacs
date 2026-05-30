@@ -36,11 +36,17 @@ export function laneToFrequency(step: number, base = BASE_HZ): number {
 
 export type LaneSpan = {
   key: string;
+  // The calendar row (feed) this span belongs to, so the seek line can bow at
+  // the rows it's currently crossing.
+  feedId: string;
   startMs: number;
   endMs: number;
   // The voice this span sounds at (row + sub-lane, see voiceStep), not the raw
   // collision lane.
   lane: number;
+  // The raw collision lane within the row (0-based), which fixes the event
+  // pill's vertical position. The seek line bows to this lane's pill centre.
+  subLane: number;
 };
 
 // Which events the playhead sits inside at instant `ms`, keyed by span with its
@@ -50,6 +56,33 @@ export function activeLanesAt(ms: number, spans: LaneSpan[]): Map<string, number
   const out = new Map<string, number>();
   for (const s of spans) {
     if (ms >= s.startMs && ms < s.endMs) out.set(s.key, s.lane);
+  }
+  return out;
+}
+
+// Which rows (feeds) have an event under the playhead at `ms` — the seek line
+// bows at these. Half-open like activeLanesAt.
+export function activeFeedsAt(ms: number, spans: LaneSpan[]): Set<string> {
+  const out = new Set<string>();
+  for (const s of spans) {
+    if (ms >= s.startMs && ms < s.endMs) out.add(s.feedId);
+  }
+  return out;
+}
+
+// Which rows the playhead SWEPT ACROSS between `fromMs` and `toMs`, mapped to the
+// collision lane of a crossed event in that row — i.e. any event whose
+// [start, end) overlaps that interval. The sweep moves fast (days per frame), so
+// a row is "touched" if the playhead passed through any of its events this frame,
+// not only if it's sitting inside one at the instant `toMs`. This is what plucks
+// the elastic string; the lane tells it which pill (vertically) to bow toward —
+// the last-crossed event wins when several in one row are swept on one frame.
+export function sweptLanes(fromMs: number, toMs: number, spans: LaneSpan[]): Map<string, number> {
+  const lo = Math.min(fromMs, toMs);
+  const hi = Math.max(fromMs, toMs);
+  const out = new Map<string, number>();
+  for (const s of spans) {
+    if (s.startMs < hi && s.endMs > lo) out.set(s.feedId, s.subLane);
   }
   return out;
 }
@@ -232,18 +265,27 @@ function ready(): boolean {
   return true;
 }
 
+// Tail shaping shared by bell and whistle: when the ringing body ends at tBody,
+// a TAIL_FADE_S linear ramp to true zero begins, and TAIL_SILENCE_S of guaranteed
+// silence follows before the oscillators stop. Because the fade reaches zero
+// (TAIL_FADE_S) well before the stop (TAIL_SILENCE_S later), the waveform is
+// already flat at stop time, so there is no end-click.
+const TAIL_FADE_S = 0.5; // volume fade-out, starts when the silence window starts
+const TAIL_SILENCE_S = 0.6; // silence held before the oscillators stop
+
 export function playBell(freq: number): void {
   if (!ready() || !ctx || !master) return;
   const now = ctx.currentTime + 0.02;
   const dur = 1.8; // long ring so bells sustain and reverberate into each other
+  const tBody = now + dur;
   const env = ctx.createGain();
   env.connect(master);
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(1, now + 0.003); // sharp attack = metallic ting
-  env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
-  // Ramp the remainder to true zero before the oscillators stop, so the note ends
-  // on silence rather than truncating a non-zero waveform into a click.
-  env.gain.linearRampToValueAtTime(0, now + dur + 0.04);
+  env.gain.exponentialRampToValueAtTime(0.0008, tBody);
+  // At the body's end, fade linearly to true zero over TAIL_FADE_S, then hold
+  // silence for the rest of TAIL_SILENCE_S before stopping — no end-click.
+  env.gain.linearRampToValueAtTime(0, tBody + TAIL_FADE_S);
   for (const p of BELL_PARTIALS) {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
@@ -253,7 +295,7 @@ export function playBell(freq: number): void {
     osc.connect(pg);
     pg.connect(env);
     osc.start(now);
-    osc.stop(now + dur + 0.05);
+    osc.stop(tBody + TAIL_SILENCE_S);
   }
 }
 
@@ -266,16 +308,18 @@ export function playWhistle(freq: number): void {
   // A short upward glide reads as a whistle rather than a plain beep.
   osc.frequency.setValueAtTime(freq * 0.92, now);
   osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + dur);
+  const tBody = now + dur;
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(0.6, now + 0.03);
-  env.gain.exponentialRampToValueAtTime(0.0008, now + dur);
-  // Settle to true zero before stopping, so the note doesn't end on a click.
-  env.gain.linearRampToValueAtTime(0, now + dur + 0.04);
+  env.gain.exponentialRampToValueAtTime(0.0008, tBody);
+  // Same tail as the bell: fade to true zero over TAIL_FADE_S from the body's
+  // end, then hold silence to the stop — no end-click.
+  env.gain.linearRampToValueAtTime(0, tBody + TAIL_FADE_S);
   osc.connect(env);
   env.connect(master);
   osc.start(now);
-  osc.stop(now + dur + 0.05);
+  osc.stop(tBody + TAIL_SILENCE_S);
 }
 
 // Ascending major triad (C5, E5, G5) for the activation countdown: "ding,
