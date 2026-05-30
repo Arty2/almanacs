@@ -333,9 +333,9 @@
   // How far left (px) a single event plucks the string at its touch point, and
   // the spring that pulls each pluck back to zero — under-damped so it overshoots
   // and twangs before settling.
-  const BEND_AMP_PX = 16;
-  const BEND_STIFFNESS = 240;
-  const BEND_DAMPING = 16;
+  const BEND_AMP_PX = 12;
+  const BEND_STIFFNESS = 520;
+  const BEND_DAMPING = 24;
   // How long (s) a row stays pulled out after the playhead sweeps past one of
   // its events, so a fast single-frame pass still yields a full visible pluck
   // before the spring releases and twangs back.
@@ -715,6 +715,24 @@
     if (!scrollEl) return;
     viewportWidth = scrollEl.clientWidth;
     scrollLeft = scrollEl.scrollLeft;
+    scheduleReveal();
+  }
+
+  // Firefox Android reflows the viewport several times right after first paint
+  // (address-bar collapse, late layout), and each width change flows through
+  // pxPerDay -> assignLanes -> row heights, resizing rows vertically. The
+  // centering effect re-asserts the centre on every such change, but if we
+  // revealed on the first width those later resizes would be seen as a vertical
+  // jump. So keep the content hidden until the width has stayed put for a beat,
+  // letting all the row-height settling finish while invisible; then reveal
+  // instantly (no fade — the fade itself read as slowness).
+  let revealTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleReveal(): void {
+    if (centered) return;
+    clearTimeout(revealTimer);
+    revealTimer = setTimeout(() => {
+      centered = true;
+    }, 120);
   }
 
   // Horizontal window (in content px) of what's rendered, with one viewport of
@@ -747,13 +765,15 @@
     scrollEl.addEventListener('scroll', onScroll, { passive: true });
     const ro = new ResizeObserver(updateViewportVars);
     ro.observe(scrollEl);
-    // Belt-and-braces: never leave the content hidden if a browser somehow never
-    // reports a viewport width. The centering effect normally reveals first.
+    // Belt-and-braces: never leave the content hidden if the width never settles
+    // (e.g. a browser that keeps nudging it). scheduleReveal() normally reveals
+    // ~120ms after the last width change, well before this.
     const revealGuard = setTimeout(() => {
       centered = true;
     }, 600);
     return () => {
       clearTimeout(revealGuard);
+      clearTimeout(revealTimer);
       scrollEl?.removeEventListener('scroll', onScroll);
       ro.disconnect();
     };
@@ -801,8 +821,6 @@
     scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
     // Mark the initial centre as done so the month-zoom drift recenter can engage.
     didCenter = true;
-    // Reveal the (now-centred) content; the very first painted frame is centred.
-    centered = true;
   });
 
   // Month zoom: nudge the viewport so the today line stays centered as
@@ -1200,13 +1218,13 @@
     min-width: 100%;
     min-height: 100%;
     overflow-anchor: none;
-    /* Hidden until the first centre lands, so Firefox Android (which paints
-       before measuring the viewport width) doesn't flash a left→centre jump.
-       opacity keeps the element laid out so clientWidth/scrollWidth stay
-       measurable for the centering math. The fade is neutralized to instant
-       under reduced motion by the global data-motion="reduced" rule. */
+    /* Hidden until the viewport width settles and the first centre lands, so
+       Firefox Android (which reflows the width several times after first paint)
+       does all its row-height/centre settling while invisible instead of as a
+       visible jump. Revealed instantly — a fade here read as load slowness.
+       opacity (not display) keeps the element laid out so clientWidth/scrollWidth
+       stay measurable for the centering + lane math while hidden. */
     opacity: 0;
-    transition: opacity 150ms ease;
   }
   .scroll-content.is-centered {
     opacity: 1;
