@@ -769,23 +769,34 @@
     // todayPx) use the static fallback scale, which for fit-whole-span zooms
     // lands today far to the left. The effect re-runs once width is known.
     if (viewportWidth <= 0 || totalWidth <= 0) return;
-    // Open on today unless a temporary marker (e.g. from a shared #d= fragment)
-    // remembers a previous position.
-    const targetPx =
-      ui.tempMarkerMs != null
-        ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)
-        : todayPx;
     const el = scrollEl;
-    const want = Math.max(0, targetPx - el.clientWidth / 2);
-    // Firefox Android applies the .scroll-content width after this effect runs,
-    // so a synchronous scrollLeft is clamped to 0 and lost. Apply across a few
-    // frames and only latch once it sticks (or the content is wide enough to
-    // honour it), so the first paint lands on today on every browser.
-    let tries = 0;
+    // Firefox Android settles the viewport width (and so pxPerDay/todayPx) and
+    // applies the .scroll-content width a few frames AFTER this effect first
+    // runs, and its scroll anchoring shifts a too-early scrollLeft — which lands
+    // the view to the right of today. So keep re-asserting the centre, recomputed
+    // live each frame, and only latch once the scroll actually lands at a stable
+    // width (not on a "content wide enough" guess, which can latch while
+    // scrollLeft is still wrong). overflow-anchor:none (CSS) stops the shifting.
+    const start = performance.now();
+    let stableW = -1;
+    let stableFrames = 0;
     const apply = (): void => {
+      // Open on today unless a temporary marker (e.g. a shared #d= fragment)
+      // remembers a previous position. Recomputed live so a late width/today
+      // settle is honoured rather than a value captured too early.
+      const targetPx =
+        ui.tempMarkerMs != null
+          ? dateToPx(new Date(ui.tempMarkerMs), rangeStart, pxPerDay)
+          : todayPx;
+      const w = el.clientWidth;
+      const want = Math.max(0, targetPx - w / 2);
       el.scrollLeft = want;
       const landed = Math.abs(el.scrollLeft - want) <= 1;
-      if (landed || el.scrollWidth - el.clientWidth >= want || tries++ >= 10) {
+      stableFrames = w === stableW ? stableFrames + 1 : 0;
+      stableW = w;
+      // Latch when it truly lands at a width that's held steady for ~2 frames, or
+      // give up after a deadline so we never loop forever.
+      if ((landed && stableFrames >= 2) || performance.now() - start >= 2000) {
         didCenter = true;
         return;
       }
@@ -1180,11 +1191,15 @@
     background: var(--paper);
     overscroll-behavior: contain;
     touch-action: pan-x pan-y;
+    /* Firefox's scroll anchoring otherwise shifts our programmatic load-centering
+       as rows/.scroll-content lay out, landing the view right of today. */
+    overflow-anchor: none;
   }
   .scroll-content {
     position: relative;
     min-width: 100%;
     min-height: 100%;
+    overflow-anchor: none;
   }
   #time-header {
     position: sticky;
@@ -1235,7 +1250,10 @@
     height: 0;
     z-index: 8;
     pointer-events: none;
-    will-change: transform;
+    /* No will-change: transform — on Firefox Android it promotes this to a
+       composited layer that re-composites with the per-frame translateX but
+       reuses the cached raster, so the path's bend (updated via setAttribute d)
+       never repaints and the seek line stays straight. */
   }
   .music-sweep-svg {
     position: absolute;
