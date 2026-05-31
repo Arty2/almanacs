@@ -92,6 +92,25 @@ export function deleteScratchpadEvent(uid: string): void {
   if (ui.modalEvent?.uid === uid) ui.modalEvent = null;
 }
 
+// Move an event between local lanes, keeping its uid. URL/secret feeds are
+// network-fetched and overwritten on refresh, so only scratchpad lanes are
+// valid targets. Both affected lanes are re-sorted and persisted.
+export function moveEventToLane(uid: string, destFeedId: string): void {
+  const srcFeedId = laneFeedIdOf(uid);
+  if (srcFeedId === destFeedId) return;
+  if (!destFeedId.startsWith('scratchpad:')) return;
+  const ev = (events.byFeed[srcFeedId] ?? []).find((e) => e.uid === uid);
+  if (!ev) return;
+  events.byFeed[srcFeedId] = (events.byFeed[srcFeedId] ?? []).filter((e) => e.uid !== uid);
+  const moved = { ...ev, feedId: destFeedId };
+  events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), moved].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
+  saveScratchpad(events.byFeed[srcFeedId], laneIdOf(srcFeedId));
+  saveScratchpad(events.byFeed[destFeedId], laneIdOf(destFeedId));
+  if (ui.modalEvent?.uid === uid) ui.modalEvent = { ...ui.modalEvent, feedId: destFeedId };
+}
+
 function newLaneId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
