@@ -30,11 +30,14 @@
   let lastExpandedHeight = 28;
 
   const expanded = $derived(height > collapsedHeight + 2);
-  // Keep the collapsed bar exactly as tall as the header whenever it isn't
-  // expanded (covers the initial measure and font-size changes). Keyed off the
-  // visual `expanded` state so it converges without fighting a drag.
+  // Resting collapsed height: 1px under the header so the bar tucks flush at the
+  // screen bottom (the spare pixel sits just off-screen).
+  const closedHeight = $derived(collapsedHeight - 1);
+  // Keep the collapsed bar at the resting height whenever it isn't expanded
+  // (covers the initial measure and font-size changes). Keyed off the visual
+  // `expanded` state so it converges without fighting a drag.
   $effect(() => {
-    if (!expanded) height = collapsedHeight;
+    if (!expanded) height = closedHeight;
   });
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
 
@@ -167,7 +170,7 @@
   // Kiosk mode keeps the tray collapsed and inert.
   $effect(() => {
     if (isKiosk()) {
-      height = collapsedHeight;
+      height = closedHeight;
       ui.statusExpanded = false;
       clearSelection();
     }
@@ -191,7 +194,7 @@
     if (!dragging) return;
     const delta = dragStartY - e.clientY;
     if (Math.abs(delta) > 3) pointerMoved = true;
-    const next = Math.min(maxHeight(), Math.max(collapsedHeight, dragStartHeight + delta));
+    const next = Math.min(maxHeight(), Math.max(closedHeight, dragStartHeight + delta));
     height = next;
   }
 
@@ -215,16 +218,16 @@
       return;
     }
     if (startedCollapsed) {
-      height = collapsedHeight;
+      height = closedHeight;
       ui.statusExpanded = false;
       return;
     }
     if (startedExpanded && draggedDown) {
-      height = collapsedHeight;
+      height = closedHeight;
       ui.statusExpanded = false;
       trayCollapse();
     } else if (height < collapsedHeight * 1.5) {
-      height = collapsedHeight;
+      height = closedHeight;
       ui.statusExpanded = false;
       trayCollapse();
     } else {
@@ -236,7 +239,7 @@
   function toggleExpand(): void {
     if (isKiosk()) return;
     if (expanded) {
-      height = collapsedHeight;
+      height = closedHeight;
       ui.statusExpanded = false;
       trayCollapse();
     } else {
@@ -669,7 +672,7 @@
           title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onDeleteTap}
-        >{deleteStage === 'done' ? 'DELETE ✓' : deleteStage === 'confirm' ? 'DELETE ?' : 'DELETE'}</button>
+        >DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
         <span class="sel-count">{selection.uids.size}</span>
       </span>
       {#if !isKiosk()}
@@ -688,7 +691,7 @@
           title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onCancelTap}
-        >{cancelStage === 'done' ? 'CANCEL ✓' : cancelStage === 'confirm' ? 'CANCEL ?' : 'CANCEL'}</button>
+        >CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
         <div class="move-menu" bind:this={moveRoot}>
           <button
             type="button"
@@ -1034,6 +1037,14 @@
     cursor: not-allowed;
     border-style: dashed;
   }
+  /* Fixed-width slot for the ? / ✓ indicator so DELETE/CANCEL keep one size
+     across idle → confirm → done. */
+  .sel-mark {
+    display: inline-block;
+    width: 0.8em;
+    margin-left: 0.3em;
+    text-align: center;
+  }
   /* Idle DELETE matches the settings delete button (accent border + text). */
   .sel-delete:not(.confirming):not(.done) {
     border-color: var(--accent);
@@ -1080,6 +1091,9 @@
     cursor: pointer;
     font-size: var(--fs-12);
     white-space: nowrap;
+  }
+  .move-menu-item + .move-menu-item {
+    border-top: 1px dashed var(--ink);
   }
   .move-menu-item:hover {
     background: var(--ink);
