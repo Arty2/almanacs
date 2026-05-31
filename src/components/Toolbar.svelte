@@ -5,7 +5,7 @@
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { formatDate } from '../lib/format';
-  import { createLongPress, loading } from '../lib/haptics';
+  import { createLongPress, loading, countdownBeat } from '../lib/haptics';
   import {
     primeTimelineAudio,
     suspendTimelineAudio,
@@ -118,6 +118,7 @@
       holdTimers.push(
         setTimeout(() => {
           playCountdownTone(countdownToneIndex(beat, enabling, HOLD_STEPS));
+          countdownBeat();
           if (beat === HOLD_STEPS) {
             holdActivated = true;
             suppressTitleClick = true;

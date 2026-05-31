@@ -279,13 +279,19 @@ const TAIL_SILENCE_S = 0.6; // silence held before the oscillators stop
 
 export function playBell(freq: number, level = 1): void {
   if (!ready() || !ctx || !master) return;
-  const now = ctx.currentTime + 0.02;
+  // Stagger each note's onset by a few ms of jitter: when a fat chord fires, a
+  // shared exact start makes every voice's sharp attack (and in-phase
+  // fundamentals) sum into a single-sample transient — the click/static. A tiny
+  // spread desynchronizes the attacks so the chord swells cleanly instead.
+  const now = ctx.currentTime + 0.02 + Math.random() * 0.012;
   const dur = 1.8; // long ring so bells sustain and reverberate into each other
   const tBody = now + dur;
   const env = ctx.createGain();
   env.connect(master);
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(level, now + 0.003); // sharp attack = metallic ting
+  // ~7ms attack: still a metallic ting, but soft enough that stacked voices
+  // don't sum into an onset click.
+  env.gain.linearRampToValueAtTime(level, now + 0.007);
   env.gain.exponentialRampToValueAtTime(0.0008 * level, tBody);
   // At the body's end, fade linearly to true zero over TAIL_FADE_S, then hold
   // silence for the rest of TAIL_SILENCE_S before stopping — no end-click.
@@ -294,6 +300,9 @@ export function playBell(freq: number, level = 1): void {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.value = freq * p.mult;
+    // A few cents of random detune decorrelates the phase of identical partials
+    // across simultaneous voices, so they don't reinforce into a transient spike.
+    osc.detune.value = (Math.random() - 0.5) * 8;
     const pg = ctx.createGain();
     pg.gain.value = p.gain;
     osc.connect(pg);
@@ -305,7 +314,8 @@ export function playBell(freq: number, level = 1): void {
 
 export function playWhistle(freq: number, level = 1): void {
   if (!ready() || !ctx || !master) return;
-  const now = ctx.currentTime + 0.02;
+  // Same onset jitter as the bell, so stacked whistles don't click either.
+  const now = ctx.currentTime + 0.02 + Math.random() * 0.012;
   const dur = 0.55;
   const osc = ctx.createOscillator();
   osc.type = 'sine';

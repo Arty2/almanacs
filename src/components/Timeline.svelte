@@ -313,6 +313,16 @@
   // Constant pace: one screenful every MS_PER_VIEWPORT, so the sweep keeps the
   // same feel whether it covers three screens or the whole multi-year timeline.
   const MS_PER_VIEWPORT = SWEEP_MS / SWEEP_VIEWPORTS;
+  // Wider zooms sweep slower (a screenful spans more time, so a leisurely pace
+  // reads better): month is the 1× baseline, year is 2.5× slower, the rest ramp
+  // between. Multiplies MS_PER_VIEWPORT for the active zoom.
+  const SWEEP_PACE_BY_ZOOM: Record<Zoom, number> = {
+    month: 1,
+    quarter: 1.5,
+    'half-year': 2,
+    year: 2.5,
+    '2-year': 3,
+  };
   // Keep audio alive past a bell's tail (~1.1s) when disabling, so the final
   // beat of the reversed countdown rings out instead of being cut by suspend().
   const BELL_TAIL_MS = 1300;
@@ -320,12 +330,15 @@
   // Strike a batch of crossings as one polyphonic chord: every distinct pitch
   // plays at the same instant (no throttle, nothing dropped). Identical pitches
   // are merged — stacking the same note only adds loudness, not harmony. The
-  // per-note level is equal-power normalized (1/sqrt(n)) so a fat chord sums to
-  // roughly the loudness of a single note instead of getting louder with density.
+  // per-note level is normalized so a fat chord doesn't get louder with density,
+  // using exponent 0.6 (a touch fuller than equal-power's 0.5 so the polyphony
+  // stays rich) with a floor so huge chords don't shrink each voice to nothing.
+  // The per-note onset jitter + detune in playBell keeps the stacked attacks
+  // from summing into a click.
   function ringChord(batch: Crossing[], play: (freq: number, level: number) => void): void {
     const voices = uniqueVoices(batch, Infinity);
     if (voices.length === 0) return;
-    const level = 1 / Math.sqrt(voices.length);
+    const level = Math.max(0.28, 1 / Math.pow(voices.length, 0.6));
     for (const v of voices) play(laneToFrequency(v), level);
   }
 
@@ -507,7 +520,8 @@
     // RIGHT_PAD_PX trailing pad included — not just the last dated pixel.
     const endPx = totalWidth + RIGHT_PAD_PX;
     const endMs = pxToDate(endPx, rangeStart, pxPerDay).getTime();
-    const durationMs = sweepDurationMs(endPx - startLeft, vw, MS_PER_VIEWPORT);
+    const paceMs = MS_PER_VIEWPORT * SWEEP_PACE_BY_ZOOM[zoom.value];
+    const durationMs = sweepDurationMs(endPx - startLeft, vw, paceMs);
     // Timeline-ms advanced per real-ms; the playhead is integrated by this rate
     // each frame (below) rather than from absolute elapsed time.
     const speed = durationMs > 0 ? (endMs - startMs) / durationMs : endMs - startMs;
