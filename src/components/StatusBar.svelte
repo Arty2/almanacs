@@ -9,7 +9,11 @@
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
 
-  const COLLAPSED_HEIGHT = 28;
+  // The collapsed tray height tracks the header's rendered height — it now carries
+  // vertical padding (to match the bottom toolbar) and scales with the font-size
+  // setting, so a fixed 28 would let the header spill below the screen. Measured
+  // from the live `.handle` via bind:clientHeight; 28 is the pre-measure fallback.
+  let collapsedHeight = $state(28);
   const MAX_HEIGHT_VH = 60;
   let showVersion = $state(true);
   $effect(() => {
@@ -22,10 +26,16 @@
   let dragStartY = 0;
   let dragStartHeight = 0;
   let pointerMoved = false;
-  let height = $state(COLLAPSED_HEIGHT);
-  let lastExpandedHeight = COLLAPSED_HEIGHT;
+  let height = $state(28);
+  let lastExpandedHeight = 28;
 
-  const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
+  const expanded = $derived(height > collapsedHeight + 2);
+  // Keep the collapsed bar exactly as tall as the header whenever it isn't
+  // expanded (covers the initial measure and font-size changes). Keyed off the
+  // visual `expanded` state so it converges without fighting a drag.
+  $effect(() => {
+    if (!expanded) height = collapsedHeight;
+  });
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
 
   // Local lanes (Draft + imported .ics) — destinations for move/copy.
@@ -157,7 +167,7 @@
   // Kiosk mode keeps the tray collapsed and inert.
   $effect(() => {
     if (isKiosk()) {
-      height = COLLAPSED_HEIGHT;
+      height = collapsedHeight;
       ui.statusExpanded = false;
       clearSelection();
     }
@@ -181,7 +191,7 @@
     if (!dragging) return;
     const delta = dragStartY - e.clientY;
     if (Math.abs(delta) > 3) pointerMoved = true;
-    const next = Math.min(maxHeight(), Math.max(COLLAPSED_HEIGHT, dragStartHeight + delta));
+    const next = Math.min(maxHeight(), Math.max(collapsedHeight, dragStartHeight + delta));
     height = next;
   }
 
@@ -193,7 +203,7 @@
       toggleExpand();
       return;
     }
-    const startedExpanded = dragStartHeight > COLLAPSED_HEIGHT + 2;
+    const startedExpanded = dragStartHeight > collapsedHeight + 2;
     const startedCollapsed = !startedExpanded;
     const draggedDown = e.clientY > dragStartY;
     const draggedUp = e.clientY < dragStartY - 10;
@@ -205,16 +215,16 @@
       return;
     }
     if (startedCollapsed) {
-      height = COLLAPSED_HEIGHT;
+      height = collapsedHeight;
       ui.statusExpanded = false;
       return;
     }
     if (startedExpanded && draggedDown) {
-      height = COLLAPSED_HEIGHT;
+      height = collapsedHeight;
       ui.statusExpanded = false;
       trayCollapse();
-    } else if (height < COLLAPSED_HEIGHT * 1.5) {
-      height = COLLAPSED_HEIGHT;
+    } else if (height < collapsedHeight * 1.5) {
+      height = collapsedHeight;
       ui.statusExpanded = false;
       trayCollapse();
     } else {
@@ -226,11 +236,11 @@
   function toggleExpand(): void {
     if (isKiosk()) return;
     if (expanded) {
-      height = COLLAPSED_HEIGHT;
+      height = collapsedHeight;
       ui.statusExpanded = false;
       trayCollapse();
     } else {
-      height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
+      height = lastExpandedHeight > collapsedHeight + 2 ? lastExpandedHeight : maxHeight();
       ui.statusExpanded = true;
       trayExpand();
     }
@@ -643,6 +653,7 @@
     <div
       class="handle selection-head"
       role="presentation"
+      bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}
       onpointerup={endDrag}
@@ -710,6 +721,7 @@
       class="handle"
       aria-label={expanded ? 'Collapse events' : 'Expand events'}
       aria-expanded={expanded}
+      bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}
       onpointerup={endDrag}
