@@ -1109,8 +1109,12 @@
           >
             <div class="feed-row">
               {#if isScratchpad(feed)}
-                <span class="kind-mark" title="Draft" aria-label="Draft">
-                  <Icon name="plus" size={14} />
+                <span class="kind-mark" title="Local (not synced)" aria-label="Local (not synced)">
+                  <Icon name="unlink" size={14} />
+                </span>
+              {:else}
+                <span class="kind-mark" title="Linked (URL feed)" aria-label="Linked (URL feed)">
+                  <Icon name="link" size={14} />
                 </span>
               {/if}
               {#if travelIconName(feed.travel)}
@@ -1249,15 +1253,6 @@
                       data-state={formHidden ? 'enable' : 'disable'}
                       onclick={() => (formHidden = !formHidden)}
                     >{formHidden ? 'Enable' : 'Disable'}</button>
-                    {#if isScratchpad(feed)}
-                      <button
-                        type="button"
-                        class="lane-export-btn"
-                        onclick={() => exportLaneIcs(feed)}
-                        title="Download this lane as an .ics file"
-                        aria-label="Download this lane as an .ics file"
-                      ><Icon name="arrow-bar-down" size={16} /></button>
-                    {/if}
                     {#if isDeletableFeed(feed)}
                       <button
                         type="button"
@@ -1271,6 +1266,15 @@
                         : confirmDeleteFeedId === feed.id
                           ? 'Delete ?'
                           : 'Delete'}</button>
+                    {/if}
+                    {#if isScratchpad(feed)}
+                      <button
+                        type="button"
+                        class="lane-export-btn"
+                        onclick={() => exportLaneIcs(feed)}
+                        title="Download this lane as an .ics file"
+                        aria-label="Download this lane as an .ics file"
+                      ><Icon name="arrow-bar-down" size={16} /></button>
                     {/if}
                   </div>
                   <div class="action-group">
@@ -1462,7 +1466,7 @@
   }
   .form-actions .lane-export-btn {
     flex: none;
-    width: 30px;
+    width: 26px;
     padding: 0;
   }
   .form-actions .lane-export-btn:hover {
@@ -1565,9 +1569,9 @@
   details.group > summary h3::before {
     content: '▸';
     display: inline-block;
-    margin-right: 0.4em;
+    margin-right: 0.3em;
     color: var(--ink-muted);
-    font-size: 0.9em;
+    font-size: 1.3em;
   }
   details.group[open] > summary h3::before {
     content: '▾';

@@ -25,7 +25,7 @@ The Configuration section's **Import** button (and long-press to paste from the 
 - **A JSON config** — the format produced by **Export** — replaces your current calendars, rules, and settings. Use it to move a full setup between devices, alongside the share-link flow.
 - **An `.ics` calendar file** — adds its events as a new **local lane**, named after the calendar (`X-WR-CALNAME`), the file, or the import date. A local lane behaves like the built-in **Draft**: its events are editable, stored in `localStorage`, and not synced to any URL. Recurring events are expanded to a static snapshot within the visible window at import time; no link to the source file is kept. Each `.ics` you import becomes its own lane, and any imported lane can be deleted.
 
-Local lanes (Draft and imported `.ics`) are marked with a "not synced" badge to distinguish them from URL-backed feeds, and each can be exported back to an `.ics` file from its row in **Calendars**.
+In **Calendars**, each row carries a marker that distinguishes local lanes (Draft and imported `.ics`) from URL-backed feeds: an **unlink** glyph for local, not-synced lanes and a **link** glyph for linked URL feeds. Each local lane can be exported back to an `.ics` file from its row.
 
 ## Kiosk mode
 

@@ -669,6 +669,15 @@
         <span aria-hidden="true"></span>
       {/if}
       <span class="sel-right">
+        <button
+          type="button"
+          class="sel-btn sel-cancel"
+          class:confirming={cancelStage === 'confirm'}
+          class:done={cancelStage === 'done'}
+          title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={onCancelTap}
+        >{cancelStage === 'done' ? 'CANCEL ✓' : cancelStage === 'confirm' ? 'CANCEL ?' : 'CANCEL'}</button>
         <div class="move-menu" bind:this={moveRoot}>
           <button
             type="button"
@@ -693,15 +702,6 @@
             </div>
           {/if}
         </div>
-        <button
-          type="button"
-          class="sel-btn sel-cancel"
-          class:confirming={cancelStage === 'confirm'}
-          class:done={cancelStage === 'done'}
-          title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
-          onpointerdown={(e) => e.stopPropagation()}
-          onclick={onCancelTap}
-        >{cancelStage === 'done' ? 'CANCEL ✓' : cancelStage === 'confirm' ? 'CANCEL ?' : 'CANCEL'}</button>
       </span>
     </div>
   {:else}
@@ -925,9 +925,9 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.6em;
-    height: 28px;
+    min-height: 28px;
     flex-shrink: 0;
-    padding: 0 0.6em;
+    padding: 0.35em 0.6em;
     border: 0;
     background: transparent;
     color: inherit;
@@ -1021,6 +1021,14 @@
     opacity: 0.4;
     cursor: not-allowed;
     border-style: dashed;
+  }
+  /* Idle DELETE matches the settings delete button (accent border + text). */
+  .sel-delete:not(.confirming):not(.done) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .sel-delete:not(.confirming):not(.done):not(:disabled):hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   }
   /* Two-stage confirm/done look (matches the modal/settings delete buttons). */
   .sel-btn.confirming,
