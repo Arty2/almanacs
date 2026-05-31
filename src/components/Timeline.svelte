@@ -737,9 +737,28 @@
   // style and stutter the scroll in Chrome.
   function updateViewportVars(): void {
     if (!scrollEl) return;
-    viewportWidth = scrollEl.clientWidth;
+    const newWidth = scrollEl.clientWidth;
+    // A width change with no scroll is a viewport resize / device rotation. Once
+    // the user has interacted (so load-centering no longer owns the scroll),
+    // preserve whatever date was at screen centre across the resize, rescaled to
+    // the new width — otherwise the fixed scrollLeft would drift to a different
+    // date. Captured with the CURRENT pxPerDay before viewportWidth changes it.
+    const resized = newWidth !== viewportWidth && viewportWidth > 0;
+    const centerDate =
+      resized && centered && lastInteractionMs !== 0
+        ? pxToDate(scrollEl.scrollLeft + viewportWidth / 2, rangeStart, pxPerDay)
+        : null;
+    viewportWidth = newWidth;
     scrollLeft = scrollEl.scrollLeft;
     scheduleReveal();
+    if (centerDate) {
+      queueMicrotask(() => {
+        if (!scrollEl) return;
+        const npd = computePxPerDay(zoom.value, scrollEl.clientWidth) * fontScale;
+        const px = dateToPx(centerDate, rangeStart, npd);
+        scrollEl.scrollLeft = Math.max(0, px - scrollEl.clientWidth / 2);
+      });
+    }
   }
 
   // Firefox Android reflows the viewport several times right after first paint
@@ -1051,6 +1070,10 @@
     }
     const center = scrollEl.scrollLeft + scrollEl.clientWidth / 2;
     const centerDate = pxToDate(center, rangeStart, pxPerDay);
+    // If today's marker is already near screen centre, recentre on today after
+    // the zoom so the current-day line stays put; otherwise keep whatever date
+    // was centred (the user has scrolled elsewhere).
+    const todayCentered = Math.abs(center - todayPx) <= scrollEl.clientWidth * 0.25;
     zoom.value = next;
     queueMicrotask(() => {
       if (!scrollEl) return;
@@ -1062,7 +1085,12 @@
         return;
       }
       const newPxPerDay = computePxPerDay(next, scrollEl.clientWidth) * fontScale;
-      const targetPx = dateToPx(centerDate, rangeStart, newPxPerDay);
+      const anchorDate = todayCentered
+        ? next === 'month'
+          ? new Date(clock.now)
+          : todayDate
+        : centerDate;
+      const targetPx = dateToPx(anchorDate, rangeStart, newPxPerDay);
       scrollEl.scrollLeft = Math.max(0, targetPx - scrollEl.clientWidth / 2);
     });
   }
