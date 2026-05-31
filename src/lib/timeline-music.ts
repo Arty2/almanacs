@@ -273,16 +273,26 @@ function ready(): boolean {
 const TAIL_FADE_S = 0.5; // volume fade-out, starts when the silence window starts
 const TAIL_SILENCE_S = 0.6; // silence held before the oscillators stop
 
-export function playBell(freq: number): void {
+// `level` scales a note's peak so a whole chord of simultaneous notes can be
+// normalized (equal-power, ~1/sqrt(n)) — playing many at once stays as loud as
+// one, never louder. Default 1 = a solo strike at full level.
+
+export function playBell(freq: number, level = 1): void {
   if (!ready() || !ctx || !master) return;
-  const now = ctx.currentTime + 0.02;
+  // Stagger each note's onset by a few ms of jitter: when a fat chord fires, a
+  // shared exact start makes every voice's sharp attack (and in-phase
+  // fundamentals) sum into a single-sample transient — the click/static. A tiny
+  // spread desynchronizes the attacks so the chord swells cleanly instead.
+  const now = ctx.currentTime + 0.02 + Math.random() * 0.012;
   const dur = 1.8; // long ring so bells sustain and reverberate into each other
   const tBody = now + dur;
   const env = ctx.createGain();
   env.connect(master);
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(1, now + 0.003); // sharp attack = metallic ting
-  env.gain.exponentialRampToValueAtTime(0.0008, tBody);
+  // ~7ms attack: still a metallic ting, but soft enough that stacked voices
+  // don't sum into an onset click.
+  env.gain.linearRampToValueAtTime(level, now + 0.007);
+  env.gain.exponentialRampToValueAtTime(0.0008 * level, tBody);
   // At the body's end, fade linearly to true zero over TAIL_FADE_S, then hold
   // silence for the rest of TAIL_SILENCE_S before stopping — no end-click.
   env.gain.linearRampToValueAtTime(0, tBody + TAIL_FADE_S);
@@ -290,6 +300,9 @@ export function playBell(freq: number): void {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.value = freq * p.mult;
+    // A few cents of random detune decorrelates the phase of identical partials
+    // across simultaneous voices, so they don't reinforce into a transient spike.
+    osc.detune.value = (Math.random() - 0.5) * 8;
     const pg = ctx.createGain();
     pg.gain.value = p.gain;
     osc.connect(pg);
@@ -299,9 +312,10 @@ export function playBell(freq: number): void {
   }
 }
 
-export function playWhistle(freq: number): void {
+export function playWhistle(freq: number, level = 1): void {
   if (!ready() || !ctx || !master) return;
-  const now = ctx.currentTime + 0.02;
+  // Same onset jitter as the bell, so stacked whistles don't click either.
+  const now = ctx.currentTime + 0.02 + Math.random() * 0.012;
   const dur = 0.55;
   const osc = ctx.createOscillator();
   osc.type = 'sine';
@@ -311,8 +325,8 @@ export function playWhistle(freq: number): void {
   const tBody = now + dur;
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(0.6, now + 0.03);
-  env.gain.exponentialRampToValueAtTime(0.0008, tBody);
+  env.gain.linearRampToValueAtTime(0.6 * level, now + 0.03);
+  env.gain.exponentialRampToValueAtTime(0.0008 * level, tBody);
   // Same tail as the bell: fade to true zero over TAIL_FADE_S from the body's
   // end, then hold silence to the stop — no end-click.
   env.gain.linearRampToValueAtTime(0, tBody + TAIL_FADE_S);

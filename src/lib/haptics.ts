@@ -102,6 +102,13 @@ export function longPress(): void {
   buzz(80);
 }
 
+// One pulse per bell of the timeline-music arming/disarming countdown, so each
+// "clue" beat is felt as well as heard. Goes through buzz() so it honours the
+// Haptics setting (and substitutes a tap sound where vibration is unsupported).
+export function countdownBeat(): void {
+  buzz(35);
+}
+
 // Tray expand = one longer pulse ("taaaap"); collapse = two short ("tap tap").
 export function trayExpand(): void {
   buzz(45);
