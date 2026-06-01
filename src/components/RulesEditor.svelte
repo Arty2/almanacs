@@ -337,6 +337,14 @@
               <div class="action-group">
                 <button
                   type="button"
+                  class="delete-btn"
+                  class:confirming={confirmDeleteId === rule.id}
+                  class:done={doneDeleteId === rule.id}
+                  title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
+                  onclick={() => remove(rule.id)}
+                >Delete<span class="act-mark">{doneDeleteId === rule.id ? '✓' : confirmDeleteId === rule.id ? '?' : ''}</span></button>
+                <button
+                  type="button"
                   class="disable-btn"
                   data-state={formDisabled ? 'enable' : 'disable'}
                   onclick={() => {
@@ -345,14 +353,6 @@
                     if (snapshot) snapshot = { ...snapshot, disabled: formDisabled };
                   }}
                 ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formDisabled ? 'Enable' : 'Disable'}</span></span></button>
-                <button
-                  type="button"
-                  class="delete-btn"
-                  class:confirming={confirmDeleteId === rule.id}
-                  class:done={doneDeleteId === rule.id}
-                  title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
-                  onclick={() => remove(rule.id)}
-                >Delete<span class="act-mark">{doneDeleteId === rule.id ? '✓' : confirmDeleteId === rule.id ? '?' : ''}</span></button>
               </div>
               <div class="action-group">
                 <button
@@ -547,9 +547,9 @@
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Save sizes to its content so it sits narrower than Cancel. */
+  /* Save shares its action group equally with Cancel, so the two match width. */
   .form-actions button.primary {
-    flex: 0 1 auto;
+    flex: 1 1 0;
   }
   .form-actions .delete-btn {
     position: relative;

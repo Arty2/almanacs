@@ -1247,15 +1247,6 @@
                   <div class="action-group">
                     <button
                       type="button"
-                      class="disable-btn"
-                      data-state={formHidden ? 'enable' : 'disable'}
-                      onclick={() => {
-                        if (editingFeed) { toggleHidden(editingFeed); formHidden = !!editingFeed.hidden; }
-                        else formHidden = !formHidden;
-                      }}
-                    ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formHidden ? 'Enable' : 'Disable'}</span></span></button>
-                    <button
-                      type="button"
                       class="delete-btn"
                       class:confirming={confirmDeleteFeedId === feed.id}
                       class:done={doneDeleteFeedId === feed.id}
@@ -1267,6 +1258,15 @@
                           : undefined}
                       onclick={() => removeFeed(feed.id)}
                     >Delete<span class="act-mark">{doneDeleteFeedId === feed.id ? '✓' : confirmDeleteFeedId === feed.id ? '?' : ''}</span></button>
+                    <button
+                      type="button"
+                      class="disable-btn"
+                      data-state={formHidden ? 'enable' : 'disable'}
+                      onclick={() => {
+                        if (editingFeed) { toggleHidden(editingFeed); formHidden = !!editingFeed.hidden; }
+                        else formHidden = !formHidden;
+                      }}
+                    ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formHidden ? 'Enable' : 'Disable'}</span></span></button>
                   </div>
                   <div class="action-group">
                     <button
