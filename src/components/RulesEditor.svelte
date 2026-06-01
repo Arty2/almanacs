@@ -402,7 +402,6 @@
     border-top-color: transparent;
   }
   .rule-list li[data-active='true'] {
-    background: var(--paper-2);
     outline: 2px solid var(--ink);
     outline-offset: -2px;
   }

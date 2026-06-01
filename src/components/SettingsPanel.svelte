@@ -1456,9 +1456,9 @@
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Save sizes to its content so it sits narrower than Cancel. */
+  /* Save shares its action group equally with Cancel, so the two match width. */
   .form-actions button.primary {
-    flex: 0 1 auto;
+    flex: 1 1 0;
   }
   .form-actions .delete-btn {
     position: relative;
@@ -1632,7 +1632,6 @@
     border-top-color: transparent;
   }
   .feeds li[data-active='true'] {
-    background: var(--paper-2);
     outline: 2px solid var(--ink);
     outline-offset: -2px;
   }
@@ -1652,9 +1651,13 @@
     padding: 6px 8px;
   }
   /* Local calendars lead with the download button — drop the left inset so it
-     sits flush to the panel edge. */
+     sits flush to the panel edge. While editing, restore it so the open card's
+     contents align with the rest of the form. */
   .feed-row[data-local='true'] {
     padding-left: 0;
+  }
+  .feeds li[data-active='true'] .feed-row[data-local='true'] {
+    padding-left: 8px;
   }
   .feed-name-btn {
     flex: 1;
