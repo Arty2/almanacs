@@ -1108,15 +1108,6 @@
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row">
-              {#if isScratchpad(feed)}
-                <span class="kind-mark" title="Local (not synced)" aria-label="Local (not synced)">
-                  <Icon name="unlink" size={14} />
-                </span>
-              {:else}
-                <span class="kind-mark" title="Linked (URL feed)" aria-label="Linked (URL feed)">
-                  <Icon name="link" size={14} />
-                </span>
-              {/if}
               {#if travelIconName(feed.travel)}
                 <span class="kind-mark" title={travelLabelText(feed.travel)}>
                   <Icon name={travelIconName(feed.travel)!} size={14} />
@@ -1137,7 +1128,7 @@
                 aria-expanded={editingFeedId === feed.id}
               >
                 <span class="feed-name-text">{feed.name}</span>
-                {#if isScratchpad(feed)}<LocalBadge />{/if}
+                {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}

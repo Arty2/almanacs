@@ -999,6 +999,10 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.5em;
+    /* Taller than the normal 28px header so the 28px buttons get breathing room,
+       matching the footer toolbar (.copy-bar) height. */
+    height: auto;
+    padding: 0.35em 0.6em;
     cursor: pointer;
     touch-action: none;
   }
@@ -1006,7 +1010,7 @@
     display: inline-flex;
     align-items: center;
     justify-self: start;
-    gap: 0.3em;
+    gap: 0.5em;
   }
   .sel-right {
     display: inline-flex;
