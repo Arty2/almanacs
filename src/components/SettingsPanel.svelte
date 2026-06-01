@@ -1105,7 +1105,7 @@
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
-            <div class="feed-row">
+            <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
               {#if isScratchpad(feed)}
                 <IconButton
                   icon="arrow-bar-down"
@@ -1649,6 +1649,11 @@
     align-items: center;
     gap: 0.3em;
     padding: 6px 8px;
+  }
+  /* Local calendars lead with the download button — drop the left inset so it
+     sits flush to the panel edge. */
+  .feed-row[data-local='true'] {
+    padding-left: 0;
   }
   .feed-name-btn {
     flex: 1;
