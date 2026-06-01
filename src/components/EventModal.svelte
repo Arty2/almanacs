@@ -411,6 +411,8 @@
     background: rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
+    overscroll-behavior: contain;
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
     transition: background 150ms ease-in, backdrop-filter 150ms ease-in, -webkit-backdrop-filter 150ms ease-in;

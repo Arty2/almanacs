@@ -28,9 +28,13 @@
   let pointerMoved = false;
   let height = $state(28);
   let lastExpandedHeight = 28;
-  // Swipe-down-to-dismiss on the tray body (not the header). Only armed when the
-  // inner scroll region is already at the top, so it never fights content scroll.
-  let traySwipeStartY: number | null = null;
+  // Swipe-down-to-dismiss on the tray body (not the header). Armed on pointerdown
+  // only when the inner scroll region is at the top; promoted to a real header-style
+  // drag once the finger clearly moves down, so content scroll and row taps survive.
+  let trayArmed = false;
+  let trayArmStartY = 0;
+  let trayArmTarget: HTMLElement | null = null;
+  let trayArmPointerId = 0;
 
   const expanded = $derived(height > collapsedHeight + 2);
   // Resting collapsed height: a touch taller than the header so the bar sits
@@ -279,29 +283,50 @@
     }
   }
 
-  // Swipe-down anywhere on the tray body collapses it, mirroring the header drag.
-  // Unlike the header we don't capture the pointer or treat a tap as toggle, so
-  // clicks on event rows keep working; we only arm when the body is scrolled to
-  // the top so a downward swipe can't be a scroll gesture.
+  // Swipe-down anywhere on the tray body drags it shut exactly like the header:
+  // once a downward gesture from scroll-top crosses a small threshold we promote
+  // it to the same live drag (onDrag/endDrag) the handle uses. We only arm at the
+  // top and only on downward motion, so scrolling the content and tapping event
+  // rows still work (a tap never reaches dragging, so the row's click fires).
   function onTrayPointerDown(e: PointerEvent): void {
-    traySwipeStartY = null;
+    trayArmed = false;
     if (isKiosk()) return;
     const scroller = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(
       '.tray-scroll, .raw-block',
     );
     if (scroller && scroller.scrollTop > 0) return;
-    traySwipeStartY = e.clientY;
+    trayArmed = true;
+    trayArmStartY = e.clientY;
+    trayArmTarget = e.currentTarget as HTMLElement;
+    trayArmPointerId = e.pointerId;
+  }
+
+  function onTrayPointerMove(e: PointerEvent): void {
+    if (dragging) {
+      onDrag(e);
+      return;
+    }
+    if (!trayArmed) return;
+    const dy = e.clientY - trayArmStartY;
+    if (dy <= 4) {
+      // Upward / negligible motion is a content scroll, not a dismiss — disarm.
+      if (dy < -4) trayArmed = false;
+      return;
+    }
+    // Clear downward swipe from the top: hand off to the same drag the header runs.
+    trayArmed = false;
+    dragging = true;
+    pointerMoved = true;
+    dragStartY = trayArmStartY;
+    dragStartHeight = height;
+    trayArmTarget?.setPointerCapture(trayArmPointerId);
+    onDrag(e);
   }
 
   function onTrayPointerUp(e: PointerEvent): void {
-    if (traySwipeStartY == null) return;
-    const dy = e.clientY - traySwipeStartY;
-    traySwipeStartY = null;
-    if (dy > 60) {
-      height = closedHeight;
-      ui.statusExpanded = false;
-      trayCollapse();
-    }
+    trayArmed = false;
+    if (!dragging) return;
+    endDrag(e);
   }
 
   function toggleExpand(): void {
@@ -818,8 +843,9 @@
       aria-label="Upcoming events"
       inert={!fullyExpanded}
       onpointerdown={onTrayPointerDown}
+      onpointermove={onTrayPointerMove}
       onpointerup={onTrayPointerUp}
-      onpointercancel={() => (traySwipeStartY = null)}
+      onpointercancel={onTrayPointerUp}
     >
       {#if rawMode}
         <div class="raw-block">
