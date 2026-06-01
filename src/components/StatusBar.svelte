@@ -940,13 +940,11 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.6em;
-    /* content-box so min-height pins the inner row (not incl. padding): the
-       header is then the same height in normal and multi-select mode, where the
-       28px buttons would otherwise add to a border-box min-height. */
-    box-sizing: content-box;
-    min-height: 28px;
+    /* Fixed height keeps the header one size in normal and multi-select mode
+       (the 28px buttons fit exactly). collapsedHeight is measured from this. */
+    height: 28px;
     flex-shrink: 0;
-    padding: 0.35em 0.6em;
+    padding: 0 0.6em;
     border: 0;
     background: transparent;
     color: inherit;

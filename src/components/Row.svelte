@@ -320,7 +320,7 @@
   .span-bar {
     position: absolute;
     top: 50%;
-    height: 4px;
+    height: 10px;
     border: 1px solid var(--ink);
     border-radius: 999px;
     padding: 0;
