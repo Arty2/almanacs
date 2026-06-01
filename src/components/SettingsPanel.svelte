@@ -272,12 +272,10 @@
       else delete target.travel;
       if (formHidden) target.hidden = true;
       else delete target.hidden;
-      if (!isScratchpad(target)) {
-        if (formTimezone) target.timezone = formTimezone;
-        else delete target.timezone;
-        if (target.source.kind === 'user' && formUrl.trim()) {
-          target.source = { kind: 'user', url: formUrl.trim() };
-        }
+      if (formTimezone) target.timezone = formTimezone;
+      else delete target.timezone;
+      if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
+        target.source = { kind: 'user', url: formUrl.trim() };
       }
       void onRefresh();
       clearForm();
@@ -1112,7 +1110,7 @@
                 <IconButton
                   icon="arrow-bar-down"
                   label="Download this lane as an .ics file"
-                  variant="ghost"
+                  variant="default"
                   size={16}
                   onclick={() => exportLaneIcs(feed)}
                 />
@@ -1137,7 +1135,6 @@
                 aria-expanded={editingFeedId === feed.id}
               >
                 <span class="feed-name-text">{feed.name}</span>
-                {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
                 {#if feedTzLabel(feed)}
                   <span class="feed-tz" data-mono>({feedTzLabel(feed)})</span>
                 {/if}
@@ -1153,6 +1150,9 @@
                   <Icon name="help" size={14} />
                 </button>
               {/if}
+              <span class="feed-link-mark">
+                {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
+              </span>
               <IconButton
                 icon={fi === 0 ? 'arrow-bar-down' : 'arrow-up'}
                 label={fi === 0 ? 'Wrap to end' : 'Move up'}
@@ -1231,20 +1231,18 @@
                     </select>
                   </div>
                 {/if}
-                {#if !isScratchpad(feed)}
-                  <div class="field">
-                    <label for="form-tz-{feed.id}">Time zone</label>
-                    <select id="form-tz-{feed.id}" bind:value={formTimezone}>
-                      <option value=""
-                        >Auto{events.tzByFeed[feed.id]
-                          ? ' (' + events.tzByFeed[feed.id] + ')'
-                          : ''}</option>
-                      {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                        <option value={tz}>{formatTzOption(tz)}</option>
-                      {/each}
-                    </select>
-                  </div>
-                {/if}
+                <div class="field">
+                  <label for="form-tz-{feed.id}">Time zone</label>
+                  <select id="form-tz-{feed.id}" bind:value={formTimezone}>
+                    <option value=""
+                      >Auto{events.tzByFeed[feed.id]
+                        ? ' (' + events.tzByFeed[feed.id] + ')'
+                        : ''}</option>
+                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
+                      <option value={tz}>{formatTzOption(tz)}</option>
+                    {/each}
+                  </select>
+                </div>
                 <div class="form-actions feed-form-actions">
                   <div class="action-group">
                     <button
@@ -1737,6 +1735,15 @@
   .kind-mark {
     color: var(--ink-muted);
     display: inline-flex;
+  }
+  /* Link/unlink indicator gets its own slot just before the up/down controls so
+     it lines up in a column across rows (rather than being clipped inside the
+     overflow-hidden name button). */
+  .feed-link-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
   .warn-btn {
     display: inline-flex;

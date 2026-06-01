@@ -59,6 +59,11 @@
   const hasLocalSelection = $derived(selectedLocalUids.length > 0);
   // URL-only selection: nothing to delete/move, so the action becomes a copy.
   const copyMode = $derived(selection.uids.size > 0 && !hasLocalSelection);
+  // Count shows just the total when the selection is all one kind (all local or
+  // all URL); a mixed selection shows "local / total" so it's clear how many can
+  // be moved/deleted.
+  const selTotal = $derived(selection.uids.size);
+  const mixedSelection = $derived(selectedLocalUids.length > 0 && selectedLocalUids.length < selTotal);
 
   // --- Two-stage DELETE / CANCEL (tap → confirm → done+cooldown-to-undo) ---
   const CONFIRM_WINDOW_MS = 3000;
@@ -132,19 +137,52 @@
     if (!inSelectionMode) {
       if (deleteTimer) clearTimeout(deleteTimer);
       if (cancelTimer) clearTimeout(cancelTimer);
-      deleteTimer = cancelTimer = null;
+      if (moveTimer) clearTimeout(moveTimer);
+      deleteTimer = cancelTimer = moveTimer = null;
       deleteStage = cancelStage = 'idle';
+      moveStage = 'idle';
+      moveUndo = null;
       moveMenuOpen = false;
     }
   });
 
-  // --- MOVE / COPY submenu ---
+  // --- MOVE / COPY submenu (action → ✓ with a cooldown-to-undo, like DELETE) ---
   let moveMenuOpen = $state(false);
   let moveRoot: HTMLDivElement | undefined = $state();
+  let moveStage = $state<'idle' | 'done'>('idle');
+  let moveTimer: ReturnType<typeof setTimeout> | null = null;
+  type MoveUndo = { kind: 'move'; map: Map<string, string> } | { kind: 'copy'; uids: string[] };
+  let moveUndo: MoveUndo | null = null;
+
   function pickLane(laneId: string): void {
-    if (copyMode) copyEventsToLane(selection.uids, laneId);
-    else moveEventsToLane(selection.uids, laneId);
+    moveUndo = copyMode
+      ? { kind: 'copy', uids: copyEventsToLane(selection.uids, laneId) }
+      : { kind: 'move', map: moveEventsToLane(selection.uids, laneId) };
     moveMenuOpen = false;
+    moveStage = 'done';
+    if (moveTimer) clearTimeout(moveTimer);
+    moveTimer = setTimeout(() => { moveTimer = null; moveStage = 'idle'; moveUndo = null; }, CONFIRM_WINDOW_MS);
+  }
+
+  function onMoveTap(): void {
+    if (moveStage === 'done') { // undo the move/copy during the cooldown
+      if (moveTimer) clearTimeout(moveTimer);
+      moveTimer = null;
+      if (moveUndo?.kind === 'copy') {
+        deleteLocalEvents(moveUndo.uids);
+      } else if (moveUndo?.kind === 'move') {
+        const byLane = new Map<string, string[]>();
+        for (const [uid, srcFeedId] of moveUndo.map) {
+          if (!byLane.has(srcFeedId)) byLane.set(srcFeedId, []);
+          byLane.get(srcFeedId)!.push(uid);
+        }
+        for (const [srcFeedId, uids] of byLane) moveEventsToLane(uids, srcFeedId);
+      }
+      moveUndo = null;
+      moveStage = 'idle';
+      return;
+    }
+    moveMenuOpen = !moveMenuOpen;
   }
   $effect(() => {
     if (!moveMenuOpen) return;
@@ -664,61 +702,51 @@
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span class="sel-left">
+      <button
+        type="button"
+        class="sel-btn sel-delete"
+        class:confirming={deleteStage === 'confirm'}
+        class:done={deleteStage === 'done'}
+        disabled={!hasLocalSelection}
+        title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={onDeleteTap}
+      ><span class="sel-mark" aria-hidden="true"></span>DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
+      <div class="move-menu" bind:this={moveRoot}>
         <button
           type="button"
-          class="sel-btn sel-delete"
-          class:confirming={deleteStage === 'confirm'}
-          class:done={deleteStage === 'done'}
-          disabled={!hasLocalSelection}
-          title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
+          class="sel-btn sel-move"
+          class:done={moveStage === 'done'}
+          aria-haspopup="menu"
+          aria-expanded={moveMenuOpen}
+          title={moveStage === 'done' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
           onpointerdown={(e) => e.stopPropagation()}
-          onclick={onDeleteTap}
-        ><span class="sel-mark" aria-hidden="true"></span>DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
-        <span class="sel-count">{selection.uids.size}</span>
-      </span>
-      {#if !isKiosk()}
-        <span class="toggle" aria-hidden="true">
-          <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
-        </span>
-      {:else}
-        <span aria-hidden="true"></span>
-      {/if}
-      <span class="sel-right">
-        <button
-          type="button"
-          class="sel-btn sel-cancel"
-          class:confirming={cancelStage === 'confirm'}
-          class:done={cancelStage === 'done'}
-          title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
-          onpointerdown={(e) => e.stopPropagation()}
-          onclick={onCancelTap}
-        ><span class="sel-mark" aria-hidden="true"></span>CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
-        <div class="move-menu" bind:this={moveRoot}>
-          <button
-            type="button"
-            class="sel-btn"
-            aria-haspopup="menu"
-            aria-expanded={moveMenuOpen}
-            title={copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
-            onpointerdown={(e) => e.stopPropagation()}
-            onclick={() => (moveMenuOpen = !moveMenuOpen)}
-          >{copyMode ? 'COPY' : 'MOVE'}</button>
-          {#if moveMenuOpen}
-            <div class="move-menu-list" role="menu">
-              {#each localLanes as lane (lane.id)}
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="move-menu-item"
-                  onpointerdown={(e) => e.stopPropagation()}
-                  onclick={() => pickLane(lane.id)}
-                >{lane.name}</button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </span>
+          onclick={onMoveTap}
+        ><span class="sel-mark" aria-hidden="true"></span>{copyMode ? 'COPY' : 'MOVE'}<span class="sel-mark">{moveStage === 'done' ? '✓' : ''}</span></button>
+        {#if moveMenuOpen}
+          <div class="move-menu-list" role="menu">
+            {#each localLanes as lane (lane.id)}
+              <button
+                type="button"
+                role="menuitem"
+                class="move-menu-item"
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={() => pickLane(lane.id)}
+              >{lane.name}</button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <span class="sel-count">{mixedSelection ? `${selectedLocalUids.length} / ${selTotal}` : selTotal}</span>
+      <button
+        type="button"
+        class="sel-btn sel-cancel"
+        class:confirming={cancelStage === 'confirm'}
+        class:done={cancelStage === 'done'}
+        title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={onCancelTap}
+      ><span class="sel-mark" aria-hidden="true"></span>CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
     </div>
   {:else}
     <button
@@ -997,10 +1025,9 @@
     color: var(--ink);
   }
   .selection-head {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    display: flex;
     align-items: center;
-    gap: 0.5em;
+    gap: 0.4em;
     /* Taller than the normal 28px header so the 28px buttons get breathing room,
        matching the footer toolbar (.copy-bar) height. */
     height: auto;
@@ -1008,17 +1035,9 @@
     cursor: pointer;
     touch-action: none;
   }
-  .sel-left {
-    display: inline-flex;
-    align-items: center;
-    justify-self: start;
-    gap: 0.5em;
-  }
-  .sel-right {
-    display: inline-flex;
-    align-items: center;
-    justify-self: end;
-    gap: 0.3em;
+  /* DELETE and MOVE sit at the start; CANCEL is pushed to the far right. */
+  .sel-cancel {
+    margin-left: auto;
   }
   .sel-count {
     font-size: var(--fs-12);
@@ -1052,10 +1071,6 @@
     display: inline-block;
     width: 0.8em;
     text-align: center;
-  }
-  .sel-delete,
-  .sel-cancel {
-    padding: 0 8px;
   }
   /* Idle DELETE matches the settings delete button (accent border + text). */
   .sel-delete:not(.confirming):not(.done) {

@@ -95,8 +95,11 @@ export function deleteScratchpadEvent(uid: string): void {
 // Move one or more events between local lanes, keeping their uids. URL/secret
 // feeds are network-fetched and overwritten on refresh, so only scratchpad lanes
 // are valid targets. Every touched lane is re-sorted and persisted once.
-export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): void {
-  if (!destFeedId.startsWith('scratchpad:')) return;
+// Returns a uid→original-lane map of the events it actually moved, so callers can
+// reverse the move (e.g. an undo affordance) by moving each back to its source.
+export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): Map<string, string> {
+  const moved = new Map<string, string>();
+  if (!destFeedId.startsWith('scratchpad:')) return moved;
   const touched = new Set<string>([destFeedId]);
   for (const uid of uids) {
     const srcFeedId = laneFeedIdOf(uid);
@@ -106,6 +109,7 @@ export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): vo
     events.byFeed[srcFeedId] = (events.byFeed[srcFeedId] ?? []).filter((e) => e.uid !== uid);
     events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), { ...ev, feedId: destFeedId }];
     touched.add(srcFeedId);
+    moved.set(uid, srcFeedId);
     if (ui.modalEvent?.uid === uid) ui.modalEvent = { ...ui.modalEvent, feedId: destFeedId };
   }
   for (const feedId of touched) {
@@ -114,6 +118,7 @@ export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): vo
     );
     saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
   }
+  return moved;
 }
 
 // Move a single event — thin wrapper over the batch move.
@@ -141,8 +146,10 @@ export function deleteLocalEvents(uids: Iterable<string>): void {
 // Copy the given events (found in any lane/feed) into a local lane as fresh
 // scratchpad events (new uids). Used for URL-only selections where move isn't
 // possible. Originals are left intact.
-export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): void {
-  if (!destFeedId.startsWith('scratchpad:')) return;
+// Returns the uids of the freshly created copies, so callers can reverse the copy
+// (e.g. an undo affordance) by deleting them.
+export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): string[] {
+  if (!destFeedId.startsWith('scratchpad:')) return [];
   const want = new Set(uids);
   const copies: ParsedEvent[] = [];
   for (const list of Object.values(events.byFeed)) {
@@ -156,11 +163,12 @@ export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): vo
       copies.push(c);
     }
   }
-  if (copies.length === 0) return;
+  if (copies.length === 0) return [];
   events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), ...copies].sort(
     (a, b) => a.start.getTime() - b.start.getTime(),
   );
   saveScratchpad(events.byFeed[destFeedId], laneIdOf(destFeedId));
+  return copies.map((c) => c.uid);
 }
 
 function newLaneId(): string {
