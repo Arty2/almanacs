@@ -28,6 +28,9 @@
   let pointerMoved = false;
   let height = $state(28);
   let lastExpandedHeight = 28;
+  // Swipe-down-to-dismiss on the tray body (not the header). Only armed when the
+  // inner scroll region is already at the top, so it never fights content scroll.
+  let traySwipeStartY: number | null = null;
 
   const expanded = $derived(height > collapsedHeight + 2);
   // Resting collapsed height: a touch taller than the header so the bar sits
@@ -273,6 +276,31 @@
     } else {
       lastExpandedHeight = height;
       ui.statusExpanded = true;
+    }
+  }
+
+  // Swipe-down anywhere on the tray body collapses it, mirroring the header drag.
+  // Unlike the header we don't capture the pointer or treat a tap as toggle, so
+  // clicks on event rows keep working; we only arm when the body is scrolled to
+  // the top so a downward swipe can't be a scroll gesture.
+  function onTrayPointerDown(e: PointerEvent): void {
+    traySwipeStartY = null;
+    if (isKiosk()) return;
+    const scroller = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(
+      '.tray-scroll, .raw-block',
+    );
+    if (scroller && scroller.scrollTop > 0) return;
+    traySwipeStartY = e.clientY;
+  }
+
+  function onTrayPointerUp(e: PointerEvent): void {
+    if (traySwipeStartY == null) return;
+    const dy = e.clientY - traySwipeStartY;
+    traySwipeStartY = null;
+    if (dy > 60) {
+      height = closedHeight;
+      ui.statusExpanded = false;
+      trayCollapse();
     }
   }
 
@@ -784,7 +812,15 @@
   {/if}
 
   {#if (expanded || inSelectionMode) && eventGroups}
-    <div class="events-tray" role="region" aria-label="Upcoming events" inert={!fullyExpanded}>
+    <div
+      class="events-tray"
+      role="region"
+      aria-label="Upcoming events"
+      inert={!fullyExpanded}
+      onpointerdown={onTrayPointerDown}
+      onpointerup={onTrayPointerUp}
+      onpointercancel={() => (traySwipeStartY = null)}
+    >
       {#if rawMode}
         <div class="raw-block">
           <table class="raw-table">
@@ -1244,6 +1280,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     padding: 0.6em 0.8em;
     user-select: text;
@@ -1269,6 +1306,7 @@
   .tray-scroll {
     flex: 1 1 auto;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 0.4em 0.6em 0.5em;
     user-select: text;
     -webkit-user-select: text;

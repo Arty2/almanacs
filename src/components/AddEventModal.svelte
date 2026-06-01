@@ -364,6 +364,7 @@
     width: min(520px, calc(100vw - 1rem));
     max-height: calc(100dvh - 2rem);
     overflow: auto;
+    overscroll-behavior: contain;
     box-sizing: border-box;
     transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
