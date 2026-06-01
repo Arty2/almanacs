@@ -1589,9 +1589,10 @@
     content: '▸';
     display: inline-block;
     margin-right: 0.3em;
-    color: var(--ink-muted);
+    color: var(--ink);
     font-size: 2.6em;
     line-height: 1;
+    transform: translateY(-1px);
   }
   details.group[open] > summary h3::before {
     content: '▾';
