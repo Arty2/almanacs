@@ -278,13 +278,13 @@
             onclick={() => (editingRuleId === rule.id ? cancelEdit() : startEdit(rule))}
             ondblclick={() => toggleRuleDisabled(rule)}
           >
-            <span class="rule-preview">{previewText(rule)}</span>
             <span
               class="style-swatch"
               data-style={rule.style}
               aria-label={styleLabel(rule.style)}
               title={styleLabel(rule.style)}
             >α</span>
+            <span class="rule-preview">{previewText(rule)}</span>
           </button>
           <IconButton
             icon={ri === 0 ? 'arrow-bar-down' : 'arrow-up'}
@@ -461,7 +461,7 @@
     align-items: center;
     justify-content: center;
     width: 18px;
-    height: 16px;
+    height: 18px;
     flex-shrink: 0;
     border: 1px solid var(--ink);
     background: transparent;
