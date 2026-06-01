@@ -1049,6 +1049,7 @@
   .sel-delete,
   .sel-cancel {
     position: relative;
+    padding: 0 calc(12px + 0.5ch);
   }
   .sel-mark {
     position: absolute;
