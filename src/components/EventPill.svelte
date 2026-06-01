@@ -80,7 +80,7 @@
     event.allDay
       ? null
       : formatTime(event.start, config.timeFormat, config.timezone) +
-          ' – ' +
+          ' — ' +
           formatTime(event.end, config.timeFormat, config.timezone),
   );
 
@@ -246,5 +246,14 @@
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: visible;
+  }
+  /* Pull the time up toward the title (reduces vertical reach so pills in
+     adjacent lanes overlap less) and give it the same paper stroke as the
+     title for legibility over neighbouring pills. */
+  .meta-time {
+    margin-top: -4px;
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--stroke-w) var(--paper);
+    text-shadow: 0 0 1px var(--paper);
   }
 </style>

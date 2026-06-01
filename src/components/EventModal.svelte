@@ -4,7 +4,9 @@
   import { ui, config, events, pushLog, deleteScratchpadEvent, isKiosk } from '../lib/state.svelte';
   import { formatRange, formatTime } from '../lib/format';
   import { makeRule, matchingRulesFor } from '../lib/rules';
-  import { SCRATCHPAD_FEED_ID, type FindReplaceRule, type StyleVariant } from '../lib/types';
+  import { wrapVeventInCalendar } from '../lib/ics-core';
+  import { buildIcs } from '../lib/calendar-links';
+  import { isLocalFeedId, type FindReplaceRule, type StyleVariant } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let showSource = $state(false);
@@ -21,7 +23,7 @@
   // if ui.modalEvent shifts while the done flash is up.
   let pendingDeleteUid: string | null = null;
 
-  const isScratch = $derived(ui.modalEvent?.feedId === SCRATCHPAD_FEED_ID);
+  const isScratch = $derived(ui.modalEvent ? isLocalFeedId(ui.modalEvent.feedId) : false);
   // Kiosk mode: the modal is view-only — every mutate/export action is disabled.
   const locked = $derived(isKiosk());
 
@@ -296,7 +298,7 @@
 >
   {#if ui.modalEvent}
     {@const ev = ui.modalEvent}
-    {@const raw = events.rawByUid[ev.uid] ?? null}
+    {@const raw = events.rawByUid[ev.uid] ? wrapVeventInCalendar(events.rawByUid[ev.uid]) : (isScratch ? buildIcs(ev) : null)}
     <article class:locked>
       <header>
         <h2 class="modal-title">{ev.displayTitle}</h2>
@@ -327,16 +329,16 @@
         {/if}
       {:else}
         {@const info = formatEventDateInfo(ev)}
-        <p><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration} · {info.duration}{/if}</time></p>
-        {#if info.time}<p class="event-time">{info.time}{#if info.duration} · {info.duration}{/if}</p>{/if}
-        {#if ev.displayLocation}<p>{ev.displayLocation}</p>{/if}
+        <p class="event-info"><time datetime={ev.start.toISOString()}>{info.date}{#if ev.allDay && info.duration}{' · '}{info.duration}{/if}</time></p>
+        {#if info.time}<p class="event-time">{info.time}{#if info.duration}{' · '}{info.duration}{/if}</p>{/if}
+        {#if ev.displayLocation}<p class="event-info">{ev.displayLocation}</p>{/if}
         {#if ev.displayDescription}<p class="desc">{@html linkifyText(ev.displayDescription)}</p>{/if}
         {#if ev.url}<p><a href={ev.url} target="_blank" rel="noopener">Open source</a></p>{/if}
       {/if}
       {#if !locked}
         <footer class="modal-footer">
           <div class="source-slot">
-            {#if isScratch}
+            {#if isScratch && !showSource}
               <button
                 type="button"
                 class="action-btn delete-btn"
@@ -345,6 +347,7 @@
                 title={doneDelete ? 'Tap to cancel deletion' : undefined}
                 onclick={onDeleteClick}
               >{doneDelete ? 'Delete ✓' : confirmDelete ? 'Confirm delete' : 'Delete'}</button>
+              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
             {#if showSource}
               <button type="button" class="action-btn add-filter-btn" onclick={addFilterFromEvent}
@@ -364,9 +367,7 @@
             {/if}
           </div>
           <div class="copy-slot">
-            {#if !showSource}
-              <CalendarDownloadMenu events={[ev]} />
-            {/if}
+            <CalendarDownloadMenu events={[ev]} />
             {#if raw}
               <button
                 type="button"
@@ -376,9 +377,6 @@
                 title={showSource ? 'Hide raw iCal' : 'View raw iCal'}
                 aria-label={showSource ? 'Hide raw iCal' : 'View raw iCal'}
               >{'{ }'}</button>
-            {/if}
-            {#if isScratch}
-              <button type="button" class="action-btn" onclick={editDraft}>EDIT</button>
             {/if}
             <button
               type="button"
@@ -401,6 +399,7 @@
     width: min(600px, calc(100vw - 1rem));
     max-height: calc(100dvh - 2rem);
     overflow: auto;
+    overscroll-behavior: contain;
     box-sizing: border-box;
     transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
@@ -412,6 +411,8 @@
     background: rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
+    overscroll-behavior: contain;
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
     transition: background 150ms ease-in, backdrop-filter 150ms ease-in, -webkit-backdrop-filter 150ms ease-in;
@@ -430,8 +431,8 @@
     justify-content: space-between;
     align-items: center;
     gap: 0.5em;
-    padding-bottom: 0.5em;
-    margin-bottom: 0.5em;
+    padding-bottom: 0.35em;
+    margin-bottom: 0.25em;
   }
   .modal-title {
     flex: 1 1 auto;
@@ -511,11 +512,14 @@
     background: var(--ink);
     color: var(--paper);
   }
+  .event-info {
+    margin: 0.1em 0;
+  }
   .event-time {
     font-family: var(--mono);
     font-size: 0.9em;
     color: var(--ink-muted);
-    margin: 0.05em 0 0.15em;
+    margin: 0.1em 0;
   }
   .filter-count {
     font-size: var(--fs-11);
@@ -601,6 +605,7 @@
   }
   .desc {
     white-space: pre-wrap;
+    margin: 0.6em 0 0.1em;
   }
   time {
     font-family: var(--mono);

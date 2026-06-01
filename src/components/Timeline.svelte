@@ -1270,6 +1270,9 @@
     background: var(--paper);
     overscroll-behavior: contain;
     touch-action: pan-x pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
     /* Firefox's scroll anchoring otherwise shifts our programmatic load-centering
        as rows/.scroll-content lay out, landing the view right of today. */
     overflow-anchor: none;

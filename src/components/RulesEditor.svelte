@@ -278,13 +278,13 @@
             onclick={() => (editingRuleId === rule.id ? cancelEdit() : startEdit(rule))}
             ondblclick={() => toggleRuleDisabled(rule)}
           >
-            <span class="rule-preview">{previewText(rule)}</span>
             <span
               class="style-swatch"
               data-style={rule.style}
               aria-label={styleLabel(rule.style)}
               title={styleLabel(rule.style)}
             >α</span>
+            <span class="rule-preview">{previewText(rule)}</span>
           </button>
           <IconButton
             icon={ri === 0 ? 'arrow-bar-down' : 'arrow-up'}
@@ -337,22 +337,22 @@
               <div class="action-group">
                 <button
                   type="button"
-                  class="disable-btn"
-                  data-state={formDisabled ? 'enable' : 'disable'}
-                  onclick={() => (formDisabled = !formDisabled)}
-                >{formDisabled ? 'Enable' : 'Disable'}</button>
-                <button
-                  type="button"
                   class="delete-btn"
                   class:confirming={confirmDeleteId === rule.id}
                   class:done={doneDeleteId === rule.id}
                   title={doneDeleteId === rule.id ? 'Tap to cancel deletion' : undefined}
                   onclick={() => remove(rule.id)}
-                >{doneDeleteId === rule.id
-                  ? 'Delete ✓'
-                  : confirmDeleteId === rule.id
-                    ? 'Delete ?'
-                    : 'Delete'}</button>
+                >Delete<span class="act-mark">{doneDeleteId === rule.id ? '✓' : confirmDeleteId === rule.id ? '?' : ''}</span></button>
+                <button
+                  type="button"
+                  class="disable-btn"
+                  data-state={formDisabled ? 'enable' : 'disable'}
+                  onclick={() => {
+                    toggleRuleDisabled(rule);
+                    formDisabled = !formDisabled;
+                    if (snapshot) snapshot = { ...snapshot, disabled: formDisabled };
+                  }}
+                ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formDisabled ? 'Enable' : 'Disable'}</span></span></button>
               </div>
               <div class="action-group">
                 <button
@@ -402,7 +402,6 @@
     border-top-color: transparent;
   }
   .rule-list li[data-active='true'] {
-    background: var(--paper-2);
     outline: 2px solid var(--ink);
     outline-offset: -2px;
   }
@@ -462,7 +461,7 @@
     align-items: center;
     justify-content: center;
     width: 18px;
-    height: 16px;
+    height: 18px;
     flex-shrink: 0;
     border: 1px solid var(--ink);
     background: transparent;
@@ -548,9 +547,36 @@
     text-transform: uppercase;
     cursor: pointer;
   }
+  /* Save shares its action group equally with Cancel, so the two match width. */
+  .form-actions button.primary {
+    flex: 1 1 0;
+  }
   .form-actions .delete-btn {
+    position: relative;
     border-color: var(--accent);
     color: var(--accent);
+  }
+  /* Keep the word centered and constant-width: the ?/✓ floats at the right edge
+     instead of being part of the centered label. */
+  .form-actions .delete-btn .act-mark {
+    position: absolute;
+    right: 0.4em;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* Reserve the wider word so Enable/Disable never changes size; current label
+     is centered over the hidden sizer. */
+  .form-actions .act-stack {
+    display: inline-grid;
+  }
+  .form-actions .act-stack > * {
+    grid-area: 1 / 1;
+    text-align: center;
+  }
+  .form-actions .act-sizer {
+    visibility: hidden;
   }
   .form-actions .delete-btn:hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));

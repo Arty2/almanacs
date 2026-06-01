@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import { ui, events, addScratchpadEvent, updateScratchpadEvent } from '../lib/state.svelte';
-  import { FEED_CATEGORIES, SCRATCHPAD_FEED_ID, type FeedCategory } from '../lib/types';
+  import { FEED_CATEGORIES, type FeedCategory } from '../lib/types';
 
   let dialog: HTMLDialogElement | undefined = $state();
   let dismissing = $state(false);
@@ -157,7 +157,9 @@
     if (!dialog) return;
     if (ui.addEventOpen && !dialog.open) {
       const editing = ui.addEventEditUid
-        ? (events.byFeed[SCRATCHPAD_FEED_ID] ?? []).find((e) => e.uid === ui.addEventEditUid)
+        ? Object.values(events.byFeed)
+            .flat()
+            .find((e) => e.uid === ui.addEventEditUid)
         : null;
       if (editing) prefillFrom(editing);
       else prefill();
@@ -362,6 +364,7 @@
     width: min(520px, calc(100vw - 1rem));
     max-height: calc(100dvh - 2rem);
     overflow: auto;
+    overscroll-behavior: contain;
     box-sizing: border-box;
     transition: transform 150ms ease-in, opacity 150ms ease-in;
   }
@@ -373,6 +376,8 @@
     background: rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
+    overscroll-behavior: contain;
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
     transition: background 150ms ease-in, backdrop-filter 150ms ease-in, -webkit-backdrop-filter 150ms ease-in;

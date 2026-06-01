@@ -13,7 +13,13 @@ import { SCRATCHPAD_FEED_ID } from './types';
 import { loadConfig } from './storage';
 import { applyRules } from './rules';
 import { dtf } from './format';
-import { loadScratchpad, saveScratchpad, makeScratchpadEvent, type ScratchpadInput } from './scratchpad';
+import {
+  loadScratchpad,
+  saveScratchpad,
+  clearScratchpad,
+  makeScratchpadEvent,
+  type ScratchpadInput,
+} from './scratchpad';
 
 export const config = $state<AppConfig>(loadConfig());
 
@@ -22,30 +28,61 @@ export const events = $state<{
   tzByFeed: Record<string, string>;
   rawByUid: Record<string, string>;
   lastSuccessAt: Record<string, number>;
-}>({ byFeed: { [SCRATCHPAD_FEED_ID]: loadScratchpad() }, tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
+}>({ byFeed: loadLocalLanes(), tzByFeed: {}, rawByUid: {}, lastSuccessAt: {} });
 
-export function addScratchpadEvent(input: ScratchpadInput): ParsedEvent {
+// The lane id stored inside a scratchpad FeedSource, derived from its feed id.
+function laneIdOf(feedId: string): string {
+  return feedId.startsWith('scratchpad:') ? feedId.slice('scratchpad:'.length) : 'default';
+}
+
+// Hydrate every local lane (the Draft plus any imported .ics) from localStorage.
+function loadLocalLanes(): Record<string, ParsedEvent[]> {
+  const out: Record<string, ParsedEvent[]> = {};
+  for (const f of config.feeds) {
+    if (f.source.kind === 'scratchpad') out[f.id] = loadScratchpad(f.source.id ?? 'default');
+  }
+  if (!out[SCRATCHPAD_FEED_ID]) out[SCRATCHPAD_FEED_ID] = loadScratchpad();
+  return out;
+}
+
+// Find which local lane currently holds an event, so edits/deletes route to it.
+function laneFeedIdOf(uid: string): string {
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    if ((events.byFeed[f.id] ?? []).some((e) => e.uid === uid)) return f.id;
+  }
+  return SCRATCHPAD_FEED_ID;
+}
+
+export function addScratchpadEvent(
+  input: ScratchpadInput,
+  feedId: string = SCRATCHPAD_FEED_ID,
+): ParsedEvent {
   const ev = makeScratchpadEvent(input);
-  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
-  events.byFeed[SCRATCHPAD_FEED_ID] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
-  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  ev.feedId = feedId;
+  const prev = events.byFeed[feedId] ?? [];
+  events.byFeed[feedId] = [...prev, ev].sort((a, b) => a.start.getTime() - b.start.getTime());
+  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
   return ev;
 }
 
 export function updateScratchpadEvent(uid: string, input: ScratchpadInput): void {
-  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
+  const feedId = laneFeedIdOf(uid);
+  const prev = events.byFeed[feedId] ?? [];
   const next = makeScratchpadEvent(input);
   next.uid = uid;
-  events.byFeed[SCRATCHPAD_FEED_ID] = prev
+  next.feedId = feedId;
+  events.byFeed[feedId] = prev
     .map((e) => (e.uid === uid ? next : e))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
-  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
 }
 
 export function deleteScratchpadEvent(uid: string): void {
-  const prev = events.byFeed[SCRATCHPAD_FEED_ID] ?? [];
-  events.byFeed[SCRATCHPAD_FEED_ID] = prev.filter((e) => e.uid !== uid);
-  saveScratchpad(events.byFeed[SCRATCHPAD_FEED_ID]);
+  const feedId = laneFeedIdOf(uid);
+  const prev = events.byFeed[feedId] ?? [];
+  events.byFeed[feedId] = prev.filter((e) => e.uid !== uid);
+  saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
   if (selection.uids.has(uid)) {
     const next = new Set(selection.uids);
     next.delete(uid);
@@ -53,6 +90,216 @@ export function deleteScratchpadEvent(uid: string): void {
     if (next.size === 0) selection.mode = false;
   }
   if (ui.modalEvent?.uid === uid) ui.modalEvent = null;
+}
+
+// Move one or more events between local lanes, keeping their uids. URL/secret
+// feeds are network-fetched and overwritten on refresh, so only scratchpad lanes
+// are valid targets. Every touched lane is re-sorted and persisted once.
+// Returns a uid→original-lane map of the events it actually moved, so callers can
+// reverse the move (e.g. an undo affordance) by moving each back to its source.
+export function moveEventsToLane(uids: Iterable<string>, destFeedId: string): Map<string, string> {
+  const moved = new Map<string, string>();
+  if (!destFeedId.startsWith('scratchpad:')) return moved;
+  const touched = new Set<string>([destFeedId]);
+  for (const uid of uids) {
+    const srcFeedId = laneFeedIdOf(uid);
+    if (srcFeedId === destFeedId) continue;
+    const ev = (events.byFeed[srcFeedId] ?? []).find((e) => e.uid === uid);
+    if (!ev) continue;
+    events.byFeed[srcFeedId] = (events.byFeed[srcFeedId] ?? []).filter((e) => e.uid !== uid);
+    events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), { ...ev, feedId: destFeedId }];
+    touched.add(srcFeedId);
+    moved.set(uid, srcFeedId);
+    if (ui.modalEvent?.uid === uid) ui.modalEvent = { ...ui.modalEvent, feedId: destFeedId };
+  }
+  for (const feedId of touched) {
+    events.byFeed[feedId] = (events.byFeed[feedId] ?? []).sort(
+      (a, b) => a.start.getTime() - b.start.getTime(),
+    );
+    saveScratchpad(events.byFeed[feedId], laneIdOf(feedId));
+  }
+  return moved;
+}
+
+// Move a single event — thin wrapper over the batch move.
+export function moveEventToLane(uid: string, destFeedId: string): void {
+  moveEventsToLane([uid], destFeedId);
+}
+
+// Delete only the local-lane events among the given uids; URL/secret-feed events
+// are left alone (they re-fetch). Each touched lane is persisted once.
+export function deleteLocalEvents(uids: Iterable<string>): void {
+  const drop = new Set(uids);
+  const touched: string[] = [];
+  for (const f of config.feeds) {
+    if (f.source.kind !== 'scratchpad') continue;
+    const list = events.byFeed[f.id] ?? [];
+    const next = list.filter((e) => !drop.has(e.uid));
+    if (next.length !== list.length) {
+      events.byFeed[f.id] = next;
+      touched.push(f.id);
+    }
+  }
+  for (const id of touched) saveScratchpad(events.byFeed[id], laneIdOf(id));
+}
+
+// Copy the given events (found in any lane/feed) into a local lane as fresh
+// scratchpad events (new uids). Used for URL-only selections where move isn't
+// possible. Originals are left intact.
+// Returns the uids of the freshly created copies, so callers can reverse the copy
+// (e.g. an undo affordance) by deleting them.
+export function copyEventsToLane(uids: Iterable<string>, destFeedId: string): string[] {
+  if (!destFeedId.startsWith('scratchpad:')) return [];
+  const want = new Set(uids);
+  const copies: ParsedEvent[] = [];
+  for (const list of Object.values(events.byFeed)) {
+    for (const e of list) {
+      if (!want.has(e.uid)) continue;
+      const c = makeScratchpadEvent({
+        title: e.title, start: e.start, end: e.end, allDay: e.allDay,
+        location: e.location, description: e.description, category: e.category,
+      });
+      c.feedId = destFeedId;
+      copies.push(c);
+    }
+  }
+  if (copies.length === 0) return [];
+  events.byFeed[destFeedId] = [...(events.byFeed[destFeedId] ?? []), ...copies].sort(
+    (a, b) => a.start.getTime() - b.start.getTime(),
+  );
+  saveScratchpad(events.byFeed[destFeedId], laneIdOf(destFeedId));
+  return copies.map((c) => c.uid);
+}
+
+function newLaneId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// Create a new local lane (behaving like the Draft) from imported .ics events.
+export function createImportedLane(name: string, evts: ParsedEvent[]): CalendarFeed {
+  const id = newLaneId();
+  const feedId = 'scratchpad:' + id;
+  const order = config.feeds.reduce((m, f) => Math.max(m, f.order), -1) + 1;
+  const feed: CalendarFeed = {
+    id: feedId,
+    source: { kind: 'scratchpad', id },
+    name,
+    collapsed: false,
+    order,
+    kind: 'events',
+    category: 'none',
+  };
+  const laneEvents = evts
+    .map((e) => ({ ...e, feedId }))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  config.feeds = [...config.feeds, feed];
+  events.byFeed[feedId] = laneEvents;
+  saveScratchpad(laneEvents, id);
+  return feed;
+}
+
+// Purge a local lane's stored events (the caller removes it from config.feeds).
+export function removeLocalLane(feedId: string): void {
+  clearScratchpad(laneIdOf(feedId));
+  delete events.byFeed[feedId];
+}
+
+// Developer/test helper: populate the Draft lane with a spread of events around
+// today and add an extra imported lane, so the local-lane UI can be exercised
+// without manual data entry. Reused by the long-press Reset shortcut.
+export function seedTestData(): void {
+  const DAY = 86_400_000;
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const at = (offsetDays: number, hh = 0, mm = 0): Date =>
+    new Date(midnight.getTime() + offsetDays * DAY + hh * 3_600_000 + mm * 60_000);
+  // All-day events are anchored to UTC midnight (matching AddEventModal / ICS import),
+  // so the UTC-based date formatter renders a single-day span as one date, not two.
+  const today = new Date();
+  const atDay = (offsetDays: number): Date =>
+    new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() + offsetDays));
+
+  const draft: ParsedEvent[] = [
+    makeScratchpadEvent({
+      title: 'Past conference', start: atDay(-42), end: atDay(-39), allDay: true,
+      location: 'Berlin', description: 'Three-day event well before today.', category: 'events',
+    }),
+    makeScratchpadEvent({
+      title: 'Spring break', start: atDay(-10), end: atDay(-3), allDay: true,
+      location: 'Crete', description: 'Week-long multi-day all-day span.', category: 'holidays',
+    }),
+    makeScratchpadEvent({
+      title: 'Dentist', start: at(-14, 9, 0), end: at(-14, 10, 0), allDay: false,
+      location: 'Clinic', category: 'none',
+    }),
+    makeScratchpadEvent({
+      title: 'Project deadline', start: atDay(-3), end: atDay(-2), allDay: true,
+      location: 'Remote', category: 'announcements',
+    }),
+    makeScratchpadEvent({
+      title: 'Standup', start: at(-1, 9, 30), end: at(-1, 10, 0), allDay: false,
+      location: 'Office', category: 'none',
+    }),
+    makeScratchpadEvent({
+      title: 'Today all-day', start: atDay(0), end: atDay(1), allDay: true,
+      location: 'Town hall', category: 'observances',
+    }),
+    makeScratchpadEvent({
+      title: 'Lunch with Alex', start: at(0, 12, 0), end: at(0, 13, 0), allDay: false,
+      location: 'Cafe', description: 'Overlaps the morning block.', category: 'guests',
+    }),
+    makeScratchpadEvent({
+      title: 'Morning workshop', start: at(0, 11, 30), end: at(0, 12, 30), allDay: false,
+      location: 'Room 2', description: 'Overlaps lunch on purpose to test lane stacking.',
+      category: 'events',
+    }),
+    makeScratchpadEvent({
+      title: 'Public holiday', start: atDay(3), end: atDay(4), allDay: true,
+      category: 'holidays',
+    }),
+    makeScratchpadEvent({
+      title: 'Trip abroad', start: atDay(5), end: atDay(9), allDay: true,
+      location: 'Lisbon', category: 'events',
+    }),
+    makeScratchpadEvent({
+      title: 'Company offsite', start: atDay(15), end: atDay(20), allDay: true,
+      location: 'Porto', description: 'Five-day multi-day event for lane testing.',
+      category: 'announcements',
+    }),
+    makeScratchpadEvent({
+      title: 'Quarterly review', start: at(30, 14, 0), end: at(30, 15, 30), allDay: false,
+      location: 'Boardroom', category: 'announcements',
+    }),
+  ];
+  const sortedDraft = draft.sort((a, b) => a.start.getTime() - b.start.getTime());
+  events.byFeed[SCRATCHPAD_FEED_ID] = sortedDraft;
+  saveScratchpad(sortedDraft);
+  // The Draft lane defaults to hidden; reveal it so the seeded events are visible.
+  const draftFeed = config.feeds.find((f) => f.id === SCRATCHPAD_FEED_ID);
+  if (draftFeed) delete draftFeed.hidden;
+
+  const imported: ParsedEvent[] = [
+    makeScratchpadEvent({
+      title: 'Imported: kickoff', start: atDay(-7), end: atDay(-6), allDay: true,
+      location: 'HQ', category: 'events',
+    }),
+    makeScratchpadEvent({
+      title: 'Imported: call', start: at(-1, 16, 0), end: at(-1, 16, 30), allDay: false,
+      location: 'Zoom',
+    }),
+    makeScratchpadEvent({
+      title: 'Imported: release', start: atDay(2), end: atDay(4), allDay: true,
+      category: 'announcements',
+    }),
+    makeScratchpadEvent({
+      title: 'Imported: retro', start: at(12, 10, 0), end: at(12, 11, 0), allDay: false,
+      location: 'Room 5',
+    }),
+  ];
+  createImportedLane('Imported (test)', imported);
 }
 
 export const zoom = $state<{ value: Zoom }>({ value: 'month' });

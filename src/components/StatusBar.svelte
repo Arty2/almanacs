@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, getDisplayByFeed, pushLog, selection, clearSelection, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
+  import { config, getDisplayByFeed, pushLog, selection, clearSelection, moveEventsToLane, copyEventsToLane, deleteLocalEvents, focus, ui, effectiveFeedTz, isKiosk } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { today } from '../lib/today.svelte';
   import { startOfDay, addDays, addMonths, isoWeekNumber } from '../lib/time';
@@ -9,7 +9,11 @@
   import { trayExpand, trayCollapse } from '../lib/haptics';
   import type { DisplayEvent, FeedCategory, ParsedEvent, Travel } from '../lib/types';
 
-  const COLLAPSED_HEIGHT = 28;
+  // The collapsed tray height tracks the header's rendered height — it now carries
+  // vertical padding (to match the bottom toolbar) and scales with the font-size
+  // setting, so a fixed 28 would let the header spill below the screen. Measured
+  // from the live `.handle` via bind:clientHeight; 28 is the pre-measure fallback.
+  let collapsedHeight = $state(28);
   const MAX_HEIGHT_VH = 60;
   let showVersion = $state(true);
   $effect(() => {
@@ -22,11 +26,184 @@
   let dragStartY = 0;
   let dragStartHeight = 0;
   let pointerMoved = false;
-  let height = $state(COLLAPSED_HEIGHT);
-  let lastExpandedHeight = COLLAPSED_HEIGHT;
+  let height = $state(28);
+  let lastExpandedHeight = 28;
+  // Swipe-down-to-dismiss on the tray body (not the header). Armed on pointerdown
+  // only when the inner scroll region is at the top; promoted to a real header-style
+  // drag once the finger clearly moves down, so content scroll and row taps survive.
+  let trayArmed = false;
+  let trayArmStartY = 0;
+  let trayArmTarget: HTMLElement | null = null;
+  let trayArmPointerId = 0;
 
-  const expanded = $derived(height > COLLAPSED_HEIGHT + 2);
+  const expanded = $derived(height > collapsedHeight + 2);
+  // Resting collapsed height: a touch taller than the header so the bar sits
+  // comfortably at the screen bottom without clipping its content.
+  const closedHeight = $derived(collapsedHeight + 2);
+  // Keep the collapsed bar at the resting height whenever it isn't expanded
+  // (covers the initial measure, font-size changes, and the header shrinking
+  // back when selection mode exits). Keyed off the explicit expand flag so a
+  // stale tall `height` isn't misread as "expanded" once the header re-measures.
+  $effect(() => {
+    if (!ui.statusExpanded) height = closedHeight;
+  });
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
+
+  // Local lanes (Draft + imported .ics) — destinations for move/copy.
+  const localLanes = $derived(config.feeds.filter((f) => f.source.kind === 'scratchpad'));
+  // Selected uids that live in a local lane (only those can be deleted/moved).
+  const selectedLocalUids = $derived.by(() => {
+    const out: string[] = [];
+    if (selection.uids.size === 0) return out;
+    const byFeed = getDisplayByFeed();
+    for (const f of localLanes) {
+      for (const ev of byFeed[f.id] ?? []) {
+        if (selection.uids.has(ev.uid)) out.push(ev.uid);
+      }
+    }
+    return out;
+  });
+  const hasLocalSelection = $derived(selectedLocalUids.length > 0);
+  // URL-only selection: nothing to delete/move, so the action becomes a copy.
+  const copyMode = $derived(selection.uids.size > 0 && !hasLocalSelection);
+  // Count shows just the total when the selection is all one kind (all local or
+  // all URL); a mixed selection shows "local / total" so it's clear how many can
+  // be moved/deleted.
+  const selTotal = $derived(selection.uids.size);
+  const mixedSelection = $derived(selectedLocalUids.length > 0 && selectedLocalUids.length < selTotal);
+
+  // --- Two-stage DELETE / CANCEL (tap → confirm → done+cooldown-to-undo) ---
+  const CONFIRM_WINDOW_MS = 3000;
+  type Stage = 'idle' | 'confirm' | 'done';
+  let deleteStage = $state<Stage>('idle');
+  let cancelStage = $state<Stage>('idle');
+  let deleteTimer: ReturnType<typeof setTimeout> | null = null;
+  let cancelTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function commitDelete(): void {
+    const removed = [...selectedLocalUids];
+    deleteLocalEvents(removed);
+    const next = new Set(selection.uids);
+    for (const uid of removed) next.delete(uid);
+    if (next.size === 0) clearSelection();
+    else selection.uids = next;
+  }
+  function commitCancel(): void {
+    focus.feedId = null;
+    focus.eventIndex = -1;
+    clearSelection();
+  }
+
+  function onDeleteTap(): void {
+    if (!hasLocalSelection) return;
+    if (deleteStage === 'done') { // undo during cooldown
+      if (deleteTimer) clearTimeout(deleteTimer);
+      deleteTimer = null;
+      deleteStage = 'idle';
+      return;
+    }
+    if (deleteStage === 'confirm') {
+      if (deleteTimer) clearTimeout(deleteTimer);
+      deleteStage = 'done';
+      deleteTimer = setTimeout(() => {
+        deleteTimer = null;
+        deleteStage = 'idle';
+        commitDelete();
+      }, CONFIRM_WINDOW_MS);
+      return;
+    }
+    deleteStage = 'confirm';
+    if (deleteTimer) clearTimeout(deleteTimer);
+    deleteTimer = setTimeout(() => { deleteTimer = null; deleteStage = 'idle'; }, CONFIRM_WINDOW_MS);
+  }
+
+  function onCancelTap(): void {
+    if (cancelStage === 'done') {
+      if (cancelTimer) clearTimeout(cancelTimer);
+      cancelTimer = null;
+      cancelStage = 'idle';
+      return;
+    }
+    if (cancelStage === 'confirm') {
+      if (cancelTimer) clearTimeout(cancelTimer);
+      cancelStage = 'done';
+      cancelTimer = setTimeout(() => {
+        cancelTimer = null;
+        cancelStage = 'idle';
+        commitCancel();
+      }, CONFIRM_WINDOW_MS);
+      return;
+    }
+    cancelStage = 'confirm';
+    if (cancelTimer) clearTimeout(cancelTimer);
+    cancelTimer = setTimeout(() => { cancelTimer = null; cancelStage = 'idle'; }, CONFIRM_WINDOW_MS);
+  }
+
+  // Reset stages/timers whenever we leave selection mode.
+  $effect(() => {
+    if (!inSelectionMode) {
+      if (deleteTimer) clearTimeout(deleteTimer);
+      if (cancelTimer) clearTimeout(cancelTimer);
+      if (moveTimer) clearTimeout(moveTimer);
+      deleteTimer = cancelTimer = moveTimer = null;
+      deleteStage = cancelStage = 'idle';
+      moveStage = 'idle';
+      moveUndo = null;
+      moveMenuOpen = false;
+    }
+  });
+
+  // --- MOVE / COPY submenu (action → ✓ with a cooldown-to-undo, like DELETE) ---
+  let moveMenuOpen = $state(false);
+  let moveRoot: HTMLDivElement | undefined = $state();
+  let moveStage = $state<'idle' | 'done'>('idle');
+  let moveTimer: ReturnType<typeof setTimeout> | null = null;
+  type MoveUndo = { kind: 'move'; map: Map<string, string> } | { kind: 'copy'; uids: string[] };
+  let moveUndo: MoveUndo | null = null;
+
+  function pickLane(laneId: string): void {
+    moveUndo = copyMode
+      ? { kind: 'copy', uids: copyEventsToLane(selection.uids, laneId) }
+      : { kind: 'move', map: moveEventsToLane(selection.uids, laneId) };
+    moveMenuOpen = false;
+    moveStage = 'done';
+    if (moveTimer) clearTimeout(moveTimer);
+    moveTimer = setTimeout(() => { moveTimer = null; moveStage = 'idle'; moveUndo = null; }, CONFIRM_WINDOW_MS);
+  }
+
+  function onMoveTap(): void {
+    if (moveStage === 'done') { // undo the move/copy during the cooldown
+      if (moveTimer) clearTimeout(moveTimer);
+      moveTimer = null;
+      if (moveUndo?.kind === 'copy') {
+        deleteLocalEvents(moveUndo.uids);
+      } else if (moveUndo?.kind === 'move') {
+        const byLane = new Map<string, string[]>();
+        for (const [uid, srcFeedId] of moveUndo.map) {
+          if (!byLane.has(srcFeedId)) byLane.set(srcFeedId, []);
+          byLane.get(srcFeedId)!.push(uid);
+        }
+        for (const [srcFeedId, uids] of byLane) moveEventsToLane(uids, srcFeedId);
+      }
+      moveUndo = null;
+      moveStage = 'idle';
+      return;
+    }
+    moveMenuOpen = !moveMenuOpen;
+  }
+  $effect(() => {
+    if (!moveMenuOpen) return;
+    const onPointer = (e: PointerEvent): void => {
+      if (moveRoot && !moveRoot.contains(e.target as Node)) moveMenuOpen = false;
+    };
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') moveMenuOpen = false; };
+    document.addEventListener('pointerdown', onPointer, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  });
   let fullyExpanded = $state(false);
   $effect(() => {
     if (!ui.statusExpanded || dragging) {
@@ -40,7 +217,7 @@
   // Kiosk mode keeps the tray collapsed and inert.
   $effect(() => {
     if (isKiosk()) {
-      height = COLLAPSED_HEIGHT;
+      height = closedHeight;
       ui.statusExpanded = false;
       clearSelection();
     }
@@ -64,7 +241,7 @@
     if (!dragging) return;
     const delta = dragStartY - e.clientY;
     if (Math.abs(delta) > 3) pointerMoved = true;
-    const next = Math.min(maxHeight(), Math.max(COLLAPSED_HEIGHT, dragStartHeight + delta));
+    const next = Math.min(maxHeight(), Math.max(closedHeight, dragStartHeight + delta));
     height = next;
   }
 
@@ -76,7 +253,7 @@
       toggleExpand();
       return;
     }
-    const startedExpanded = dragStartHeight > COLLAPSED_HEIGHT + 2;
+    const startedExpanded = dragStartHeight > collapsedHeight + 2;
     const startedCollapsed = !startedExpanded;
     const draggedDown = e.clientY > dragStartY;
     const draggedUp = e.clientY < dragStartY - 10;
@@ -88,16 +265,16 @@
       return;
     }
     if (startedCollapsed) {
-      height = COLLAPSED_HEIGHT;
+      height = closedHeight;
       ui.statusExpanded = false;
       return;
     }
     if (startedExpanded && draggedDown) {
-      height = COLLAPSED_HEIGHT;
+      height = closedHeight;
       ui.statusExpanded = false;
       trayCollapse();
-    } else if (height < COLLAPSED_HEIGHT * 1.5) {
-      height = COLLAPSED_HEIGHT;
+    } else if (height < collapsedHeight * 1.5) {
+      height = closedHeight;
       ui.statusExpanded = false;
       trayCollapse();
     } else {
@@ -106,14 +283,60 @@
     }
   }
 
+  // Swipe-down anywhere on the tray body drags it shut exactly like the header:
+  // once a downward gesture from scroll-top crosses a small threshold we promote
+  // it to the same live drag (onDrag/endDrag) the handle uses. We only arm at the
+  // top and only on downward motion, so scrolling the content and tapping event
+  // rows still work (a tap never reaches dragging, so the row's click fires).
+  function onTrayPointerDown(e: PointerEvent): void {
+    trayArmed = false;
+    if (isKiosk()) return;
+    const scroller = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(
+      '.tray-scroll, .raw-block',
+    );
+    if (scroller && scroller.scrollTop > 0) return;
+    trayArmed = true;
+    trayArmStartY = e.clientY;
+    trayArmTarget = e.currentTarget as HTMLElement;
+    trayArmPointerId = e.pointerId;
+  }
+
+  function onTrayPointerMove(e: PointerEvent): void {
+    if (dragging) {
+      onDrag(e);
+      return;
+    }
+    if (!trayArmed) return;
+    const dy = e.clientY - trayArmStartY;
+    if (dy <= 4) {
+      // Upward / negligible motion is a content scroll, not a dismiss — disarm.
+      if (dy < -4) trayArmed = false;
+      return;
+    }
+    // Clear downward swipe from the top: hand off to the same drag the header runs.
+    trayArmed = false;
+    dragging = true;
+    pointerMoved = true;
+    dragStartY = trayArmStartY;
+    dragStartHeight = height;
+    trayArmTarget?.setPointerCapture(trayArmPointerId);
+    onDrag(e);
+  }
+
+  function onTrayPointerUp(e: PointerEvent): void {
+    trayArmed = false;
+    if (!dragging) return;
+    endDrag(e);
+  }
+
   function toggleExpand(): void {
     if (isKiosk()) return;
     if (expanded) {
-      height = COLLAPSED_HEIGHT;
+      height = closedHeight;
       ui.statusExpanded = false;
       trayCollapse();
     } else {
-      height = lastExpandedHeight > COLLAPSED_HEIGHT + 2 ? lastExpandedHeight : maxHeight();
+      height = lastExpandedHeight > collapsedHeight + 2 ? lastExpandedHeight : maxHeight();
       ui.statusExpanded = true;
       trayExpand();
     }
@@ -526,39 +749,57 @@
     <div
       class="handle selection-head"
       role="presentation"
+      bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}
       onpointerup={endDrag}
       onpointercancel={endDrag}
     >
-      <span
-        class="status-chip"
-        data-online={online.value ? 'true' : null}
-        title={online.value ? 'Online' : 'Offline'}
-      >
-        <span class="dot" aria-hidden="true"></span>
-        <span class="status-text">{online.value ? 'ONLINE' : 'OFFLINE'}</span>
-      </span>
-      {#if !isKiosk()}
-        <span class="toggle" aria-hidden="true">
-          <Icon name={expanded ? 'arrow-down' : 'arrow-up'} size={14} />
-        </span>
-      {:else}
-        <span aria-hidden="true"></span>
-      {/if}
-      <span class="sel-right">
-        <span class="sel-count">{selection.uids.size} selected</span>
+      <button
+        type="button"
+        class="sel-btn sel-delete"
+        class:confirming={deleteStage === 'confirm'}
+        class:done={deleteStage === 'done'}
+        disabled={!hasLocalSelection}
+        title={deleteStage === 'done' ? 'Tap to undo' : 'Delete selected'}
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={onDeleteTap}
+      >DELETE<span class="sel-mark">{deleteStage === 'done' ? '✓' : deleteStage === 'confirm' ? '?' : ''}</span></button>
+      <div class="move-menu" bind:this={moveRoot}>
         <button
           type="button"
-          class="clear-sel"
-          aria-label="Clear selection"
-          title="Clear selection"
+          class="sel-btn sel-move"
+          class:done={moveStage === 'done'}
+          aria-haspopup="menu"
+          aria-expanded={moveMenuOpen}
+          title={moveStage === 'done' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
           onpointerdown={(e) => e.stopPropagation()}
-          onclick={clearSelection}
-        >
-          <Icon name="close" size={16} />
-        </button>
-      </span>
+          onclick={onMoveTap}
+        >{copyMode ? 'COPY' : 'MOVE'}<span class="sel-mark">{moveStage === 'done' ? '✓' : ''}</span></button>
+        {#if moveMenuOpen}
+          <div class="move-menu-list" role="menu">
+            {#each localLanes as lane (lane.id)}
+              <button
+                type="button"
+                role="menuitem"
+                class="move-menu-item"
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={() => pickLane(lane.id)}
+              >{lane.name}</button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <span class="sel-count">{mixedSelection ? `${selectedLocalUids.length} / ${selTotal}` : selTotal}</span>
+      <button
+        type="button"
+        class="sel-btn sel-cancel"
+        class:confirming={cancelStage === 'confirm'}
+        class:done={cancelStage === 'done'}
+        title={cancelStage === 'done' ? 'Tap to undo' : 'Cancel selection'}
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={onCancelTap}
+      >CANCEL<span class="sel-mark">{cancelStage === 'done' ? '✓' : cancelStage === 'confirm' ? '?' : ''}</span></button>
     </div>
   {:else}
     <button
@@ -566,6 +807,7 @@
       class="handle"
       aria-label={expanded ? 'Collapse events' : 'Expand events'}
       aria-expanded={expanded}
+      bind:clientHeight={collapsedHeight}
       onpointerdown={startDrag}
       onpointermove={onDrag}
       onpointerup={endDrag}
@@ -595,7 +837,16 @@
   {/if}
 
   {#if (expanded || inSelectionMode) && eventGroups}
-    <div class="events-tray" role="region" aria-label="Upcoming events" inert={!fullyExpanded}>
+    <div
+      class="events-tray"
+      role="region"
+      aria-label="Upcoming events"
+      inert={!fullyExpanded}
+      onpointerdown={onTrayPointerDown}
+      onpointermove={onTrayPointerMove}
+      onpointerup={onTrayPointerUp}
+      onpointercancel={onTrayPointerUp}
+    >
       {#if rawMode}
         <div class="raw-block">
           <table class="raw-table">
@@ -781,6 +1032,8 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.6em;
+    /* Fixed height keeps the header one size in normal and multi-select mode
+       (the 28px buttons fit exactly). collapsedHeight is measured from this. */
     height: 28px;
     flex-shrink: 0;
     padding: 0 0.6em;
@@ -834,36 +1087,111 @@
     color: var(--ink);
   }
   .selection-head {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    display: flex;
     align-items: center;
-    gap: 0.5em;
+    gap: 0.4em;
+    /* Taller than the normal 28px header so the 28px buttons get breathing room,
+       matching the footer toolbar (.copy-bar) height. */
+    height: auto;
+    padding: 0.35em 0.6em;
     cursor: pointer;
     touch-action: none;
   }
-  .sel-right {
-    display: inline-flex;
-    align-items: center;
-    justify-self: end;
-    gap: 0.5em;
-  }
-  .clear-sel {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--ink);
-    cursor: pointer;
-    flex-shrink: 0;
+  /* DELETE and MOVE sit at the start; CANCEL is pushed to the far right. */
+  .sel-cancel {
+    margin-left: auto;
   }
   .sel-count {
     font-size: var(--fs-12);
     letter-spacing: 0.04em;
     white-space: nowrap;
+  }
+  .sel-btn {
+    position: relative;
+    height: 28px;
+    /* Right padding leaves room for the floated ?/✓ so the button width stays
+       constant across states; the label stays centered in the full width. */
+    padding: 0 0.95em;
+    border: var(--btn-border-w) solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: var(--fs-12);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .sel-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-style: dashed;
+  }
+  /* The ?/✓ floats at the right edge rather than sitting in the centered label,
+     so the word stays centered and the button width never changes. */
+  .sel-mark {
+    position: absolute;
+    right: 0.2em;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* Idle DELETE matches the settings delete button (accent border + text). */
+  .sel-delete:not(.confirming):not(.done) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .sel-delete:not(.confirming):not(.done):not(:disabled):hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  /* Two-stage confirm/done look (matches the modal/settings delete buttons). */
+  .sel-btn.confirming,
+  .sel-btn.done {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+  }
+  .sel-btn.done {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--ink);
+  }
+  .move-menu {
+    position: relative;
+    display: inline-flex;
+  }
+  .move-menu-list {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    min-width: 9em;
+    max-height: 50vh;
+    overflow: auto;
+    border: var(--btn-border-w) solid var(--ink);
+    background: var(--paper);
+  }
+  .move-menu-item {
+    text-align: left;
+    padding: 0.4em 0.6em;
+    border: none;
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: var(--fs-12);
+    white-space: nowrap;
+  }
+  .move-menu-item + .move-menu-item {
+    border-top: 1px dashed var(--ink);
+  }
+  .move-menu-item:hover {
+    background: var(--ink);
+    color: var(--paper);
   }
 
   /* Tray */
@@ -978,6 +1306,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     padding: 0.6em 0.8em;
     user-select: text;
@@ -1003,6 +1332,7 @@
   .tray-scroll {
     flex: 1 1 auto;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 0.4em 0.6em 0.5em;
     user-select: text;
     -webkit-user-select: text;

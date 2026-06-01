@@ -1,11 +1,30 @@
 <script lang="ts">
   import IconButton from './IconButton.svelte';
   import Icon from './Icon.svelte';
+  import LocalBadge from './LocalBadge.svelte';
   import RulesEditor from './RulesEditor.svelte';
-  import { config, ui, zoom, events, effectiveFeedTz, pushLog } from '../lib/state.svelte';
+  import {
+    config,
+    ui,
+    zoom,
+    events,
+    effectiveFeedTz,
+    pushLog,
+    createImportedLane,
+    removeLocalLane,
+    seedTestData,
+  } from '../lib/state.svelte';
   import { online } from '../lib/online.svelte';
   import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
+  import { parseIcs } from '../lib/ics-core';
+  import { rangeForToday } from '../lib/layout';
+  import {
+    isIcsText,
+    calNameFromIcs,
+    eventsToIcs,
+    exportLaneFilename,
+  } from '../lib/scratchpad';
   import { makeRule } from '../lib/rules';
   import {
     formatTimezoneLabel,
@@ -253,12 +272,10 @@
       else delete target.travel;
       if (formHidden) target.hidden = true;
       else delete target.hidden;
-      if (!isScratchpad(target)) {
-        if (formTimezone) target.timezone = formTimezone;
-        else delete target.timezone;
-        if (target.source.kind === 'user' && formUrl.trim()) {
-          target.source = { kind: 'user', url: formUrl.trim() };
-        }
+      if (formTimezone) target.timezone = formTimezone;
+      else delete target.timezone;
+      if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
+        target.source = { kind: 'user', url: formUrl.trim() };
       }
       void onRefresh();
       clearForm();
@@ -318,6 +335,9 @@
     doneDeleteFeedTimer = setTimeout(() => {
       doneDeleteFeedId = null;
       doneDeleteFeedTimer = null;
+      // Local lanes (Draft + imported .ics) keep their events in the scratchpad
+      // store; purge it so a deleted lane does not resurrect on reload.
+      if (id.startsWith('scratchpad:')) removeLocalLane(id);
       config.feeds = config.feeds.filter((f) => f.id !== id);
       if (editingFeedId === id) clearForm();
     }, CONFIRM_WINDOW_MS);
@@ -325,6 +345,13 @@
 
   function isScratchpad(feed: CalendarFeed): boolean {
     return feed.source.kind === 'scratchpad';
+  }
+
+  // The built-in Draft lane is permanent; imported .ics lanes and URL feeds can
+  // be deleted.
+  function isDeletableFeed(feed: CalendarFeed): boolean {
+    if (feed.source.kind === 'scratchpad') return (feed.source.id ?? 'default') !== 'default';
+    return feed.source.kind === 'user';
   }
 
   function toggleHidden(feed: CalendarFeed): void {
@@ -386,6 +413,35 @@
     config.trayFilter = next.trayFilter;
   }
 
+  // Parse an .ics payload and add it as a new local lane. Returns true on success.
+  function importIcsAsLane(text: string, fallbackName: string): boolean {
+    // Expand events over the same window the timeline shows, so recurring events
+    // are captured exactly as a URL feed would be.
+    const { start, end } = rangeForToday(new Date(), {
+      pastMonths: config.pastMonths,
+      futureMonths: config.futureMonths,
+    });
+    const parsed = parseIcs(text, 'scratchpad:imported', start, end);
+    if (parsed.length === 0) {
+      importError = 'No events found in the calendar file';
+      return false;
+    }
+    createImportedLane(calNameFromIcs(text) ?? fallbackName, parsed);
+    return true;
+  }
+
+  function exportLaneIcs(feed: CalendarFeed): void {
+    const evs = events.byFeed[feed.id] ?? [];
+    const ics = eventsToIcs(evs, feed.name);
+    const blob = new Blob([ics], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = exportLaneFilename(feed.name);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function downloadExport(): void {
     const json = exportConfig(config);
     const blob = new Blob([json], { type: 'application/json' });
@@ -412,6 +468,16 @@
     importError = null;
     try {
       const text = await navigator.clipboard.readText();
+      if (isIcsText(text)) {
+        if (typeof window !== 'undefined' && !window.confirm(
+          'Add the calendar from the clipboard as a new local lane?',
+        )) return;
+        if (importIcsAsLane(text, 'Imported ' + new Date().toISOString().slice(0, 10))) {
+          void onRefresh();
+          flashImport();
+        }
+        return;
+      }
       const next = importConfig(text);
       if (typeof window !== 'undefined' && !window.confirm(
         'Replace current calendars, rules, and settings with the clipboard content?',
@@ -448,10 +514,13 @@
   }
 
   const LONGPRESS_MS = 500;
+  const SEED_PRESS_MS = 3000;
   let exportPressTimer: ReturnType<typeof setTimeout> | null = null;
   let exportLongFired = false;
   let importPressTimer: ReturnType<typeof setTimeout> | null = null;
   let importLongFired = false;
+  let resetPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let resetLongFired = false;
 
   function startExportPress(): void {
     exportLongFired = false;
@@ -505,6 +574,26 @@
     triggerImport();
   }
 
+  // Developer/test shortcut: hold Reset for 3s to reset to defaults and seed
+  // sample local-lane data (Draft + an imported test lane).
+  function startResetPress(): void {
+    resetLongFired = false;
+    if (resetPressTimer) clearTimeout(resetPressTimer);
+    resetPressTimer = setTimeout(() => {
+      resetPressTimer = null;
+      resetLongFired = true;
+      longPress();
+      resetAndSeed();
+    }, SEED_PRESS_MS);
+  }
+
+  function cancelResetPress(): void {
+    if (resetPressTimer) {
+      clearTimeout(resetPressTimer);
+      resetPressTimer = null;
+    }
+  }
+
   async function handleImport(e: Event): Promise<void> {
     importError = null;
     const input = e.currentTarget as HTMLInputElement;
@@ -512,6 +601,19 @@
     if (!file) return;
     try {
       const text = await file.text();
+      if (isIcsText(text)) {
+        if (typeof window === 'undefined' || window.confirm(
+          `Add the calendar '${file.name}' as a new local lane?`,
+        )) {
+          const fallback = file.name.replace(/\.(ics|ical|txt)$/i, '');
+          if (importIcsAsLane(text, fallback)) {
+            void onRefresh();
+            flashImport();
+          }
+        }
+        input.value = '';
+        return;
+      }
       const next = importConfig(text);
       if (typeof window === 'undefined' || window.confirm(
         `Replace current calendars, rules, and settings with the file '${file.name}'?`,
@@ -526,7 +628,28 @@
     input.value = '';
   }
 
+  function resetToDefaults(): void {
+    const d = defaultConfig();
+    applyImported(d);
+    config.kioskPin = d.kioskPin;
+    clearForm();
+  }
+
+  // Persist the reset synchronously (the autosave is debounced), drop any
+  // view/marker URL state, and reload so the app comes up fresh on today.
+  function persistAndReload(): void {
+    saveConfig($state.snapshot(config) as typeof config);
+    if (typeof history !== 'undefined') history.replaceState(null, '', location.pathname);
+    if (typeof location !== 'undefined') location.reload();
+  }
+
   function resetAndClear(): void {
+    // The click that follows a 3s long-press is consumed here, so it doesn't
+    // also trigger the tap-confirm flow.
+    if (resetLongFired) {
+      resetLongFired = false;
+      return;
+    }
     if (!confirmReset) {
       armConfirmReset();
       return;
@@ -534,15 +657,25 @@
     if (confirmResetTimer) clearTimeout(confirmResetTimer);
     confirmReset = false;
     confirmResetTimer = null;
-    const d = defaultConfig();
-    applyImported(d);
-    config.kioskPin = d.kioskPin;
-    clearForm();
-    // Persist the reset synchronously (the autosave is debounced), drop any
-    // view/marker URL state, and reload so the app comes up fresh on today.
-    saveConfig($state.snapshot(config) as typeof config);
-    if (typeof history !== 'undefined') history.replaceState(null, '', location.pathname);
-    if (typeof location !== 'undefined') location.reload();
+    resetToDefaults();
+    persistAndReload();
+  }
+
+  // Developer/test: reset to defaults and seed sample local-lane data.
+  function resetAndSeed(): void {
+    if (typeof window !== 'undefined' && !window.confirm(
+      'Developer: reset everything and seed test data (Draft + imported lane)? '
+        + 'This replaces your current calendars, rules, and settings.',
+    )) {
+      resetLongFired = false;
+      return;
+    }
+    if (confirmResetTimer) clearTimeout(confirmResetTimer);
+    confirmReset = false;
+    confirmResetTimer = null;
+    resetToDefaults();
+    seedTestData();
+    persistAndReload();
   }
 
   const themeOptions: { id: Theme; label: string }[] = [
@@ -972,11 +1105,15 @@
             data-feed-card={feed.id}
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
-            <div class="feed-row">
+            <div class="feed-row" data-local={isScratchpad(feed) ? 'true' : null}>
               {#if isScratchpad(feed)}
-                <span class="kind-mark" title="Draft" aria-label="Draft">
-                  <Icon name="plus" size={14} />
-                </span>
+                <IconButton
+                  icon="arrow-bar-down"
+                  label="Download this lane as an .ics file"
+                  variant="default"
+                  size={16}
+                  onclick={() => exportLaneIcs(feed)}
+                />
               {/if}
               {#if travelIconName(feed.travel)}
                 <span class="kind-mark" title={travelLabelText(feed.travel)}>
@@ -1013,6 +1150,9 @@
                   <Icon name="help" size={14} />
                 </button>
               {/if}
+              <span class="feed-link-mark">
+                {#if isScratchpad(feed)}<LocalBadge />{:else}<LocalBadge linked />{/if}
+              </span>
               <IconButton
                 icon={fi === 0 ? 'arrow-bar-down' : 'arrow-up'}
                 label={fi === 0 ? 'Wrap to end' : 'Move up'}
@@ -1091,42 +1231,42 @@
                     </select>
                   </div>
                 {/if}
-                {#if !isScratchpad(feed)}
-                  <div class="field">
-                    <label for="form-tz-{feed.id}">Time zone</label>
-                    <select id="form-tz-{feed.id}" bind:value={formTimezone}>
-                      <option value=""
-                        >Auto{events.tzByFeed[feed.id]
-                          ? ' (' + events.tzByFeed[feed.id] + ')'
-                          : ''}</option>
-                      {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
-                        <option value={tz}>{formatTzOption(tz)}</option>
-                      {/each}
-                    </select>
-                  </div>
-                {/if}
+                <div class="field">
+                  <label for="form-tz-{feed.id}">Time zone</label>
+                  <select id="form-tz-{feed.id}" bind:value={formTimezone}>
+                    <option value=""
+                      >Auto{events.tzByFeed[feed.id]
+                        ? ' (' + events.tzByFeed[feed.id] + ')'
+                        : ''}</option>
+                    {#each TZ_OVERRIDE_OPTIONS as tz (tz)}
+                      <option value={tz}>{formatTzOption(tz)}</option>
+                    {/each}
+                  </select>
+                </div>
                 <div class="form-actions feed-form-actions">
                   <div class="action-group">
                     <button
                       type="button"
+                      class="delete-btn"
+                      class:confirming={confirmDeleteFeedId === feed.id}
+                      class:done={doneDeleteFeedId === feed.id}
+                      disabled={!isDeletableFeed(feed)}
+                      title={!isDeletableFeed(feed)
+                        ? 'This calendar can’t be deleted'
+                        : doneDeleteFeedId === feed.id
+                          ? 'Tap to cancel deletion'
+                          : undefined}
+                      onclick={() => removeFeed(feed.id)}
+                    >Delete<span class="act-mark">{doneDeleteFeedId === feed.id ? '✓' : confirmDeleteFeedId === feed.id ? '?' : ''}</span></button>
+                    <button
+                      type="button"
                       class="disable-btn"
                       data-state={formHidden ? 'enable' : 'disable'}
-                      onclick={() => (formHidden = !formHidden)}
-                    >{formHidden ? 'Enable' : 'Disable'}</button>
-                    {#if feed.source.kind === 'user'}
-                      <button
-                        type="button"
-                        class="delete-btn"
-                        class:confirming={confirmDeleteFeedId === feed.id}
-                        class:done={doneDeleteFeedId === feed.id}
-                        title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
-                        onclick={() => removeFeed(feed.id)}
-                      >{doneDeleteFeedId === feed.id
-                        ? 'Delete ✓'
-                        : confirmDeleteFeedId === feed.id
-                          ? 'Delete ?'
-                          : 'Delete'}</button>
-                    {/if}
+                      onclick={() => {
+                        if (editingFeed) { toggleHidden(editingFeed); formHidden = !!editingFeed.hidden; }
+                        else formHidden = !formHidden;
+                      }}
+                    ><span class="act-stack"><span class="act-sizer" aria-hidden="true">Disable</span><span>{formHidden ? 'Enable' : 'Disable'}</span></span></button>
                   </div>
                   <div class="action-group">
                     <button
@@ -1197,12 +1337,17 @@
           type="button"
           class="danger"
           class:confirming={confirmReset}
+          title="Reset to default (long-press to seed test data)"
           onclick={resetAndClear}
+          onpointerdown={startResetPress}
+          onpointerup={cancelResetPress}
+          onpointercancel={cancelResetPress}
+          onpointerleave={cancelResetPress}
         >{confirmReset ? 'Reset ?' : 'Reset'}</button>
         <input
           bind:this={fileInput}
           type="file"
-          accept="application/json"
+          accept="application/json,text/calendar,.ics,.ical"
           onchange={handleImport}
           hidden
         />
@@ -1252,6 +1397,7 @@
   .panel-body {
     flex: 1 1 auto;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 1em 1em 2em;
     display: flex;
     flex-direction: column;
@@ -1310,12 +1456,46 @@
     text-transform: uppercase;
     cursor: pointer;
   }
+  /* Save shares its action group equally with Cancel, so the two match width. */
+  .form-actions button.primary {
+    flex: 1 1 0;
+  }
   .form-actions .delete-btn {
+    position: relative;
     border-color: var(--accent);
     color: var(--accent);
   }
-  .form-actions .delete-btn:hover {
+  /* Keep the word centered and constant-width: the ?/✓ floats at the right edge
+     instead of being part of the centered label. */
+  .form-actions .delete-btn .act-mark {
+    position: absolute;
+    right: 0.4em;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* Reserve the wider word so Enable/Disable never changes size; current label
+     is centered over the hidden sizer. */
+  .form-actions .act-stack {
+    display: inline-grid;
+  }
+  .form-actions .act-stack > * {
+    grid-area: 1 / 1;
+    text-align: center;
+  }
+  .form-actions .act-sizer {
+    visibility: hidden;
+  }
+  .form-actions .delete-btn:not(:disabled):hover {
     background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  }
+  .form-actions .delete-btn:disabled {
+    border-color: var(--ink-faint);
+    color: var(--ink-muted);
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-style: dashed;
   }
   .form-actions .delete-btn.confirming {
     background: var(--accent);
@@ -1366,7 +1546,7 @@
     font-size: 0.85em;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--ink-muted);
+    color: var(--ink);
     font-weight: 600;
     user-select: none;
   }
@@ -1402,13 +1582,17 @@
   }
   details.group > summary h3 {
     margin: 0;
+    display: flex;
+    align-items: center;
   }
   details.group > summary h3::before {
     content: '▸';
     display: inline-block;
-    margin-right: 0.4em;
-    color: var(--ink-muted);
-    font-size: 0.9em;
+    margin-right: 0.3em;
+    color: var(--ink);
+    font-size: 2.6em;
+    line-height: 1;
+    transform: translateY(-1px);
   }
   details.group[open] > summary h3::before {
     content: '▾';
@@ -1452,7 +1636,6 @@
     border-top-color: transparent;
   }
   .feeds li[data-active='true'] {
-    background: var(--paper-2);
     outline: 2px solid var(--ink);
     outline-offset: -2px;
   }
@@ -1470,6 +1653,15 @@
     align-items: center;
     gap: 0.3em;
     padding: 6px 8px;
+  }
+  /* Local calendars lead with the download button — drop the left inset so it
+     sits flush to the panel edge. While editing, restore it so the open card's
+     contents align with the rest of the form. */
+  .feed-row[data-local='true'] {
+    padding-left: 0;
+  }
+  .feeds li[data-active='true'] .feed-row[data-local='true'] {
+    padding-left: 8px;
   }
   .feed-name-btn {
     flex: 1;
@@ -1566,6 +1758,15 @@
   .kind-mark {
     color: var(--ink-muted);
     display: inline-flex;
+  }
+  /* Link/unlink indicator gets its own slot just before the up/down controls so
+     it lines up in a column across rows (rather than being clipped inside the
+     overflow-hidden name button). */
+  .feed-link-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
   .warn-btn {
     display: inline-flex;
