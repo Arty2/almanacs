@@ -1588,7 +1588,7 @@
     display: inline-block;
     margin-right: 0.3em;
     color: var(--ink-muted);
-    font-size: 1.3em;
+    font-size: 2.6em;
   }
   details.group[open] > summary h3::before {
     content: '▾';
