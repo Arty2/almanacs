@@ -1108,6 +1108,15 @@
             data-active={editingFeedId === feed.id ? 'true' : null}
           >
             <div class="feed-row">
+              {#if isScratchpad(feed)}
+                <IconButton
+                  icon="arrow-bar-down"
+                  label="Download this lane as an .ics file"
+                  variant="ghost"
+                  size={16}
+                  onclick={() => exportLaneIcs(feed)}
+                />
+              {/if}
               {#if travelIconName(feed.travel)}
                 <span class="kind-mark" title={travelLabelText(feed.travel)}>
                   <Icon name={travelIconName(feed.travel)!} size={14} />
@@ -1256,15 +1265,6 @@
                         title={doneDeleteFeedId === feed.id ? 'Tap to cancel deletion' : undefined}
                         onclick={() => removeFeed(feed.id)}
                       >Delete<span class="act-mark">{doneDeleteFeedId === feed.id ? '✓' : confirmDeleteFeedId === feed.id ? '?' : ''}</span></button>
-                    {/if}
-                    {#if isScratchpad(feed)}
-                      <button
-                        type="button"
-                        class="lane-export-btn"
-                        onclick={() => exportLaneIcs(feed)}
-                        title="Download this lane as an .ics file"
-                        aria-label="Download this lane as an .ics file"
-                      ><Icon name="arrow-bar-down" size={16} /></button>
                     {/if}
                   </div>
                   <div class="action-group">
@@ -1457,15 +1457,6 @@
   /* Save sizes to its content so it sits narrower than Cancel. */
   .form-actions button.primary {
     flex: 0 1 auto;
-  }
-  .form-actions .lane-export-btn {
-    flex: none;
-    width: 26px;
-    padding: 0;
-  }
-  .form-actions .lane-export-btn:hover {
-    background: var(--ink);
-    color: var(--paper);
   }
   .form-actions .delete-btn {
     position: relative;

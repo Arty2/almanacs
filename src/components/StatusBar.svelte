@@ -34,10 +34,11 @@
   // comfortably at the screen bottom without clipping its content.
   const closedHeight = $derived(collapsedHeight + 2);
   // Keep the collapsed bar at the resting height whenever it isn't expanded
-  // (covers the initial measure and font-size changes). Keyed off the visual
-  // `expanded` state so it converges without fighting a drag.
+  // (covers the initial measure, font-size changes, and the header shrinking
+  // back when selection mode exits). Keyed off the explicit expand flag so a
+  // stale tall `height` isn't misread as "expanded" once the header re-measures.
   $effect(() => {
-    if (!expanded) height = closedHeight;
+    if (!ui.statusExpanded) height = closedHeight;
   });
   const inSelectionMode = $derived(selection.mode && selection.uids.size > 0);
 
@@ -68,9 +69,10 @@
   let cancelTimer: ReturnType<typeof setTimeout> | null = null;
 
   function commitDelete(): void {
-    deleteLocalEvents(selectedLocalUids);
+    const removed = [...selectedLocalUids];
+    deleteLocalEvents(removed);
     const next = new Set(selection.uids);
-    for (const uid of selectedLocalUids) next.delete(uid);
+    for (const uid of removed) next.delete(uid);
     if (next.size === 0) clearSelection();
     else selection.uids = next;
   }
