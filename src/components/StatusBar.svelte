@@ -42,6 +42,7 @@
   // drag once the finger clearly moves down, so content scroll and row taps survive.
   let trayArmed = false;
   let trayArmStartY = 0;
+  let trayArmStartX = 0;
   let trayArmTarget: HTMLElement | null = null;
   let trayArmPointerId = 0;
 
@@ -306,6 +307,7 @@
     if (scroller && scroller.scrollTop > 0) return;
     trayArmed = true;
     trayArmStartY = e.clientY;
+    trayArmStartX = e.clientX;
     trayArmTarget = e.currentTarget as HTMLElement;
     trayArmPointerId = e.pointerId;
   }
@@ -317,11 +319,18 @@
     }
     if (!trayArmed) return;
     const dy = e.clientY - trayArmStartY;
-    if (dy <= 4) {
-      // Upward / negligible motion is a content scroll, not a dismiss — disarm.
-      if (dy < -4) trayArmed = false;
+    const dx = Math.abs(e.clientX - trayArmStartX);
+    // Upward motion (content scroll up) or a horizontal-dominant swipe (a
+    // left/right scroll of the raw source view) is never a dismiss — disarm so
+    // the gesture scrolls freely. Requiring real horizontal travel before
+    // disarming keeps a near-vertical swipe tolerant of small sideways drift.
+    if (dy < -4 || (dx > 8 && dx > dy)) {
+      trayArmed = false;
       return;
     }
+    // Only hand off to the drag once the swipe is clearly downward *and*
+    // vertical-dominant, so sideways scrolling isn't hijacked.
+    if (dy <= 6 || dy <= dx) return;
     // Clear downward swipe from the top: hand off to the same drag the header runs.
     trayArmed = false;
     dragging = true;
