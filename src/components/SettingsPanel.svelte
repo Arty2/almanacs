@@ -17,6 +17,7 @@
   import { online } from '../lib/online.svelte';
   import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
+  import { normalizeFeedUrl } from '../lib/feed-url';
   import { parseIcs } from '../lib/ics-core';
   import { rangeForToday } from '../lib/layout';
   import {
@@ -275,7 +276,7 @@
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
       if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
-        target.source = { kind: 'user', url: formUrl.trim() };
+        target.source = { kind: 'user', url: normalizeFeedUrl(formUrl) };
       }
       void onRefresh();
       clearForm();
@@ -285,7 +286,7 @@
       formError = 'A URL is required.';
       return;
     }
-    const source = { kind: 'user' as const, url: formUrl.trim() };
+    const source = { kind: 'user' as const, url: normalizeFeedUrl(formUrl) };
     const id = feedIdFor(source);
     if (config.feeds.some((f) => f.id === id)) {
       formError = 'A feed with this URL already exists.';

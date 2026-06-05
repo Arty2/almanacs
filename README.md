@@ -15,7 +15,7 @@ Shows your calendars side-by-side as horizontal rows along a continuous timeline
 - **Appearance** — theme, language, date/time format, timezone
 - **Boundaries** — past/future months visible; morning and evening time limits (hide timed events outside a chosen hour range)
 - **Find & replace** — rename, recolour, or hide events by keyword
-- **Calendars** — add, reorder, and configure ICS feeds
+- **Calendars** — add, reorder, and configure ICS feeds. You can also paste a Google Calendar **share** or **embed** link (e.g. `https://calendar.google.com/calendar/embed?src=…`) and it's converted to that calendar's ICS feed automatically — the calendar must be shared publicly, otherwise Google returns a 404 and the feed shows an error explaining how to enable public sharing.
 - **Refresh interval** — 30 min / 1 h / 4 h
 
 ## Import & export
