@@ -43,6 +43,9 @@
     Object.assign(events.byFeed, _cache.byFeed);
     Object.assign(events.tzByFeed, _cache.tzByFeed);
     Object.assign(events.lastSuccessAt, _cache.lastSuccessAt);
+    // Restore prior feed-retrieval errors so they stay visible across reloads,
+    // including while offline where loadAllFeeds skips the network entirely.
+    Object.assign(ui.feedErrors, _cache.feedErrors);
   }
 
   const range = $derived(
@@ -98,7 +101,7 @@
           }
         }),
       );
-      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt);
+      saveEventsCache(events.byFeed, events.tzByFeed, events.lastSuccessAt, ui.feedErrors);
     } finally {
       ui.loading = false;
       checkDefaultFeedHealth();

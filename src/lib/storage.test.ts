@@ -10,6 +10,7 @@ import {
   saveEventsCache,
   flushEventsCache,
   loadEventsCache,
+  EVENTS_CACHE_KEY,
 } from './storage';
 import { SCHEMA_VERSION, SCRATCHPAD_FEED_ID } from './types';
 import type { ParsedEvent } from './types';
@@ -188,7 +189,7 @@ describe('events cache quota handling', () => {
     const byFeed = { stale: bulkyFeed('stale'), fresh: bulkyFeed('fresh') };
     // `stale` refreshed earlier than `fresh`, so it should be the one dropped.
     const lastSuccessAt = { stale: 1_000, fresh: 2_000 };
-    saveEventsCache(byFeed, {}, lastSuccessAt);
+    saveEventsCache(byFeed, {}, lastSuccessAt, { stale: 'boom' });
     flushEventsCache();
 
     const loaded = loadEventsCache();
@@ -196,16 +197,35 @@ describe('events cache quota handling', () => {
     expect(loaded!.byFeed.fresh).toHaveLength(60);
     expect(loaded!.byFeed.stale).toBeUndefined();
     expect(loaded!.lastSuccessAt.fresh).toBe(2_000);
+    // The evicted feed's error is dropped alongside its events.
+    expect(loaded!.feedErrors.stale).toBeUndefined();
   });
 
   it('persists everything when the store is not full', () => {
     const byFeed = { a: bulkyFeed('a', 5), b: bulkyFeed('b', 5) };
-    saveEventsCache(byFeed, { a: 'UTC' }, { a: 1, b: 2 });
+    saveEventsCache(byFeed, { a: 'UTC' }, { a: 1, b: 2 }, {});
     flushEventsCache();
 
     const loaded = loadEventsCache();
     expect(loaded!.byFeed.a).toHaveLength(5);
     expect(loaded!.byFeed.b).toHaveLength(5);
     expect(loaded!.tzByFeed.a).toBe('UTC');
+  });
+
+  it('persists feed errors so they survive a reload (e.g. while offline)', () => {
+    saveEventsCache({ a: [] }, {}, { a: 0 }, { a: 'Failed to fetch: 404' });
+    flushEventsCache();
+
+    const loaded = loadEventsCache();
+    expect(loaded!.feedErrors.a).toBe('Failed to fetch: 404');
+  });
+
+  it('loads a legacy cache without feedErrors as an empty map', () => {
+    localStorage.setItem(
+      EVENTS_CACHE_KEY,
+      JSON.stringify({ byFeed: {}, tzByFeed: {}, lastSuccessAt: {} }),
+    );
+    const loaded = loadEventsCache();
+    expect(loaded!.feedErrors).toEqual({});
   });
 });

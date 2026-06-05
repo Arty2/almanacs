@@ -17,6 +17,7 @@
   import { online } from '../lib/online.svelte';
   import { exportConfig, importConfig, defaultConfig, saveConfig, REFRESH_INTERVAL_OPTIONS } from '../lib/storage';
   import { feedIdFor } from '../lib/ics';
+  import { normalizeFeedUrl } from '../lib/feed-url';
   import { parseIcs } from '../lib/ics-core';
   import { rangeForToday } from '../lib/layout';
   import {
@@ -275,7 +276,7 @@
       if (formTimezone) target.timezone = formTimezone;
       else delete target.timezone;
       if (!isScratchpad(target) && target.source.kind === 'user' && formUrl.trim()) {
-        target.source = { kind: 'user', url: formUrl.trim() };
+        target.source = { kind: 'user', url: normalizeFeedUrl(formUrl) };
       }
       void onRefresh();
       clearForm();
@@ -285,7 +286,7 @@
       formError = 'A URL is required.';
       return;
     }
-    const source = { kind: 'user' as const, url: formUrl.trim() };
+    const source = { kind: 'user' as const, url: normalizeFeedUrl(formUrl) };
     const id = feedIdFor(source);
     if (config.feeds.some((f) => f.id === id)) {
       formError = 'A feed with this URL already exists.';
@@ -1063,6 +1064,11 @@
                   required
                 />
               </div>
+              <p class="field-hint">
+                Tip: paste a Google Calendar share or embed link and it's
+                converted to its ICS feed automatically (the calendar must be
+                shared publicly).
+              </p>
               <div class="field">
                 <label for="new-form-name">Name</label>
                 <input id="new-form-name" type="text" bind:value={formName} placeholder="My calendar" />
@@ -1619,6 +1625,13 @@
     height: 32px;
     width: 100%;
     box-sizing: border-box;
+  }
+  .field-hint {
+    margin: -0.2em 0 0.4em;
+    font-size: var(--fs-13);
+    line-height: 1.35;
+    color: var(--ink);
+    opacity: 0.7;
   }
   .feeds {
     list-style: none;

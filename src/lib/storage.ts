@@ -366,6 +366,10 @@ type CachePayload = {
   byFeed: Record<string, ParsedEvent[]>;
   tzByFeed: Record<string, string>;
   lastSuccessAt: Record<string, number>;
+  // Per-feed retrieval error messages, persisted so a failed feed's error stays
+  // visible across reloads — notably while offline, where the fetch that would
+  // re-create the error is skipped.
+  feedErrors: Record<string, string>;
 };
 let pendingCache: CachePayload | null = null;
 let cacheTimer: ReturnType<typeof setTimeout> | null = null;
@@ -374,9 +378,10 @@ export function saveEventsCache(
   byFeed: Record<string, ParsedEvent[]>,
   tzByFeed: Record<string, string>,
   lastSuccessAt: Record<string, number>,
+  feedErrors: Record<string, string>,
 ): void {
   if (typeof localStorage === 'undefined') return;
-  pendingCache = { byFeed, tzByFeed, lastSuccessAt };
+  pendingCache = { byFeed, tzByFeed, lastSuccessAt, feedErrors };
   if (cacheTimer) return;
   cacheTimer = setTimeout(flushEventsCache, 1000);
 }
@@ -387,9 +392,9 @@ export function flushEventsCache(): void {
     cacheTimer = null;
   }
   if (!pendingCache) return;
-  const { byFeed, tzByFeed, lastSuccessAt } = pendingCache;
+  const { byFeed, tzByFeed, lastSuccessAt, feedErrors } = pendingCache;
   pendingCache = null;
-  writeEventsCache(byFeed, tzByFeed, lastSuccessAt);
+  writeEventsCache(byFeed, tzByFeed, lastSuccessAt, feedErrors);
 }
 
 if (typeof window !== 'undefined') {
@@ -403,6 +408,7 @@ function serializeEventsCache(
   byFeed: Record<string, ParsedEvent[]>,
   tzByFeed: Record<string, string>,
   lastSuccessAt: Record<string, number>,
+  feedErrors: Record<string, string>,
 ): string {
   return JSON.stringify({
     byFeed: Object.fromEntries(
@@ -428,6 +434,7 @@ function serializeEventsCache(
     ),
     tzByFeed: { ...tzByFeed },
     lastSuccessAt: { ...lastSuccessAt },
+    feedErrors: { ...feedErrors },
   });
 }
 
@@ -465,6 +472,7 @@ function writeEventsCache(
   byFeed: Record<string, ParsedEvent[]>,
   tzByFeed: Record<string, string>,
   lastSuccessAt: Record<string, number>,
+  feedErrors: Record<string, string>,
 ): void {
   if (typeof localStorage === 'undefined') return;
   // Work on a shallow copy so eviction never mutates live app state. On a full
@@ -472,9 +480,13 @@ function writeEventsCache(
   // calendars stay cached rather than the whole write failing. The retry count
   // is bounded by the feed count, so a persistently failing store can't spin.
   let feeds = byFeed;
+  let errors = feedErrors;
   for (;;) {
     try {
-      localStorage.setItem(EVENTS_CACHE_KEY, serializeEventsCache(feeds, tzByFeed, lastSuccessAt));
+      localStorage.setItem(
+        EVENTS_CACHE_KEY,
+        serializeEventsCache(feeds, tzByFeed, lastSuccessAt, errors),
+      );
       return;
     } catch (err) {
       if (!isQuotaError(err)) return; // unavailable or other error — give up quietly
@@ -482,6 +494,10 @@ function writeEventsCache(
       if (!evictId) return; // nothing left to drop
       const { [evictId]: _dropped, ...rest } = feeds;
       feeds = rest;
+      // Drop the evicted feed's error too, so the cache stays internally
+      // consistent (no error for a feed whose events are no longer cached).
+      const { [evictId]: _droppedErr, ...restErrors } = errors;
+      errors = restErrors;
     }
   }
 }
@@ -490,6 +506,7 @@ export function loadEventsCache(): {
   byFeed: Record<string, ParsedEvent[]>;
   tzByFeed: Record<string, string>;
   lastSuccessAt: Record<string, number>;
+  feedErrors: Record<string, string>;
 } | null {
   if (typeof localStorage === 'undefined') return null;
   const raw = localStorage.getItem(EVENTS_CACHE_KEY);
@@ -499,6 +516,7 @@ export function loadEventsCache(): {
       byFeed?: Record<string, SerializedEvent[]>;
       tzByFeed?: Record<string, string>;
       lastSuccessAt?: Record<string, number>;
+      feedErrors?: Record<string, string>;
     };
     if (!parsed || typeof parsed !== 'object') return null;
     const byFeed: Record<string, ParsedEvent[]> = {};
@@ -529,6 +547,11 @@ export function loadEventsCache(): {
       lastSuccessAt:
         typeof parsed.lastSuccessAt === 'object' && parsed.lastSuccessAt !== null
           ? (parsed.lastSuccessAt as Record<string, number>)
+          : {},
+      // Default to {} for caches written before feedErrors existed.
+      feedErrors:
+        typeof parsed.feedErrors === 'object' && parsed.feedErrors !== null
+          ? (parsed.feedErrors as Record<string, string>)
           : {},
     };
   } catch {
