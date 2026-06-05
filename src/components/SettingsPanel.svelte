@@ -1064,11 +1064,6 @@
                   required
                 />
               </div>
-              <p class="field-hint">
-                Tip: paste a Google Calendar share or embed link and it's
-                converted to its ICS feed automatically (the calendar must be
-                shared publicly).
-              </p>
               <div class="field">
                 <label for="new-form-name">Name</label>
                 <input id="new-form-name" type="text" bind:value={formName} placeholder="My calendar" />
@@ -1625,13 +1620,6 @@
     height: 32px;
     width: 100%;
     box-sizing: border-box;
-  }
-  .field-hint {
-    margin: -0.2em 0 0.4em;
-    font-size: var(--fs-13);
-    line-height: 1.35;
-    color: var(--ink);
-    opacity: 0.7;
   }
   .feeds {
     list-style: none;
