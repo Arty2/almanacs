@@ -458,6 +458,12 @@
     padding-left: 2px;
     padding-right: 2px;
   }
+  /* Month (1M) and quarter (3M) bands are wide; keep the month name's left
+     padding minimal so it lines up tight with the band edge. */
+  [data-zoom='month'] [data-tier='month'] .label,
+  [data-zoom='quarter'] [data-tier='month'] .label {
+    padding-left: 1px;
+  }
   [data-tier='day-letters'] {
     flex: 1.5 1 0;
   }
@@ -467,6 +473,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    /* Small breathing room above/below the letter + number stack. */
+    padding-top: 1px;
+    padding-bottom: 1px;
   }
   .day-letter-band[data-weekend='true'] .day-letter,
   .day-letter-band[data-weekend='true'] .day-num {
@@ -480,7 +489,7 @@
   .day-letter {
     display: block;
     font-size: var(--fs-10);
-    line-height: 1.1;
+    line-height: 1;
     color: var(--ink);
     padding: 0;
     text-align: center;
@@ -489,7 +498,7 @@
     display: block;
     font-family: var(--mono);
     font-size: var(--fs-10);
-    line-height: 1.1;
+    line-height: 1;
     color: var(--ink);
   }
 </style>
