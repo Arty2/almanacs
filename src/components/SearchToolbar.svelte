@@ -120,7 +120,7 @@
     border-bottom: 1px solid var(--ink);
     background: var(--paper);
     position: sticky;
-    top: 50px;
+    top: var(--toolbar-h);
     z-index: 9;
   }
   .search-toolbar :global(.icon-button[aria-pressed='true']) {

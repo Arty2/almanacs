@@ -326,7 +326,7 @@
     align-items: center;
     gap: 0.5em;
     padding: var(--time-header-pad-x);
-    height: 50px;
+    height: var(--toolbar-h);
     border-bottom: 1px solid var(--ink);
     background: var(--paper);
     position: sticky;

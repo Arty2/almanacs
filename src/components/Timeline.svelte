@@ -1172,7 +1172,7 @@
   bind:this={scrollEl}
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
-  style="height: calc(100dvh - {50 + (search.open ? 44 : 0)}px);"
+  style="height: calc(100dvh - var(--toolbar-h) - {search.open ? 44 : 0}px);"
 >
   <div class="scroll-content" class:is-centered={centered} style="width: {totalWidth + RIGHT_PAD_PX}px;">
     {#if sweepActive}
@@ -1188,7 +1188,7 @@
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
       {#if ui.tempMarkerMs != null}
-        <div class="toggle-marker-wrap" style="top: {50 + (search.open ? 44 : 0) + 1}px">
+        <div class="toggle-marker-wrap" style="top: calc(var(--toolbar-h) + {search.open ? 44 : 0}px + 1px)">
           <IconButton
             icon="arrows-horizontal"
             label="Toggle between today and temporary marker"
