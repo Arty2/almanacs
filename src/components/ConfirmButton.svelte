@@ -5,9 +5,8 @@
   type Props = {
     label: string;
     variant?: 'delete' | 'neutral';
-    /** 3 = idle→confirm→done(cooldown)→undo; 2 = idle→confirm→commit (no undo). */
+    /** 3 = idle→confirm→done→undo(cooldown→commit); 2 = idle→confirm→commit (no undo). */
     stages?: 2 | 3;
-    cooldownMs?: number;
     disabled?: boolean;
     /** Icon px; tuned to read at the button's 1px stroke weight for --fs-12 text. */
     size?: number;
@@ -47,7 +46,6 @@
     label,
     variant = 'delete',
     stages = 3,
-    cooldownMs = 3000,
     disabled = false,
     size = 13,
     height,
@@ -59,7 +57,7 @@
     onUndo,
     onArm,
     onConfirm,
-    confirmIcon = 'help',
+    confirmIcon = 'question',
     doneIcon = 'check',
     undoIcon = 'undo',
     idleTitle,
@@ -73,8 +71,11 @@
     onpointerleave,
   }: Props = $props();
 
-  // The undo flash is brief — long enough to register the ↺, then back to idle.
-  const UNDO_FLASH_MS = 800;
+  // Timing of the post-confirm sequence for a 3-stage (delete) button:
+  // ✓ holds for DONE_HOLD_MS, then ↺ flashes for UNDO_WINDOW_MS, then commit.
+  const CONFIRM_WINDOW_MS = 3000; // ? auto-reverts to idle if left untouched
+  const DONE_HOLD_MS = 1000; // ✓ visible before the undo window opens
+  const UNDO_WINDOW_MS = 3000; // ↺ flashing window; commit fires at the end
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   function clearTimer(): void {
@@ -104,39 +105,40 @@
       timer = setTimeout(() => {
         state = 'idle';
         timer = null;
-      }, cooldownMs);
+      }, CONFIRM_WINDOW_MS);
       return;
     }
     // 3-stage
-    if (state === 'done') {
-      // Tap during the cooldown undoes the (still-deferred) action.
+    if (state === 'done' || state === 'undo') {
+      // A click anytime in the post-confirm window undoes the (deferred) action.
       clearTimer();
-      state = 'undo';
       onUndo?.();
-      timer = setTimeout(() => {
-        state = 'idle';
-        timer = null;
-      }, UNDO_FLASH_MS);
+      state = 'idle';
       return;
     }
     if (state === 'confirm') {
+      // Confirmed: hold ✓ for a beat, then open the flashing ↺ undo window,
+      // and commit only when that window elapses untouched.
       clearTimer();
       state = 'done';
       onArm?.();
       timer = setTimeout(() => {
-        state = 'idle';
-        timer = null;
-        onCommit?.();
-      }, cooldownMs);
+        state = 'undo';
+        timer = setTimeout(() => {
+          state = 'idle';
+          timer = null;
+          onCommit?.();
+        }, UNDO_WINDOW_MS);
+      }, DONE_HOLD_MS);
       return;
     }
-    // idle (or mid-undo flash) → arm the confirm
+    // idle → arm the confirm
     clearTimer();
     state = 'confirm';
     timer = setTimeout(() => {
       state = 'idle';
       timer = null;
-    }, cooldownMs);
+    }, CONFIRM_WINDOW_MS);
   }
 
   $effect(() => () => clearTimer());
@@ -155,7 +157,7 @@
       ? disabledTitle
       : state === 'confirm'
         ? confirmTitle
-        : state === 'done'
+        : state === 'done' || state === 'undo'
           ? doneTitle
           : idleTitle,
   );
@@ -173,11 +175,9 @@
   const statusPhrase = $derived(
     state === 'confirm'
       ? `${label} — tap again to confirm`
-      : state === 'done'
-        ? `${label} — tap to undo within ${Math.round(cooldownMs / 1000)} seconds`
-        : state === 'undo'
-          ? `${label} undone`
-          : label,
+      : state === 'done' || state === 'undo'
+        ? `${label} confirmed — tap to undo`
+        : label,
   );
 </script>
 
@@ -242,6 +242,20 @@
   }
   .cb-icon-box {
     display: inline-block;
+  }
+  /* In the undo window the ↺ icon flashes once a second to flag the closing
+     undo affordance (3 blinks over the 3s window). */
+  .confirm-btn[data-state='undo'] .cb-current :global(.icon) {
+    animation: cb-blink 1s linear 3;
+  }
+  @keyframes cb-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0.2; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .confirm-btn[data-state='undo'] .cb-current :global(.icon) {
+      animation: none;
+    }
   }
   /* Screen-reader-only state announcement (icons are aria-hidden). */
   .cb-sr {

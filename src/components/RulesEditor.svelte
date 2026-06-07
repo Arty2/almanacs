@@ -326,12 +326,12 @@
                 <button
                   type="button"
                   onclick={cancelEdit}
-                  disabled={deleteState === 'done'}
+                  disabled={deleteState === 'done' || deleteState === 'undo'}
                 >Cancel</button>
                 <button
                   type="submit"
                   class="primary"
-                  disabled={deleteState === 'done'}
+                  disabled={deleteState === 'done' || deleteState === 'undo'}
                 >Save</button>
               </div>
             </div>

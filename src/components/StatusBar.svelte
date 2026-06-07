@@ -769,11 +769,12 @@
         <ConfirmButton
           label="CANCEL"
           variant="neutral"
+          stages={2}
           height={28}
           hpad="0.95em"
           idleTitle="Cancel selection"
-          doneTitle="Tap to undo"
-          onCommit={commitCancel}
+          confirmTitle="Tap again to cancel"
+          onConfirm={commitCancel}
           onpointerdown={(e) => e.stopPropagation()}
         />
       </span>

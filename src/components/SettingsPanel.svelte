@@ -1199,12 +1199,12 @@
                     <button
                       type="button"
                       onclick={clearForm}
-                      disabled={deleteFeedState === 'done'}
+                      disabled={deleteFeedState === 'done' || deleteFeedState === 'undo'}
                     >Cancel</button>
                     <button
                       type="submit"
                       class="primary"
-                      disabled={deleteFeedState === 'done'}
+                      disabled={deleteFeedState === 'done' || deleteFeedState === 'undo'}
                     >Save</button>
                   </div>
                 </div>
