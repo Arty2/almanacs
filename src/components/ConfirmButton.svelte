@@ -244,19 +244,14 @@
     display: inline-block;
   }
   /* In the undo window the ↺ icon flashes once a second to flag the closing
-     undo affordance. */
+     undo affordance. This is a functional state indicator (the undo window is
+     closing), not decoration, so it runs regardless of the motion setting. */
   .confirm-btn[data-state='undo'] .cb-current :global(.icon) {
     animation: cb-blink 1s steps(1, end) infinite;
   }
   @keyframes cb-blink {
     0% { opacity: 1; }
     50% { opacity: 0.15; }
-  }
-  /* Honour the app's reduced-motion override (data-motion='reduced'), set from
-     the user's motion setting — not the raw OS media query, which the rest of
-     the app deliberately doesn't key off directly. */
-  :global([data-motion='reduced']) .confirm-btn[data-state='undo'] .cb-current :global(.icon) {
-    animation: none;
   }
   /* Screen-reader-only state announcement (icons are aria-hidden). */
   .cb-sr {

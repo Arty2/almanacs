@@ -1157,17 +1157,14 @@
     height: 13px;
   }
   /* During the undo window the ↺ flashes once a second, mirroring
-     ConfirmButton's closing-window affordance. */
+     ConfirmButton's closing-window affordance. A functional state indicator,
+     so it runs regardless of the motion setting. */
   .sel-move.undo .sel-current :global(.icon) {
     animation: sel-move-blink 1s steps(1, end) infinite;
   }
   @keyframes sel-move-blink {
     0% { opacity: 1; }
     50% { opacity: 0.15; }
-  }
-  /* Honour the app's reduced-motion override (data-motion='reduced'). */
-  :global([data-motion='reduced']) .sel-move.undo .sel-current :global(.icon) {
-    animation: none;
   }
   .move-menu {
     position: relative;
