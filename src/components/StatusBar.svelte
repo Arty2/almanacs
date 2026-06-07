@@ -837,7 +837,7 @@
       onpointercancel={endDrag}
     >
       <span class="status-line status-line-left">
-        {#if nextEventLabel && !expanded}
+        {#if nextEventLabel}
           <span class="next-event">{nextEventLabel}</span>
         {/if}
       </span>
@@ -1109,6 +1109,7 @@
   }
   .next-event {
     font-size: var(--fs-11);
+    line-height: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
