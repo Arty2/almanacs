@@ -1395,7 +1395,7 @@
   }
   .toggle-marker-wrap {
     position: fixed;
-    right: calc(0.75em + 1px);
+    right: calc(var(--time-header-pad-x) + 1px);
     z-index: 11;
     pointer-events: auto;
   }
