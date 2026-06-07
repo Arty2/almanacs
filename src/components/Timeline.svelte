@@ -1172,7 +1172,7 @@
   bind:this={scrollEl}
   data-zoom={zoom.value}
   data-search-active={searchActive ? 'true' : null}
-  style="height: calc(100dvh - var(--toolbar-h) - {search.open ? 44 : 0}px);"
+  style="height: calc(100dvh - var(--toolbar-h) - {search.open ? 'var(--toolbar-h)' : '0px'});"
 >
   <div class="scroll-content" class:is-centered={centered} style="width: {totalWidth + RIGHT_PAD_PX}px;">
     {#if sweepActive}
@@ -1188,7 +1188,7 @@
     <header id="time-header" role="presentation" ondblclick={onHeaderDblClick} onpointerup={onHeaderPointerUp}>
       <TimeHeader {rangeStart} {rangeEnd} {pxPerDay} {scrollEl} {thickDayKeys} {thinDayKeys} />
       {#if ui.tempMarkerMs != null}
-        <div class="toggle-marker-wrap" style="top: calc(var(--toolbar-h) + {search.open ? 44 : 0}px + 1px)">
+        <div class="toggle-marker-wrap" style="top: calc(var(--toolbar-h) + {search.open ? 'var(--toolbar-h)' : '0px'} + (var(--time-header-date-h) - 24px) / 2)">
           <IconButton
             icon="arrows-horizontal"
             label="Toggle between today and temporary marker"
@@ -1395,7 +1395,10 @@
   }
   .toggle-marker-wrap {
     position: fixed;
-    right: calc(var(--time-header-pad-x) + 1px);
+    /* Centre the 24px button under the 32px toolbar search button: the search
+       button's right edge is at --time-header-pad-x, so its centre is pad+16;
+       the 24px button matches it at pad + (16 - 12) = pad + 4. */
+    right: calc(var(--time-header-pad-x) + 4px);
     z-index: 11;
     pointer-events: auto;
   }

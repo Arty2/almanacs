@@ -116,7 +116,7 @@
     align-items: center;
     gap: var(--toolbar-gap);
     padding: var(--time-header-pad-x);
-    height: 44px;
+    height: var(--toolbar-h);
     border-bottom: 1px solid var(--ink);
     background: var(--paper);
     position: sticky;
