@@ -25,8 +25,8 @@ describe('ConfirmButton', () => {
     expect(btn.dataset.state).toBe('undo');
     expect(onCommit).not.toHaveBeenCalled();
 
-    // Commit fires only after the 3s undo window elapses untouched.
-    await vi.advanceTimersByTimeAsync(3000);
+    // Commit fires only after the 4s undo window elapses untouched.
+    await vi.advanceTimersByTimeAsync(4000);
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(btn.dataset.state).toBe('idle');
   });

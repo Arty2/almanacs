@@ -90,7 +90,7 @@
   // MOVE/COPY mirror its post-confirm timing: ✓ holds for MOVE_DONE_HOLD_MS,
   // then "Undo?" flashes for MOVE_UNDO_WINDOW_MS before the action settles.
   const MOVE_DONE_HOLD_MS = 1000; // ✓ visible before the undo window opens
-  const MOVE_UNDO_WINDOW_MS = 3000; // "Undo?" flashing undo window
+  const MOVE_UNDO_WINDOW_MS = 4000; // "Undo?" flashing cooldown (4s)
 
   function commitDelete(): void {
     const removed = [...selectedLocalUids];
@@ -760,7 +760,7 @@
           title={moveStage !== 'idle' ? 'Tap to undo' : copyMode ? 'Copy selected to lane' : 'Move selected to lane'}
           onpointerdown={(e) => e.stopPropagation()}
           onclick={onMoveTap}
-        ><span class="sel-stack"><span class="sel-sizer" aria-hidden="true">COPY&nbsp;<span class="sel-icon-box"></span></span><span class="sel-current">{moveStage === 'undo' ? 'Undo' : copyMode ? 'COPY' : 'MOVE'}{#if moveStage !== 'idle'}&nbsp;<Icon name={moveStage === 'done' ? 'check' : 'question'} size={13} />{/if}</span></span></button>
+        ><span class="sel-stack"><span class="sel-sizer" aria-hidden="true">COPY&nbsp;<span class="sel-icon-box"></span></span><span class="sel-current">{moveStage === 'undo' ? 'UNDO' : copyMode ? 'COPY' : 'MOVE'}{#if moveStage !== 'idle'}&nbsp;<Icon name={moveStage === 'done' ? 'check' : 'question'} size={13} />{/if}</span></span></button>
         {#if moveMenuOpen}
           <div class="move-menu-list" role="menu">
             {#each localLanes as lane (lane.id)}

@@ -73,7 +73,7 @@
   // ✓ holds for DONE_HOLD_MS, then "Undo?" flashes for UNDO_WINDOW_MS, commit.
   const CONFIRM_WINDOW_MS = 3000; // ? auto-reverts to idle if left untouched
   const DONE_HOLD_MS = 1000; // ✓ visible before the undo window opens
-  const UNDO_WINDOW_MS = 3000; // "Undo?" flashing window; commit fires at the end
+  const UNDO_WINDOW_MS = 4000; // "Undo?" flashing cooldown (4s); commit fires at the end
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   function clearTimer(): void {
