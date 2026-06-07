@@ -338,6 +338,8 @@
     position: absolute;
     top: 0;
     height: 100%;
+    display: flex;
+    align-items: center;
     border-left: 1px solid var(--ink);
     border-top: none;
     border-right: none;
@@ -427,7 +429,7 @@
     position: sticky;
     left: 0;
     display: inline-block;
-    padding: 1px 6px;
+    padding: 0 6px;
     font-size: var(--fs-11);
     line-height: 1.25;
     white-space: nowrap;
@@ -441,13 +443,20 @@
     position: static;
     display: block;
     width: 100%;
-    padding: 1px 0;
+    padding: 0;
     text-align: center;
   }
   [data-tier='month'] .label,
   [data-tier='quarter'] .label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+  /* Zoomed-out views have narrow month bands; trim the side padding so the
+     month names hug the left edge (and 2Y is as dense as 1Y in any orientation). */
+  [data-zoom='year'] [data-tier='month'] .label,
+  [data-zoom='2-year'] [data-tier='month'] .label {
+    padding-left: 2px;
+    padding-right: 2px;
   }
   [data-tier='day-letters'] {
     flex: 1.5 1 0;
