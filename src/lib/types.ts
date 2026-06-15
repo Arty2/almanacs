@@ -98,6 +98,9 @@ export type Motion = 'auto' | 'reduced' | 'full';
 // UI density. 'auto' is condensed on mobile, relaxed on desktop.
 export type Spacing = 'auto' | 'condensed' | 'relaxed';
 
+// Structural border weight. 'thin' is the default 1px; 'bold' thickens to 2px.
+export type BorderWeight = 'thin' | 'bold';
+
 // Feedback for taps/holds: 'auto' vibrates where supported (else a tap sound),
 // 'sound' always plays the tap sound, 'vibration' vibrates only, 'off' neither.
 export type Haptics = 'auto' | 'sound' | 'vibration' | 'both' | 'off';
@@ -135,6 +138,7 @@ export type AppConfig = {
   theme: Theme;
   motion: Motion;
   spacing: Spacing;
+  borderWeight: BorderWeight;
   haptics: Haptics;
   fontSize: FontSize;
   locale: Locale;

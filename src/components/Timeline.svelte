@@ -1298,7 +1298,7 @@
     top: 0;
     z-index: 5;
     background: var(--paper);
-    border-bottom: 1px solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink);
     height: var(--time-header-h);
   }
   .rows {

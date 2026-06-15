@@ -45,9 +45,15 @@ describe('HEADER_TIERS', () => {
     expect(HEADER_TIERS.month).toEqual(['quarter-year', 'month']);
   });
 
-  it('all non-month zooms carry quarter-year, month and week tiers', () => {
-    for (const z of ['quarter', 'half-year', 'year', '2-year'] as const) {
+  it('quarter and half-year zooms carry quarter-year, month and week tiers', () => {
+    for (const z of ['quarter', 'half-year'] as const) {
       expect(HEADER_TIERS[z]).toEqual(['quarter-year', 'month', 'week']);
+    }
+  });
+
+  it('year and 2-year zooms keep the year, quarter, month tiers', () => {
+    for (const z of ['year', '2-year'] as const) {
+      expect(HEADER_TIERS[z]).toEqual(['year', 'quarter', 'month']);
     }
   });
 });

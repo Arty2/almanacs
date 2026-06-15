@@ -104,8 +104,8 @@ export const HEADER_TIERS: Record<Zoom, Tier[]> = {
   month: ['quarter-year', 'month'],
   quarter: ['quarter-year', 'month', 'week'],
   'half-year': ['quarter-year', 'month', 'week'],
-  year: ['quarter-year', 'month', 'week'],
-  '2-year': ['quarter-year', 'month', 'week'],
+  year: ['year', 'quarter', 'month'],
+  '2-year': ['year', 'quarter', 'month'],
 };
 
 export function tierToGranularity(tier: Tier): Granularity {

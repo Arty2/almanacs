@@ -102,6 +102,12 @@
 
   const showDayLetters = $derived(zoom.value === 'month');
 
+  // On portrait mobile the 3M/6M week labels stack "W" over the number (like the
+  // 1M day column) instead of the single-line "W24" used where there's room.
+  const weekStacked = $derived(
+    isPortraitMobile && (zoom.value === 'quarter' || zoom.value === 'half-year'),
+  );
+
   const dayBands = $derived.by<Band[]>(() => {
     if (!showDayLetters) return [];
     const days = ticksBetween(rangeStart, rangeEnd, 'day');
@@ -180,7 +186,11 @@
 
 <div class="tiers" data-zoom={zoom.value}>
   {#each tiers as t (t.tier)}
-    <div class="tier" data-tier={t.tier}>
+    <div
+      class="tier"
+      data-tier={t.tier}
+      data-stacked={t.tier === 'week' && weekStacked ? 'true' : null}
+    >
       {#each t.bands as b (b.date.toISOString())}
         <button
           type="button"
@@ -191,10 +201,15 @@
           title={tooltip(b.date)}
           onclick={(e) => setTempMarker(b, e)}
         >
-          <time datetime={b.date.toISOString()} class="label">{b.label}</time>
+          {#if t.tier === 'week' && weekStacked}
+            <span class="week-letter">W</span>
+            <span class="week-num">{b.label.slice(1)}</span>
+          {:else}
+            <time datetime={b.date.toISOString()} class="label">{b.label}</time>
+          {/if}
         </button>
       {/each}
-      {#if t.tier === 'quarter-year'}
+      {#if t.tier === 'quarter-year' || t.tier === 'year'}
         <span
           class="now-day-icon"
           style="left: {nowLineLeft - 4}px"
@@ -326,12 +341,13 @@
     position: relative;
     flex: 1 1 0;
     min-height: 0;
-    border-bottom: 1px solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink);
   }
   .tier:last-child {
     border-bottom: none;
   }
-  [data-tier='quarter-year'] {
+  [data-tier='quarter-year'],
+  [data-tier='year'] {
     flex: 0 0 var(--time-header-date-h);
   }
   .band {
@@ -340,7 +356,7 @@
     height: 100%;
     display: flex;
     align-items: center;
-    border-left: 1px solid var(--ink);
+    border-left: var(--border-w) solid var(--ink);
     border-top: none;
     border-right: none;
     border-bottom: none;
@@ -364,7 +380,9 @@
   }
   .band[data-past='true'] .label,
   .band[data-past='true'] .day-letter,
-  .band[data-past='true'] .day-num {
+  .band[data-past='true'] .day-num,
+  .band[data-past='true'] .week-letter,
+  .band[data-past='true'] .week-num {
     color: var(--ink-faint);
   }
   .band[data-current='true'] .label,
@@ -437,7 +455,8 @@
     white-space: nowrap;
     color: var(--ink);
   }
-  [data-tier='quarter-year'] .label {
+  [data-tier='quarter-year'] .label,
+  [data-tier='year'] .label {
     font-weight: 700;
     font-size: var(--fs-12);
   }
@@ -448,15 +467,37 @@
     padding: 0;
     text-align: center;
   }
-  [data-tier='month'] .label {
+  [data-tier='month'] .label,
+  [data-tier='quarter'] .label {
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+  /* Portrait-mobile 3M/6M: stack "W" over the week number like the 1M day column. */
+  [data-tier='week'][data-stacked='true'] {
+    flex: 1.5 1 0;
+  }
+  [data-tier='week'][data-stacked='true'] .band {
+    flex-direction: column;
+    justify-content: center;
+    padding-top: var(--time-header-pad-y);
+    padding-bottom: var(--time-header-pad-y);
+  }
+  .week-letter,
+  .week-num {
+    display: block;
+    font-size: var(--fs-10);
+    line-height: 1;
+    text-align: center;
+    color: var(--ink);
+  }
+  .week-num {
+    font-family: var(--mono);
   }
   [data-tier='day-letters'] {
     flex: 1.5 1 0;
   }
   .day-letter-band {
-    border-left: 1px solid var(--ink);
+    border-left: var(--border-w) solid var(--ink);
     display: flex;
     flex-direction: column;
     align-items: center;

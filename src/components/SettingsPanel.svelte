@@ -782,7 +782,7 @@
 
     <div class="panel-body">
     <details class="group">
-      <summary><h3>Appearance</h3></summary>
+      <summary><h3>Look &amp; Feel</h3></summary>
       <div class="group-body">
       <div class="field">
         <label for="theme-select">Theme</label>
@@ -799,6 +799,25 @@
             <option value={s.id}>{s.label}</option>
           {/each}
         </select>
+      </div>
+      <div class="field">
+        <span class="field-label">Border weight</span>
+        <div class="segmented" role="radiogroup" aria-label="Border weight">
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.borderWeight === 'thin'}
+            onclick={() => (config.borderWeight = 'thin')}
+          >Thin</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.borderWeight === 'bold'}
+            onclick={() => (config.borderWeight = 'bold')}
+          >Bold</button>
+        </div>
       </div>
       <div class="field">
         <label for="motion-select">Motion</label>
@@ -852,6 +871,31 @@
           {/each}
         </select>
       </div>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary><h3>Time &amp; Date</h3></summary>
+      <div class="group-body">
+      <div class="field">
+        <span class="field-label">Week starts</span>
+        <div class="segmented" role="radiogroup" aria-label="Week starts on">
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.weekStart === 'monday'}
+            onclick={() => (config.weekStart = 'monday')}
+          >Mon</button>
+          <button
+            type="button"
+            class="segmented-btn"
+            role="radio"
+            aria-checked={config.weekStart === 'sunday'}
+            onclick={() => (config.weekStart = 'sunday')}
+          >Sun</button>
+        </div>
+      </div>
       <div class="field">
         <label for="format-select">Date format</label>
         <select id="format-select" bind:value={config.dateFormat}>
@@ -880,31 +924,6 @@
         <span></span>
         <div class="tz-now" aria-live="polite">
           <span>{formatTzNowLabel('local')}</span>
-        </div>
-      </div>
-      </div>
-    </details>
-
-    <details class="group">
-      <summary><h3>Boundaries</h3></summary>
-      <div class="group-body">
-      <div class="field">
-        <span class="field-label">Week starts</span>
-        <div class="segmented" role="radiogroup" aria-label="Week starts on">
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'monday'}
-            onclick={() => (config.weekStart = 'monday')}
-          >Mon</button>
-          <button
-            type="button"
-            class="segmented-btn"
-            role="radio"
-            aria-checked={config.weekStart === 'sunday'}
-            onclick={() => (config.weekStart = 'sunday')}
-          >Sun</button>
         </div>
       </div>
       <div class="field">
@@ -1329,7 +1348,7 @@
     width: min(360px, 100vw);
     height: 100dvh;
     background: var(--paper);
-    border-left: 1px solid var(--ink);
+    border-left: var(--border-w) solid var(--ink);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -1439,7 +1458,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--ink);
+    border-bottom: var(--border-w) solid var(--ink);
     height: var(--toolbar-h);
     padding: 0 1em;
     margin: 0;
@@ -1541,7 +1560,7 @@
     transition: background 200ms ease;
   }
   .feeds li + li {
-    border-top: 1px solid var(--ink);
+    border-top: var(--border-w) solid var(--ink);
   }
   .feeds li[data-active='true'] + li,
   .feeds li[data-active='true'] {
@@ -1585,7 +1604,7 @@
     font-size: var(--fs-13);
     text-align: left;
     background: transparent;
-    border: 1px solid transparent;
+    border: var(--border-w) solid transparent;
     color: inherit;
     padding: 4px 6px;
     cursor: pointer;
@@ -1613,7 +1632,7 @@
   }
   .feed-edit {
     padding: 8px 8px 10px 8px;
-    border-top: 1px dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink);
     display: flex;
     flex-direction: column;
     gap: 0.6em;
@@ -1687,7 +1706,7 @@
     width: 24px;
     height: 24px;
     padding: 0;
-    border: 1px solid var(--accent);
+    border: var(--border-w) solid var(--accent);
     background: var(--paper);
     color: var(--accent);
     cursor: pointer;
