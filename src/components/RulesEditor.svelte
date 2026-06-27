@@ -24,7 +24,7 @@
   const styleOptions: { id: StyleVariant; label: string }[] = [
     { id: 'none', label: 'Default' },
     { id: 'bold', label: 'Bold' },
-    { id: 'inverted', label: 'Inverted' },
+    { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
     { id: 'striked', label: 'Striked' },
@@ -363,7 +363,7 @@
     display: none;
   }
   .rule-list li + li {
-    border-top: 1px solid var(--ink);
+    border-top: var(--border-w) solid var(--ink);
   }
   .rule-list li[data-active='true'] + li,
   .rule-list li[data-active='true'] {
@@ -431,7 +431,7 @@
     width: 18px;
     height: 18px;
     flex-shrink: 0;
-    border: 1px solid var(--ink);
+    border: var(--border-w) solid var(--ink);
     background: transparent;
     color: var(--ink);
     box-sizing: border-box;
@@ -440,7 +440,7 @@
     line-height: 1;
   }
   .style-swatch[data-style='bold'] {
-    border-width: 2px;
+    border-width: calc(var(--border-w) + 1px);
     font-weight: 700;
   }
   .style-swatch[data-style='inverted'] {
@@ -467,7 +467,7 @@
     flex-direction: column;
     gap: 0.5em;
     padding: 0.5em 0.6em 0.7em;
-    border-top: 1px dashed var(--ink);
+    border-top: var(--border-w) dashed var(--ink);
   }
   .field {
     display: grid;
