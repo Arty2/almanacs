@@ -485,7 +485,7 @@
   .week-letter,
   .week-num {
     display: block;
-    font-size: var(--fs-10);
+    font-size: var(--fs-11);
     line-height: 1;
     text-align: center;
     color: var(--ink);
@@ -517,7 +517,7 @@
   }
   .day-letter {
     display: block;
-    font-size: var(--fs-10);
+    font-size: var(--fs-11);
     line-height: 1;
     color: var(--ink);
     padding: 0;
@@ -526,7 +526,7 @@
   .day-num {
     display: block;
     font-family: var(--mono);
-    font-size: var(--fs-10);
+    font-size: var(--fs-11);
     line-height: 1;
     color: var(--ink);
   }

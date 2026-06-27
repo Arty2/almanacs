@@ -24,7 +24,7 @@
   const styleOptions: { id: StyleVariant; label: string }[] = [
     { id: 'none', label: 'Default' },
     { id: 'bold', label: 'Bold' },
-    { id: 'inverted', label: 'Inverted' },
+    { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
     { id: 'striked', label: 'Striked' },

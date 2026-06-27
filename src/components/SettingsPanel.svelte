@@ -663,7 +663,7 @@
   const calendarStyleOptions: { id: StyleVariant | ''; label: string }[] = [
     { id: '', label: 'Default' },
     { id: 'bold', label: 'Bold' },
-    { id: 'inverted', label: 'Inverted' },
+    { id: 'inverted', label: 'Solid' },
     { id: 'dashed', label: 'Dashed' },
     { id: 'muted', label: 'Muted' },
     { id: 'striked', label: 'Striked' },
@@ -921,7 +921,7 @@
           {#each TZ_PINNED as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
           {/each}
-          <option disabled>──────────</option>
+          <hr />
           {#each TZ_REST as tz (tz)}
             <option value={tz}>{formatTimezoneLabel(tz, config.dst)}</option>
           {/each}
@@ -1066,7 +1066,7 @@
                   {#each TZ_PINNED as tz (tz)}
                     <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                   {/each}
-                  <option disabled>──────────</option>
+                  <hr />
                   {#each TZ_REST as tz (tz)}
                     <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                   {/each}
@@ -1219,7 +1219,7 @@
                     {#each TZ_PINNED as tz (tz)}
                       <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                     {/each}
-                    <option disabled>──────────</option>
+                    <hr />
                     {#each TZ_REST as tz (tz)}
                       <option value={tz}>{formatTzOption(tz, config.dst)}</option>
                     {/each}

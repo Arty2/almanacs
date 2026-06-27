@@ -80,7 +80,7 @@
   function styleLabel(s: StyleVariant): string {
     switch (s) {
       case 'bold': return 'Bold';
-      case 'inverted': return 'Inverted';
+      case 'inverted': return 'Solid';
       case 'dashed': return 'Dashed';
       case 'muted': return 'Muted';
       case 'striked': return 'Striked';
