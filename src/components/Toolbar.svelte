@@ -253,6 +253,13 @@
     <Icon name={titleIcon} size={18} />
     <time datetime={today.value.toISOString().slice(0, 10)}>{dateLabel}</time>
   </button>
+  <button
+    class="zoom-btn week-btn"
+    type="button"
+    aria-pressed={zoom.value === 'week'}
+    title="1W · week view (two timezones, hour grid)"
+    onclick={() => onZoom(zoom.value === 'week' ? zoom.lastNonWeek : 'week')}
+  >1W</button>
   <nav aria-label="Zoom" bind:this={zoomNavEl}>
     {#each zooms as z (z.id)}
       {#if z.id === 'year'}
@@ -280,13 +287,6 @@
       {/if}
     {/each}
   </nav>
-  <button
-    class="zoom-btn week-btn"
-    type="button"
-    aria-pressed={zoom.value === 'week'}
-    title="1W · week view (two timezones, hour grid)"
-    onclick={() => onZoom(zoom.value === 'week' ? zoom.lastNonWeek : 'week')}
-  >1W</button>
   <span class="spacer"></span>
   <span class="toolbar-right" bind:this={rightGroupEl}>
     {#if !isKiosk()}
@@ -388,9 +388,9 @@
     color: var(--paper);
   }
   /* The week toggle stands apart from the zoom progression: its own rounded
-     button with a small gap from the 1M–1Y group. */
+     button with a small gap before the 1M–1Y group. */
   .week-btn {
-    margin-left: var(--toolbar-gap);
+    margin-right: var(--toolbar-gap);
     border-radius: var(--btn-radius);
     flex-shrink: 0;
   }

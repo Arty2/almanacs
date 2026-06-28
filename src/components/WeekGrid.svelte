@@ -1,11 +1,23 @@
 <script lang="ts">
   import WeekEvent from './WeekEvent.svelte';
+  import Icon from './Icon.svelte';
   import { config, search, displayEventsFor } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
-  import { zonedParts, dayLimitMinutes, offsetMinutes, formatTimezoneLabel } from '../lib/format';
+  import {
+    zonedParts,
+    dayLimitMinutes,
+    offsetMinutes,
+    formatTimezoneLabel,
+    formatTzDiff,
+    resolveLocalTz,
+    isDaylight,
+    formatDayInitial,
+    formatMonth,
+    isWeekend,
+  } from '../lib/format';
   import { packLanes } from '../lib/layout';
-  import { MS_PER_DAY } from '../lib/time';
+  import { MS_PER_DAY, formatTier } from '../lib/time';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
 
   // `today` is accepted for parity with the timeline (and so the grid re-derives
@@ -25,15 +37,33 @@
   // fontScale pattern so the grid grows with larger text.
   const fontScale = $derived(config.fontSize / 14);
   const HOUR_H = $derived(Math.round(44 * fontScale));
-  // Narrow hour-label columns (two of them, left gutter).
-  const GUTTER_W = $derived(Math.round(30 * fontScale));
-  const MIN_DAY_W = $derived(Math.round(96 * fontScale));
+  // Narrow hour-label columns (one per shown timezone, left gutter).
+  const GUTTER_W = $derived(Math.round(22 * fontScale));
+  // Day columns floor low enough that a full week fits on a vertical phone.
+  const MIN_DAY_W = $derived(Math.round(44 * fontScale));
   const ALLDAY_ROW_H = $derived(Math.round(20 * fontScale));
   const MIN_BLOCK_H = 14;
   const bodyH = $derived(24 * HOUR_H);
 
+  // Header tiers: Quarter+Year, Month, and a Date row styled like the 1M zoom.
+  const TIER_Q_H = $derived(Math.round(16 * fontScale));
+  const TIER_M_H = $derived(Math.round(16 * fontScale));
+  const TIER_D_H = $derived(Math.round(30 * fontScale));
+  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_D_H);
+
   const tzTop = $derived(config.weekTzTop);
   const tzBottom = $derived(config.weekTzBottom);
+  const localTz = $derived(config.timezone === 'local' ? resolveLocalTz() : config.timezone);
+
+  // Left-gutter timezone columns: primary (anchors the grid) + secondary, then the
+  // local/display zone as a third reference only when it differs from both.
+  const tzZones = $derived.by(() => {
+    const zones = [tzTop, tzBottom];
+    if (localTz !== tzTop && localTz !== tzBottom) zones.push(localTz);
+    return zones;
+  });
+  const numTz = $derived(tzZones.length);
+  const gutterW = $derived(numTz * GUTTER_W);
 
   // Day-column width: fit seven across the visible day area, but never below a
   // legibility floor — so wide viewports show a week at a glance while the full
@@ -41,23 +71,17 @@
   let viewW = $state(0);
   const dayW = $derived.by(() => {
     if (viewW <= 0) return MIN_DAY_W;
-    return Math.max(MIN_DAY_W, Math.round((viewW - GUTTER_W * 2) / 7));
+    return Math.max(MIN_DAY_W, Math.round((viewW - gutterW) / 7));
   });
-  const gutterW2 = $derived(GUTTER_W * 2);
   const daysW = $derived(NUM_DAYS * dayW);
-  const contentW = $derived(gutterW2 + daysW);
+  const contentW = $derived(gutterW + daysW);
 
   function pad(n: number): string {
     return n < 10 ? '0' + n : String(n);
   }
 
-  function weekdayShort(d: Date): string {
-    const tag = config.locale === 'el' ? 'el' : 'en-US';
-    return d.toLocaleString(tag, { weekday: 'short', timeZone: 'UTC' });
-  }
-
   // UTC-midnight anchor for the primary-zone calendar day an instant falls on —
-  // the basis for both the day columns and per-event day placement.
+  // the basis for both the day columns and per-event (timed) day placement.
   function primaryAnchorMs(date: Date): number {
     const p = zonedParts(date, tzTop);
     return Date.UTC(p.y, p.m - 1, p.d);
@@ -74,13 +98,63 @@
   function colIndexOf(date: Date): number {
     return dayIndexOf(date) + PAST_DAYS;
   }
+  // All-day events are date-only (stored at UTC midnight); index them by their UTC
+  // calendar day so a +offset primary zone doesn't push the inclusive last moment
+  // into the next column. Column anchors (primaryTodayMs) are already UTC midnights.
+  function utcColIndexOf(date: Date): number {
+    const utcMid = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    return Math.round((utcMid - primaryTodayMs) / MS_PER_DAY) + PAST_DAYS;
+  }
 
   // The rendered day columns: today − PAST_DAYS … today + FUTURE_DAYS.
   const days = $derived.by(() => {
-    const out: { date: Date; label: string; isToday: boolean }[] = [];
+    const out: { date: Date; isToday: boolean; weekend: boolean; initial: string; num: number }[] = [];
     for (let i = 0; i < NUM_DAYS; i++) {
       const d = new Date(primaryTodayMs + (i - PAST_DAYS) * MS_PER_DAY);
-      out.push({ date: d, label: weekdayShort(d) + ' ' + d.getUTCDate(), isToday: i === PAST_DAYS });
+      out.push({
+        date: d,
+        isToday: i === PAST_DAYS,
+        weekend: isWeekend(d),
+        initial: formatDayInitial(d, config.locale),
+        num: d.getUTCDate(),
+      });
+    }
+    return out;
+  });
+
+  // Quarter+Year and Month header tiers: consecutive day-columns grouped into one
+  // band per quarter / per month, sized to span their columns.
+  const quarterBands = $derived.by(() => {
+    const out: { from: number; span: number; label: string; key: string }[] = [];
+    let i = 0;
+    while (i < days.length) {
+      const d = days[i]!.date;
+      const key = d.getUTCFullYear() + '-' + Math.floor(d.getUTCMonth() / 3);
+      let j = i + 1;
+      while (j < days.length) {
+        const dj = days[j]!.date;
+        if (dj.getUTCFullYear() + '-' + Math.floor(dj.getUTCMonth() / 3) !== key) break;
+        j++;
+      }
+      out.push({ from: i, span: j - i, label: formatTier(d, 'quarter-year'), key });
+      i = j;
+    }
+    return out;
+  });
+  const monthBands = $derived.by(() => {
+    const out: { from: number; span: number; label: string; key: string }[] = [];
+    let i = 0;
+    while (i < days.length) {
+      const d = days[i]!.date;
+      const key = d.getUTCFullYear() + '-' + d.getUTCMonth();
+      let j = i + 1;
+      while (j < days.length) {
+        const dj = days[j]!.date;
+        if (dj.getUTCFullYear() + '-' + dj.getUTCMonth() !== key) break;
+        j++;
+      }
+      out.push({ from: i, span: j - i, label: formatMonth(d, config.locale, 'short'), key });
+      i = j;
     }
     return out;
   });
@@ -150,14 +224,14 @@
     return `top:${top}px; height:${height}px; left:${left}%; width:${width}%;`;
   }
 
-  // All-day events span the day columns they cover (clamped to the window) and
-  // stack into rows so concurrent ones don't overlap.
+  // All-day events span the (UTC) day columns they cover, clamped to the window,
+  // and stack into rows so concurrent ones don't overlap.
   const allDayLayout = $derived.by(() => {
     const items: { from: number; span: number; ev: DisplayEvent; startMin: number; endMin: number }[] = [];
     for (const ev of visibleEvents) {
       if (!ev.allDay) continue;
-      const startIdx = colIndexOf(ev.start);
-      const lastIdx = colIndexOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
+      const startIdx = utcColIndexOf(ev.start);
+      const lastIdx = utcColIndexOf(new Date(Math.max(ev.start.getTime(), ev.end.getTime() - 1)));
       if (lastIdx < 0 || startIdx >= NUM_DAYS) continue;
       const from = Math.max(0, startIdx);
       const to = Math.min(NUM_DAYS - 1, lastIdx);
@@ -177,15 +251,28 @@
     return `top:${top}px; height:${ALLDAY_ROW_H - 1}px; left:${left}%; width:${width}%;`;
   }
 
-  // Gutter hour labels. Column A is the primary zone's own hours (row h = hour h);
-  // column B shows the secondary zone's wall-clock for the same instant, offset by
-  // the two zones' difference (handles fractional offsets via the minutes label).
-  const tzDiffMin = $derived.by(() => {
+  const morningMin = $derived(dayLimitMinutes(config.morningLimit, 8 * 60));
+  const eveningMin = $derived(dayLimitMinutes(config.eveningLimit, 20 * 60));
+  const morningTop = $derived((morningMin / 60) * HOUR_H);
+  const eveningTop = $derived((eveningMin / 60) * HOUR_H);
+
+  // Per-gutter-column metadata: the diff-from-local label (in parens), the hour
+  // offset from the primary zone (for the hour labels), the current day/night
+  // state, and a full-name tooltip.
+  const tzCols = $derived.by(() => {
     const at = new Date(clock.now);
-    const a = offsetMinutes(tzTop, at, config.dst);
-    const b = offsetMinutes(tzBottom, at, config.dst);
-    if (a == null || b == null) return 0;
-    return b - a;
+    const primOff = offsetMinutes(tzTop, at, config.dst) ?? 0;
+    return tzZones.map((tz) => {
+      const off = offsetMinutes(tz, at, config.dst) ?? primOff;
+      const diff = formatTzDiff(tz, config.timezone, at, config.dst);
+      return {
+        tz,
+        diffLabel: diff ? `(${diff})` : '',
+        title: formatTimezoneLabel(tz, config.dst),
+        offsetFromPrimary: off - primOff,
+        isDay: isDaylight(tz, at, morningMin, eveningMin),
+      };
+    });
   });
 
   function hourLabel(totalMin: number): string {
@@ -201,27 +288,17 @@
     return min ? `${pad(h)}:${pad(min)}` : pad(h);
   }
 
-  // Compact UTC-offset badge for a gutter column header (e.g. "+3", "−4:30").
-  function offsetBadge(tz: string): string {
-    const o = offsetMinutes(tz, new Date(clock.now), config.dst);
-    if (o == null) return '';
-    const sign = o < 0 ? '−' : '+';
-    const abs = Math.abs(o);
-    const h = Math.floor(abs / 60);
-    const min = abs % 60;
-    return min ? `${sign}${h}:${pad(min)}` : `${sign}${h}`;
-  }
-  const tzBadgeTop = $derived(offsetBadge(tzTop));
-  const tzBadgeBottom = $derived(offsetBadge(tzBottom));
-  const tzTitleTop = $derived(formatTimezoneLabel(tzTop, config.dst));
-  const tzTitleBottom = $derived(formatTimezoneLabel(tzBottom, config.dst));
-
   const hours = $derived(Array.from({ length: 24 }, (_, h) => h));
 
-  // Hour gridlines as a repeating gradient — one line per hour.
+  // Hour gridlines as a repeating gradient — one line per hour — plus a night
+  // tint outside the morning→evening working window, layered over the gridlines.
   const gridLines = $derived(
     `repeating-linear-gradient(to bottom, var(--ink-faint) 0, var(--ink-faint) var(--border-w), transparent var(--border-w), transparent ${HOUR_H}px)`,
   );
+  const nightShade = $derived(
+    `linear-gradient(to bottom, var(--wg-night) 0, var(--wg-night) ${morningTop}px, transparent ${morningTop}px, transparent ${eveningTop}px, var(--wg-night) ${eveningTop}px, var(--wg-night) ${bodyH}px)`,
+  );
+  const dayColBg = $derived(`${nightShade}, ${gridLines}`);
 
   // Live now-line position, in primary-zone minutes.
   const nowMin = $derived(zonedParts(new Date(clock.now), tzTop).minutes);
@@ -235,7 +312,6 @@
   let didScroll = false;
   $effect(() => {
     if (didScroll || !scrollBody || viewW <= 0) return;
-    const morningMin = dayLimitMinutes(config.morningLimit, 8 * 60);
     const cur = zonedParts(new Date(clock.now), tzTop).minutes;
     const targetMin = Math.max(morningMin, cur);
     // Lead in by one hour so the target row isn't flush against the sticky header.
@@ -245,34 +321,65 @@
   });
 
   const dayCols = $derived(`repeat(${NUM_DAYS}, ${dayW}px)`);
+  const tzGridCols = $derived(`repeat(${numTz}, ${GUTTER_W}px)`);
 </script>
 
 <div
   class="week-grid"
-  style="height: calc(100dvh - var(--toolbar-h) - {search.open ? 'var(--toolbar-h)' : '0px'});"
+  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; height: calc(100dvh - var(--toolbar-h) - {search.open
+    ? 'var(--toolbar-h)'
+    : '0px'});"
 >
   <!-- Each row is a flex pair [frozen-left | scrolling day-area]; the frozen
        left is position:sticky;left:0 so its containing block is the full-width
        row and it stays pinned across the whole horizontal scroll. -->
   <div class="wg-scroll" bind:this={scrollBody} bind:clientWidth={viewW}>
-    <!-- Day-column headers (sticky top); the corner labels the two zones -->
+    <!-- Tiered day headers (sticky top): Quarter+Year, Month, Date (1M style).
+         The corner shows each gutter zone's difference from local. -->
     <div class="wg-header" style="width: {contentW}px;">
-      <div class="wg-corner" style="width: {gutterW2}px; grid-template-columns: {GUTTER_W}px {GUTTER_W}px;">
-        <span class="wg-tz" title={tzTitleTop} data-mono>{tzBadgeTop}</span>
-        <span class="wg-tz wg-tz-b" title={tzTitleBottom} data-mono>{tzBadgeBottom}</span>
-      </div>
-      <div class="wg-days-head" style="grid-template-columns: {dayCols};">
-        {#each days as d (d.date.toISOString())}
-          <div class="wg-dayhead" data-current={d.isToday ? 'true' : null}>
-            <span class="wg-dayhead-label">{d.label}</span>
-          </div>
+      <div class="wg-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
+        {#each tzCols as c (c.tz)}
+          <span class="wg-tz" title={c.title} data-mono>{c.diffLabel}</span>
         {/each}
+      </div>
+      <div class="wg-header-tiers" style="width: {daysW}px;">
+        <div class="wg-tier wg-tier-q">
+          {#each quarterBands as b (b.key)}
+            <div class="wg-band" style="width: {b.span * dayW}px;">
+              <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
+            </div>
+          {/each}
+        </div>
+        <div class="wg-tier wg-tier-m">
+          {#each monthBands as b (b.key)}
+            <div class="wg-band wg-band-month" style="width: {b.span * dayW}px;">
+              <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
+            </div>
+          {/each}
+        </div>
+        <div class="wg-tier wg-tier-d" style="grid-template-columns: {dayCols};">
+          {#each days as d (d.date.toISOString())}
+            <div
+              class="wg-datecell"
+              data-current={d.isToday ? 'true' : null}
+              data-weekend={d.weekend ? 'true' : null}
+            >
+              <span class="wg-dl">{d.initial}</span>
+              <span class="wg-dn" data-mono>{d.num}</span>
+            </div>
+          {/each}
+        </div>
       </div>
     </div>
 
-    <!-- All-day strip (sticky, below the headers) -->
+    <!-- All-day strip (sticky, below the headers); the corner shows each zone's
+         current day/night glyph instead of an "all-day" title. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
-      <div class="wg-corner wg-allday-corner" style="width: {gutterW2}px;"><span>all-day</span></div>
+      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
+        {#each tzCols as c (c.tz)}
+          <span class="wg-daynight" title={c.title}><Icon name={c.isDay ? 'sun' : 'moon'} size={12} /></span>
+        {/each}
+      </div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
         {#each allDayLayout.rows as r (r.ev.uid)}
           <WeekEvent
@@ -292,20 +399,26 @@
 
     <!-- Scrollable hour grid -->
     <div class="wg-body" style="width: {contentW}px; height: {bodyH}px;">
-      <!-- Two stacked timezone label columns (frozen left) -->
-      <div class="wg-gutter-group" style="width: {gutterW2}px; grid-template-columns: {GUTTER_W}px {GUTTER_W}px;">
-        <div class="wg-gutter wg-gutter-a">
-          {#each hours as h (h)}
-            <span class="wg-hour" data-mono style="top: {h * HOUR_H}px;">{hourLabel(h * 60)}</span>
-          {/each}
-        </div>
-        <div class="wg-gutter">
-          {#each hours as h (h)}
-            <span class="wg-hour" data-mono style="top: {h * HOUR_H}px;"
-              >{hourLabel(h * 60 + tzDiffMin)}</span
-            >
-          {/each}
-        </div>
+      <!-- Timezone label columns (frozen left), one per shown zone -->
+      <div class="wg-gutter-group" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
+        {#each tzCols as c, ci (c.tz)}
+          <div class="wg-gutter" data-div={ci < numTz - 1 ? 'true' : null}>
+            {#each hours as h (h)}
+              <span class="wg-hour" data-mono style="top: {h * HOUR_H}px;"
+                >{hourLabel(h * 60 + c.offsetFromPrimary)}</span
+              >
+            {/each}
+            {#if ci === 0}
+              <!-- Morning / evening working-hours boundary markers -->
+              <span class="wg-limit" style="top: {morningTop}px;" aria-hidden="true">
+                <Icon name="sun" size={11} />
+              </span>
+              <span class="wg-limit" style="top: {eveningTop}px;" aria-hidden="true">
+                <Icon name="moon" size={11} />
+              </span>
+            {/if}
+          </div>
+        {/each}
       </div>
 
       <!-- Day columns -->
@@ -314,7 +427,7 @@
           <div
             class="wg-daycol"
             data-current={d.isToday ? 'true' : null}
-            style="background-image: {gridLines};"
+            style="background-image: {dayColBg};"
           >
             {#each timedByDay[i] ?? [] as b (b.ev.uid)}
               <WeekEvent
@@ -336,14 +449,14 @@
       </div>
 
       <!-- Live now-line across the day area -->
-      <i class="wg-now-line" style="top: {nowTop}px; left: {gutterW2}px;" aria-hidden="true"></i>
+      <i class="wg-now-line" style="top: {nowTop}px; left: {gutterW}px;" aria-hidden="true"></i>
     </div>
   </div>
 </div>
 
 <style>
   .week-grid {
-    --wg-header-h: 28px;
+    --wg-night: rgba(10, 10, 10, 0.05);
     display: flex;
     flex-direction: column;
     /* height is set inline so it can subtract the search toolbar when open. */
@@ -352,6 +465,9 @@
     box-sizing: border-box;
     overflow: hidden;
   }
+  :global([data-theme='dark']) .week-grid {
+    --wg-night: rgba(0, 0, 0, 0.22);
+  }
   .wg-scroll {
     flex: 1;
     /* Scrolls both axes: vertically through the hours, horizontally through the
@@ -359,6 +475,15 @@
     overflow: auto;
     scrollbar-width: thin;
     overscroll-behavior: contain;
+  }
+
+  /* Header text (tiers + gutter labels) is structural, not content — keep it
+     unselectable so dragging across the grid doesn't highlight it. */
+  .wg-header,
+  .wg-allday-corner,
+  .wg-gutter-group {
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .wg-header {
@@ -383,30 +508,89 @@
   .wg-tz {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding-right: 3px;
+    justify-content: center;
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: hidden;
   }
-  .wg-tz-b {
+  .wg-tz:not(:first-child),
+  .wg-daynight:not(:first-child) {
     border-left: var(--border-w) solid var(--ink-faint);
   }
-  .wg-days-head {
-    display: grid;
+
+  .wg-header-tiers {
     flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
   }
-  .wg-dayhead {
+  .wg-tier {
+    display: flex;
+  }
+  .wg-tier-q {
+    height: var(--tier-q-h, 16px);
+  }
+  .wg-tier-m {
+    height: var(--tier-m-h, 16px);
+  }
+  .wg-tier-q,
+  .wg-tier-m {
+    border-bottom: var(--border-w) solid var(--ink-faint);
+  }
+  .wg-tier-d {
+    display: grid;
+    flex: 1 1 auto;
+  }
+  .wg-band {
     display: flex;
     align-items: center;
-    justify-content: center;
-    border-left: var(--border-w) solid var(--ink-faint);
+    box-sizing: border-box;
+    border-left: var(--border-w) solid var(--ink);
     font-size: var(--fs-11);
+    line-height: 1;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  /* The label sticks just past the frozen gutter so it stays visible while its
+     band scrolls horizontally (mirrors the timeline header's sticky labels). */
+  .wg-band-label {
+    position: sticky;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+  .wg-tier-q .wg-band {
+    font-weight: 700;
+    font-size: var(--fs-12);
+  }
+  .wg-band-month .wg-band-label {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .wg-datecell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    box-sizing: border-box;
+    border-left: var(--border-w) solid var(--ink-faint);
+  }
+  .wg-datecell[data-weekend='true'] {
+    background: var(--weekend-bg);
+  }
+  .wg-dl,
+  .wg-dn {
+    font-size: var(--fs-10);
+    line-height: 1;
     color: var(--ink);
   }
-  .wg-dayhead[data-current='true'] {
+  .wg-datecell[data-weekend='true'] .wg-dl,
+  .wg-datecell[data-weekend='true'] .wg-dn {
+    color: var(--ink-muted);
+  }
+  .wg-datecell[data-current='true'] .wg-dl,
+  .wg-datecell[data-current='true'] .wg-dn {
     color: var(--accent);
     font-weight: 700;
   }
@@ -420,11 +604,11 @@
   }
   .wg-allday-corner {
     z-index: 1;
+  }
+  .wg-daynight {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding-right: 4px;
-    font-size: var(--fs-10);
+    justify-content: center;
     color: var(--ink-muted);
   }
   .wg-allday-area {
@@ -450,17 +634,29 @@
   .wg-gutter {
     position: relative;
   }
-  .wg-gutter-a {
+  .wg-gutter[data-div='true'] {
     border-right: var(--border-w) solid var(--ink-faint);
   }
   .wg-hour {
     position: absolute;
-    right: 3px;
+    left: 0;
+    right: 0;
+    text-align: center;
     transform: translateY(-50%);
     font-size: var(--fs-10);
     line-height: 1;
     color: var(--ink-muted);
     white-space: nowrap;
+  }
+  .wg-limit {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    transform: translateY(-50%);
+    color: var(--ink-muted);
+    pointer-events: none;
   }
   .wg-days {
     display: grid;
