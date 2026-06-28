@@ -49,7 +49,7 @@ export const DEFAULT_RULES: FindReplaceRule[] = [
   { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'dashed', category: 'none' },
   { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'dashed', category: 'none' },
   { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
-  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances' },
+  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances', block: 'local' },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
@@ -92,8 +92,8 @@ export function defaultConfig(): AppConfig {
     order: greekIsPrimary ? 0 : 1,
     kind: greekIsPrimary ? 'holidays' : 'events',
     category: greekIsPrimary ? 'holidays' : 'observances',
-    // Block is independent of Type; seed it to match the type so a fresh install
-    // shows the same hatch the legacy type-driven rendering did.
+    // Block is independent of Type — set it explicitly so a fresh install shows
+    // the primary holidays as a full-width band and the secondary as a row hatch.
     block: greekIsPrimary ? 'global' : 'local',
   };
   const usa: CalendarFeed = {
@@ -207,17 +207,12 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
       : kind === 'holidays'
         ? 'holidays'
         : 'none';
-  // Block was split out of Type. Honor an explicit block; otherwise migrate from
-  // the legacy category so existing configs keep the same hatch: holidays were a
-  // full-width band (global), observances a row-only hatch (local).
+  // Block is fully independent of Type — it only ever comes from an explicit
+  // block value, never derived from the holidays/observances category.
   const block: Block =
     typeof f.block === 'string' && (BLOCK_OPTIONS as string[]).includes(f.block)
       ? (f.block as Block)
-      : category === 'holidays'
-        ? 'global'
-        : category === 'observances'
-          ? 'local'
-          : 'none';
+      : 'none';
   const timezone =
     typeof f.timezone === 'string' && f.timezone.trim().length > 0
       ? f.timezone.trim()

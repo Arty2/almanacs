@@ -68,7 +68,7 @@ describe('config import/export', () => {
     expect(() => importConfig(bad)).toThrow(/schema/i);
   });
 
-  it('migrates the legacy holiday/observance type into a Block', () => {
+  it('never derives a Block from the holidays/observances type', () => {
     const feed = (id: string, category: string) => ({
       id,
       name: id,
@@ -83,29 +83,39 @@ describe('config import/export', () => {
       feeds: [feed('user:hol', 'holidays'), feed('user:obs', 'observances'), feed('user:ev', 'events')],
     });
     const out = importConfig(cfg);
-    expect(out.feeds.find((f) => f.id === 'user:hol')!.block).toBe('global');
-    expect(out.feeds.find((f) => f.id === 'user:obs')!.block).toBe('local');
+    // Type never implies a block — it must be set explicitly.
+    expect(out.feeds.find((f) => f.id === 'user:hol')!.block).toBeUndefined();
+    expect(out.feeds.find((f) => f.id === 'user:obs')!.block).toBeUndefined();
     expect(out.feeds.find((f) => f.id === 'user:ev')!.block).toBeUndefined();
-    // The type itself is preserved (icon/label), only the hatch moved out.
+    // The type itself is preserved (icon/label).
     expect(out.feeds.find((f) => f.id === 'user:hol')!.category).toBe('holidays');
   });
 
-  it('honors an explicit feed Block over the type-derived default', () => {
+  it('keeps an explicit feed Block and drops an explicit none', () => {
+    const mk = (id: string, block: string) => ({
+      id,
+      name: id,
+      source: { kind: 'user', url: 'https://example.com/' + id + '.ics' },
+      collapsed: false,
+      order: 0,
+      kind: 'events',
+      category: 'holidays',
+      block,
+    });
     const cfg = JSON.stringify({
       ...defaultConfig(),
-      feeds: [{
-        id: 'user:hol',
-        name: 'hol',
-        source: { kind: 'user', url: 'https://example.com/hol.ics' },
-        collapsed: false,
-        order: 0,
-        kind: 'events',
-        category: 'holidays',
-        block: 'none',
-      }],
+      feeds: [mk('user:g', 'global'), mk('user:n', 'none')],
     });
     const out = importConfig(cfg);
-    expect(out.feeds.find((f) => f.id === 'user:hol')!.block).toBeUndefined();
+    expect(out.feeds.find((f) => f.id === 'user:g')!.block).toBe('global');
+    expect(out.feeds.find((f) => f.id === 'user:n')!.block).toBeUndefined();
+  });
+
+  it('default Observance filter carries a local Block', () => {
+    const obs = defaultConfig().rules.find((r) => r.id === 'default-observance');
+    expect(obs?.block).toBe('local');
+    expect(obs?.style).toBe('dashed');
+    expect(obs?.category).toBe('observances');
   });
 
   it('seeds Greek + USA holiday feeds by default', () => {
