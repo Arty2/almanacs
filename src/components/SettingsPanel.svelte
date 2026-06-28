@@ -42,6 +42,7 @@
   import { longPress, panelOpen } from '../lib/haptics';
   import {
     CALENDAR_COLORS,
+    type Block,
     type CalendarColor,
     type CalendarFeed,
     type DateFormat,
@@ -50,6 +51,7 @@
     type FontSize,
     type Haptics,
     type Locale,
+    type MatchPosition,
     type Motion,
     type Spacing,
     type StyleVariant,
@@ -107,6 +109,7 @@
   let formName = $state('');
   let formCategory: FeedCategory = $state('none');
   let formTravel: Travel = $state('none');
+  let formBlock: Block = $state('none');
   let formTimezone = $state('');
   let formHidden = $state(false);
   let formError: string | null = $state(null);
@@ -142,6 +145,7 @@
     formName = '';
     formCategory = 'none';
     formTravel = 'none';
+    formBlock = 'none';
     formTimezone = '';
     formHidden = false;
     formError = null;
@@ -156,9 +160,10 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; disabled: boolean }): void {
+  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; disabled: boolean }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
+    if (next.position === 'any') delete next.position;
     config.rules = [...config.rules, next];
     draftRule = null;
     editingRuleId = null;
@@ -175,6 +180,7 @@
     formName = feed.name;
     formCategory = feed.category ?? (feed.kind === 'holidays' ? 'holidays' : 'none');
     formTravel = feed.travel ?? 'none';
+    formBlock = feed.block ?? 'none';
     formTimezone = feed.timezone ?? '';
     formHidden = !!feed.hidden;
     formError = null;
@@ -187,6 +193,7 @@
     formName = '';
     formCategory = 'none';
     formTravel = 'none';
+    formBlock = 'none';
     formTimezone = '';
     formHidden = false;
     formError = null;
@@ -247,6 +254,8 @@
       target.kind = resolved.category === 'holidays' ? 'holidays' : 'events';
       if (resolved.travel && resolved.travel !== 'none') target.travel = resolved.travel;
       else delete target.travel;
+      if (formBlock !== 'none') target.block = formBlock;
+      else delete target.block;
       if (formHidden) target.hidden = true;
       else delete target.hidden;
       if (formTimezone) target.timezone = formTimezone;
@@ -278,6 +287,7 @@
       kind: resolved.category === 'holidays' ? 'holidays' : 'events',
       category: resolved.category,
       ...(resolved.travel && resolved.travel !== 'none' ? { travel: resolved.travel } : {}),
+      ...(formBlock !== 'none' ? { block: formBlock } : {}),
       ...(formTimezone ? { timezone: formTimezone } : {}),
       ...(formHidden ? { hidden: true } : {}),
     };
@@ -682,6 +692,12 @@
     { id: 'international', label: 'International' },
     { id: 'local', label: 'Local' },
   ];
+  const blockOptions: { id: Block; label: string }[] = [
+    { id: 'none', label: 'N/A' },
+    { id: 'global', label: 'Global' },
+    { id: 'local', label: 'Local' },
+    { id: 'off', label: 'No block' },
+  ];
 
   // "Auto" type: detect category and travel from the calendar title.
   function detectCategory(name: string): FeedCategory {
@@ -1060,6 +1076,14 @@
                 </select>
               </div>
               <div class="field">
+                <label for="new-form-block">Block</label>
+                <select id="new-form-block" bind:value={formBlock}>
+                  {#each blockOptions as b (b.id)}
+                    <option value={b.id}>{b.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div class="field">
                 <label for="new-form-tz">Time zone</label>
                 <select id="new-form-tz" bind:value={formTimezone}>
                   <option value="">Auto</option>
@@ -1166,33 +1190,6 @@
                   <label for="form-name-{feed.id}">Name</label>
                   <input id="form-name-{feed.id}" type="text" bind:value={formName} placeholder="My calendar" />
                 </div>
-                <div class="field">
-                  <label for="feed-color-{feed.id}">Color</label>
-                  <select
-                    id="feed-color-{feed.id}"
-                    class="color-select"
-                    data-color={feed.color ?? null}
-                    value={feed.color ?? ''}
-                    onchange={(e) => setFeedColor(feed, ((e.currentTarget as HTMLSelectElement).value || null) as CalendarColor | null)}
-                  >
-                    <option value="">No color</option>
-                    {#each CALENDAR_COLORS as c (c)}
-                      <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="feed-style-{feed.id}">Style</label>
-                  <select
-                    id="feed-style-{feed.id}"
-                    value={feed.style ?? ''}
-                    onchange={(e) => setFeedStyle(feed, e)}
-                  >
-                    {#each calendarStyleOptions as s (s.id)}
-                      <option value={s.id}>{s.label}</option>
-                    {/each}
-                  </select>
-                </div>
                 {#if !isScratchpad(feed)}
                   <div class="field">
                     <label for="form-category-{feed.id}">Type</label>
@@ -1211,6 +1208,41 @@
                     </select>
                   </div>
                 {/if}
+                <div class="field">
+                  <label for="feed-style-{feed.id}">Style</label>
+                  <select
+                    id="feed-style-{feed.id}"
+                    value={feed.style ?? ''}
+                    onchange={(e) => setFeedStyle(feed, e)}
+                  >
+                    {#each calendarStyleOptions as s (s.id)}
+                      <option value={s.id}>{s.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="feed-color-{feed.id}">Color</label>
+                  <select
+                    id="feed-color-{feed.id}"
+                    class="color-select"
+                    data-color={feed.color ?? null}
+                    value={feed.color ?? ''}
+                    onchange={(e) => setFeedColor(feed, ((e.currentTarget as HTMLSelectElement).value || null) as CalendarColor | null)}
+                  >
+                    <option value="">No color</option>
+                    {#each CALENDAR_COLORS as c (c)}
+                      <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="form-block-{feed.id}">Block</label>
+                  <select id="form-block-{feed.id}" bind:value={formBlock}>
+                    {#each blockOptions as b (b.id)}
+                      <option value={b.id}>{b.label}</option>
+                    {/each}
+                  </select>
+                </div>
                 <div class="field">
                   <label for="form-tz-{feed.id}">Time zone</label>
                   <select id="form-tz-{feed.id}" bind:value={formTimezone}>
@@ -1554,6 +1586,19 @@
     grid-template-columns: 130px 1fr;
     align-items: center;
     gap: 0.6em;
+  }
+  /* In a calendar's edit form, line the label/control split up with the
+     4-button action row below (Delete · Disable · Cancel · Save, each flex
+     1fr with three 0.4em gaps): the label spans one button (Delete) and the
+     control spans the other three plus their gaps. */
+  .feed-edit .field {
+    grid-template-columns: calc((100% - 1.2em) / 4) 1fr;
+    column-gap: 0.4em;
+  }
+  .feed-edit .field label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .field label,
   .field .field-label {

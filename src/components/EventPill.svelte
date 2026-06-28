@@ -22,7 +22,6 @@
     isCurrent: boolean;
     isPast: boolean;
     isFocused: boolean;
-    isHolidayFeed: boolean;
     feedColor?: CalendarColor;
     feedStyle?: StyleVariant;
     feedTravel?: Travel;
@@ -35,7 +34,6 @@
     isCurrent,
     isPast,
     isFocused,
-    isHolidayFeed,
     feedColor,
     feedStyle,
     feedTravel,
@@ -94,9 +92,10 @@
   const styleAttr = $derived.by(() => {
     if (event.styleVariant !== 'none') return event.styleVariant;
     if (feedStyle) return feedStyle;
-    if (isHolidayFeed) return 'bold';
     return null;
   });
+  // A matching rule's color overrides the calendar color, mirroring style.
+  const colorAttr = $derived(event.ruleColor ?? feedColor ?? null);
 
   // Past events show only the first word of the title (the rest fades out via
   // the mask in global.css) — unless focused/selected/current, where the full
@@ -108,12 +107,12 @@
   // first-word truncation + fade mask are needless there. Estimate the title's
   // rendered width from its length and the current font size rather than
   // measuring the DOM: the root font-size is config.fontSize px, so the h3
-  // (--fs-12) renders at config.fontSize * 12/14 px per em. AVG_CHAR_EM is a
+  // (--fs-13) renders at config.fontSize * 13/14 px per em. AVG_CHAR_EM is a
   // conservative average glyph advance (we'd rather keep the mask than clip).
   const AVG_CHAR_EM = 0.55;
   const BUTTON_PADDING_PX = 16; // matches `button` padding: 2px 8px (8px each side)
   const labelFits = $derived(
-    event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 12 / 14) <=
+    event.displayTitle.trim().length * AVG_CHAR_EM * (config.fontSize * 13 / 14) <=
       event.widthPx - BUTTON_PADDING_PX,
   );
   const titleText = $derived(
@@ -174,7 +173,7 @@
   data-past={isPast ? 'true' : null}
   data-label-fits={isPast && !showFullLabel && labelFits ? 'true' : null}
   data-style={styleAttr}
-  data-cal-color={feedColor ?? null}
+  data-cal-color={colorAttr}
   data-focus={isFocused ? 'true' : null}
   data-filter={hasFilter ? 'true' : null}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
@@ -245,7 +244,7 @@
   }
   h3 {
     margin: 0;
-    font-size: var(--fs-12);
+    font-size: var(--fs-13);
     font-weight: 400;
     line-height: 1.4;
     white-space: nowrap;

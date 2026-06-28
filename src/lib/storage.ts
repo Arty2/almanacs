@@ -1,11 +1,13 @@
 import type {
   AppConfig,
+  Block,
   CalendarColor,
   CalendarFeed,
   FeedCategory,
   FindReplaceRule,
   FontSize,
   Haptics,
+  MatchPosition,
   Motion,
   ParsedEvent,
   Spacing,
@@ -13,7 +15,7 @@ import type {
   Theme,
   Travel,
 } from './types';
-import { CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -47,7 +49,7 @@ export const DEFAULT_RULES: FindReplaceRule[] = [
   { id: 'default-tbd', find: 'TBD', replace: 'TBD', style: 'dashed', category: 'none' },
   { id: 'default-tbc', find: 'TBC', replace: 'TBC', style: 'dashed', category: 'none' },
   { id: 'default-canceled', find: 'CANCELED', replace: 'CANCELED', style: 'striked', category: 'none' },
-  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances' },
+  { id: 'default-observance', find: 'Observance', replace: 'Observance', style: 'dashed', category: 'observances', block: 'local' },
 ];
 
 export const DEFAULT_RULE_IDS: ReadonlySet<string> = new Set(DEFAULT_RULES.map((r) => r.id));
@@ -90,6 +92,9 @@ export function defaultConfig(): AppConfig {
     order: greekIsPrimary ? 0 : 1,
     kind: greekIsPrimary ? 'holidays' : 'events',
     category: greekIsPrimary ? 'holidays' : 'observances',
+    // Block is independent of Type — set it explicitly so a fresh install shows
+    // the primary holidays as a full-width band and the secondary as a row hatch.
+    block: greekIsPrimary ? 'global' : 'local',
   };
   const usa: CalendarFeed = {
     id: 'user:usa-bank-holidays',
@@ -99,6 +104,7 @@ export function defaultConfig(): AppConfig {
     order: greekIsPrimary ? 1 : 0,
     kind: greekIsPrimary ? 'events' : 'holidays',
     category: greekIsPrimary ? 'observances' : 'holidays',
+    block: greekIsPrimary ? 'local' : 'global',
   };
   return {
     feeds: [greek, usa, scratchpadFeed(2)],
@@ -203,6 +209,12 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
       : kind === 'holidays'
         ? 'holidays'
         : 'none';
+  // Block is fully independent of Type — it only ever comes from an explicit
+  // block value, never derived from the holidays/observances category.
+  const block: Block =
+    typeof f.block === 'string' && (BLOCK_OPTIONS as string[]).includes(f.block)
+      ? (f.block as Block)
+      : 'none';
   const timezone =
     typeof f.timezone === 'string' && f.timezone.trim().length > 0
       ? f.timezone.trim()
@@ -218,6 +230,7 @@ function normalizeFeed(raw: unknown, fallbackOrder: number): CalendarFeed | null
     kind: category === 'holidays' ? 'holidays' : 'events',
     category,
     ...(travel && travel !== 'none' ? { travel } : {}),
+    ...(block !== 'none' ? { block } : {}),
     ...(color ? { color } : {}),
     ...(style ? { style } : {}),
     ...(timezone ? { timezone } : {}),
@@ -234,7 +247,19 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
     typeof r.category === 'string' && (FEED_CATEGORIES as string[]).includes(r.category)
       ? r.category
       : 'none';
-  return { ...r, style, category };
+  const color: CalendarColor | undefined =
+    typeof r.color === 'string' && (CALENDAR_COLORS as string[]).includes(r.color)
+      ? r.color
+      : undefined;
+  const block: Block | undefined =
+    typeof r.block === 'string' && (BLOCK_OPTIONS as string[]).includes(r.block) && r.block !== 'none'
+      ? r.block
+      : undefined;
+  const position: MatchPosition | undefined =
+    typeof r.position === 'string' && (MATCH_POSITIONS as string[]).includes(r.position) && r.position !== 'any'
+      ? r.position
+      : undefined;
+  return { ...r, style, category, color, block, position };
 }
 
 function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {
