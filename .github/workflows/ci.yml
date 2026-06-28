@@ -1,0 +1,22 @@
+name: CI
+
+# Vercel deploys via `vite build`, which runs neither svelte-check nor vitest.
+# This workflow is the gate that catches type errors and test regressions on PRs
+# before they reach main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx vitest run
