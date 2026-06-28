@@ -174,20 +174,20 @@
   });
   const isScratchpad = $derived(feed.source.kind === 'scratchpad');
   // Nav direction hint: when the focused event is at a boundary, the next tap
-  // wraps around the list, so flip that button's chevron to signal the cycle.
+  // wraps around the list. Signal the cycle with the skip icon pointing toward
+  // where it lands — the same fast-forward / rewind glyphs as the jump-to-end
+  // flash (prev wraps forward to the last event, next wraps back to the first).
   const navCount = $derived(visibleEvents.length);
   const focusedHere = $derived(
     focus.feedId === feed.id && focus.eventIndex >= 0 && focus.eventIndex < navCount,
   );
   const nextWraps = $derived(focusedHere && focus.eventIndex >= navCount - 1);
   const prevWraps = $derived(focusedHere && focus.eventIndex <= 0);
-  // The long-press jump-to-end flash shows fast-forward / rewind; otherwise a
-  // chevron, pointed the opposite way when the next tap will wrap.
   const prevIcon = $derived(
-    navFlash === 'prev' ? 'rewind' : prevWraps ? 'chevron-right' : 'chevron-left',
+    navFlash === 'prev' ? 'rewind' : prevWraps ? 'fast-forward' : 'chevron-left',
   );
   const nextIcon = $derived(
-    navFlash === 'next' ? 'fast-forward' : nextWraps ? 'chevron-left' : 'chevron-right',
+    navFlash === 'next' ? 'fast-forward' : nextWraps ? 'rewind' : 'chevron-right',
   );
   const prevLabel = 'Previous event (long-press for earliest)';
   const nextLabel = 'Next event (long-press for latest)';
