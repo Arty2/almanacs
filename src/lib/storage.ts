@@ -7,6 +7,7 @@ import type {
   FindReplaceRule,
   FontSize,
   Haptics,
+  MatchPosition,
   Motion,
   ParsedEvent,
   Spacing,
@@ -14,7 +15,7 @@ import type {
   Theme,
   Travel,
 } from './types';
-import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
+import { BLOCK_OPTIONS, CALENDAR_COLORS, FEED_CATEGORIES, MATCH_POSITIONS, SCHEMA_VERSION, SCRATCHPAD_FEED_ID, TRAVEL_OPTIONS } from './types';
 import { offsetMinutes, resolveLocalTz } from './format';
 
 const VALID_STYLES: StyleVariant[] = [
@@ -257,7 +258,11 @@ function normalizeRule(r: FindReplaceRule): FindReplaceRule {
     typeof r.block === 'string' && (BLOCK_OPTIONS as string[]).includes(r.block) && r.block !== 'none'
       ? r.block
       : undefined;
-  return { ...r, style, category, color, block };
+  const position: MatchPosition | undefined =
+    typeof r.position === 'string' && (MATCH_POSITIONS as string[]).includes(r.position) && r.position !== 'any'
+      ? r.position
+      : undefined;
+  return { ...r, style, category, color, block, position };
 }
 
 function mergeDefaultRules(userRules: FindReplaceRule[]): FindReplaceRule[] {

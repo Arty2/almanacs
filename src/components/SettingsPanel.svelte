@@ -48,6 +48,7 @@
     type FontSize,
     type Haptics,
     type Locale,
+    type MatchPosition,
     type Motion,
     type Spacing,
     type StyleVariant,
@@ -156,9 +157,10 @@
     editingRuleId = rule.id;
   }
 
-  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; disabled: boolean }): void {
+  function commitDraftRule(updates: { find: string; replace: string; style: StyleVariant; category: FeedCategory; color: CalendarColor | undefined; block: Block | undefined; position: MatchPosition; disabled: boolean }): void {
     if (!draftRule) return;
     const next: FindReplaceRule = { ...draftRule, ...updates };
+    if (next.position === 'any') delete next.position;
     config.rules = [...config.rules, next];
     draftRule = null;
     editingRuleId = null;
@@ -692,6 +694,7 @@
     { id: 'none', label: 'N/A' },
     { id: 'global', label: 'Global' },
     { id: 'local', label: 'Local' },
+    { id: 'off', label: 'No block' },
   ];
 
   // "Auto" type: detect category and travel from the calendar title.
@@ -1149,41 +1152,6 @@
                   <label for="form-name-{feed.id}">Name</label>
                   <input id="form-name-{feed.id}" type="text" bind:value={formName} placeholder="My calendar" />
                 </div>
-                <div class="field">
-                  <label for="feed-color-{feed.id}">Color</label>
-                  <select
-                    id="feed-color-{feed.id}"
-                    class="color-select"
-                    data-color={feed.color ?? null}
-                    value={feed.color ?? ''}
-                    onchange={(e) => setFeedColor(feed, ((e.currentTarget as HTMLSelectElement).value || null) as CalendarColor | null)}
-                  >
-                    <option value="">No color</option>
-                    {#each CALENDAR_COLORS as c (c)}
-                      <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="feed-style-{feed.id}">Style</label>
-                  <select
-                    id="feed-style-{feed.id}"
-                    value={feed.style ?? ''}
-                    onchange={(e) => setFeedStyle(feed, e)}
-                  >
-                    {#each calendarStyleOptions as s (s.id)}
-                      <option value={s.id}>{s.label}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="form-block-{feed.id}">Block</label>
-                  <select id="form-block-{feed.id}" bind:value={formBlock}>
-                    {#each blockOptions as b (b.id)}
-                      <option value={b.id}>{b.label}</option>
-                    {/each}
-                  </select>
-                </div>
                 {#if !isScratchpad(feed)}
                   <div class="field">
                     <label for="form-category-{feed.id}">Type</label>
@@ -1202,6 +1170,41 @@
                     </select>
                   </div>
                 {/if}
+                <div class="field">
+                  <label for="feed-style-{feed.id}">Style</label>
+                  <select
+                    id="feed-style-{feed.id}"
+                    value={feed.style ?? ''}
+                    onchange={(e) => setFeedStyle(feed, e)}
+                  >
+                    {#each calendarStyleOptions as s (s.id)}
+                      <option value={s.id}>{s.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="feed-color-{feed.id}">Color</label>
+                  <select
+                    id="feed-color-{feed.id}"
+                    class="color-select"
+                    data-color={feed.color ?? null}
+                    value={feed.color ?? ''}
+                    onchange={(e) => setFeedColor(feed, ((e.currentTarget as HTMLSelectElement).value || null) as CalendarColor | null)}
+                  >
+                    <option value="">No color</option>
+                    {#each CALENDAR_COLORS as c (c)}
+                      <option value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="form-block-{feed.id}">Block</label>
+                  <select id="form-block-{feed.id}" bind:value={formBlock}>
+                    {#each blockOptions as b (b.id)}
+                      <option value={b.id}>{b.label}</option>
+                    {/each}
+                  </select>
+                </div>
                 <div class="field">
                   <label for="form-tz-{feed.id}">Time zone</label>
                   <select id="form-tz-{feed.id}" bind:value={formTimezone}>

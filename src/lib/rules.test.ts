@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyRules, decorate, makeRule } from './rules';
+import { applyRules, decorate, makeRule, matchingRulesFor } from './rules';
 import type { ParsedEvent } from './types';
 
 function ev(partial: Partial<ParsedEvent> = {}): ParsedEvent {
@@ -106,5 +106,50 @@ describe('applyRules', () => {
     const out = decorate(ev({ title: 'Greek Christmas' }), r);
     expect(out.ruleColor).toBe('mint');
     expect(out.ruleBlock).toBe('local');
+  });
+
+  it("captures a rule's 'off' (No block) override", () => {
+    const r = [makeRule({ find: 'Christmas', replace: 'Christmas', block: 'off' })];
+    const out = decorate(ev({ title: 'Greek Christmas' }), r);
+    expect(out.ruleBlock).toBe('off');
+  });
+});
+
+describe('match position', () => {
+  it("'any' (default) replaces anywhere but ignores an empty Find", () => {
+    const out = decorate(ev({ title: 'Greek Christmas' }), [makeRule({ find: 'Christ', replace: 'X' })]);
+    expect(out.displayTitle).toBe('Greek Xmas');
+    const noop = decorate(ev({ title: 'Greek Christmas' }), [makeRule({ find: '', replace: 'X', position: 'any' })]);
+    expect(noop.displayTitle).toBe('Greek Christmas');
+  });
+
+  it("'start' only matches/replaces a leading occurrence", () => {
+    const hit = decorate(ev({ title: 'Greek Christmas' }), [makeRule({ find: 'Greek ', replace: '', position: 'start' })]);
+    expect(hit.displayTitle).toBe('Christmas');
+    // 'Greek' is not at the start here, so it is left alone.
+    const miss = decorate(ev({ title: 'A Greek Feast' }), [makeRule({ find: 'Greek', replace: 'X', position: 'start' })]);
+    expect(miss.displayTitle).toBe('A Greek Feast');
+  });
+
+  it("'end' only matches/replaces a trailing occurrence", () => {
+    const hit = decorate(ev({ title: 'Christmas Eve' }), [makeRule({ find: ' Eve', replace: '', position: 'end' })]);
+    expect(hit.displayTitle).toBe('Christmas');
+    const miss = decorate(ev({ title: 'Eve Party' }), [makeRule({ find: 'Eve', replace: 'X', position: 'end' })]);
+    expect(miss.displayTitle).toBe('Eve Party');
+  });
+
+  it('an empty Find inserts text at the start / end', () => {
+    const start = decorate(ev({ title: 'Christmas' }), [makeRule({ find: '', replace: '🎉 ', position: 'start' })]);
+    expect(start.displayTitle).toBe('🎉 Christmas');
+    const end = decorate(ev({ title: 'Christmas' }), [makeRule({ find: '', replace: ' 🎉', position: 'end' })]);
+    expect(end.displayTitle).toBe('Christmas 🎉');
+  });
+
+  it('an empty-Find start/end rule still matches via matchingRulesFor', () => {
+    const rule = makeRule({ find: '', replace: '🎉 ', position: 'start' });
+    expect(matchingRulesFor(ev({ title: 'Anything' }), [rule])).toHaveLength(1);
+    // …but an empty-Find 'any' rule never matches.
+    const any = makeRule({ find: '', replace: 'X', position: 'any' });
+    expect(matchingRulesFor(ev({ title: 'Anything' }), [any])).toHaveLength(0);
   });
 });

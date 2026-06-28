@@ -83,13 +83,15 @@ function clickAt(ctx: AudioContext, at: number): void {
 // vibration, a tap sound, or both-or-neither: 'auto' uses vibration where the
 // device supports it (else the sound, for Safari/Firefox), 'sound' always plays
 // the sound, 'vibration' vibrates only, 'off' does nothing.
-function buzz(pattern: number | number[]): void {
+// soundPattern lets the click cadence differ from the vibration rhythm — e.g.
+// the tray collapse vibrates "tap-tap" but should only click once.
+function buzz(pattern: number | number[], soundPattern: number | number[] = pattern): void {
   const mode = config.haptics;
   if (mode === 'off') return;
   const vibrates = mode === 'vibration' || mode === 'both' || (mode === 'auto' && canVibrate());
   const sounds = mode === 'sound' || mode === 'both' || (mode === 'auto' && !canVibrate());
   if (vibrates && canVibrate()) navigator.vibrate(pattern);
-  if (sounds) playTick(pattern);
+  if (sounds) playTick(soundPattern);
 }
 
 // 5ms is below what many phones (notably Firefox on Android) actually render,
@@ -115,7 +117,8 @@ export function trayExpand(): void {
 }
 
 export function trayCollapse(): void {
-  buzz([12, 40, 12]);
+  // Vibrates "tap-tap" but sounds as a single click.
+  buzz([12, 40, 12], 12);
 }
 
 // Settings panel open: a firm single pulse, same strength as the tray opening.

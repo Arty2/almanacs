@@ -26,10 +26,19 @@ export const TRAVEL_OPTIONS: Travel[] = ['none', 'international', 'local'];
 // Day-blocking hatch for a calendar/filter, independent of its Type:
 //   'global' = full-width band spanning the header and every row
 //   'local'  = hatch confined to the owning row
-//   'none'   = no block
-export type Block = 'none' | 'global' | 'local';
+//   'none'   = N/A — unset, inherits (a filter leaves the calendar's block alone)
+//   'off'    = No block — an explicit override that forces non-blocking, even
+//              over a calendar's Global/Local block when a filter applies
+export type Block = 'none' | 'global' | 'local' | 'off';
 
-export const BLOCK_OPTIONS: Block[] = ['none', 'global', 'local'];
+export const BLOCK_OPTIONS: Block[] = ['none', 'global', 'local', 'off'];
+
+// Where a filter's Find anchors. 'any' matches a substring anywhere (the
+// default, and the only mode that requires a non-empty Find); 'start'/'end'
+// anchor to the ends and accept an empty Find so text can be inserted there.
+export type MatchPosition = 'start' | 'any' | 'end';
+
+export const MATCH_POSITIONS: MatchPosition[] = ['start', 'any', 'end'];
 
 export type CalendarColor =
   | 'peach'
@@ -133,6 +142,7 @@ export type FindReplaceRule = {
   category: FeedCategory;
   color?: CalendarColor;
   block?: Block;
+  position?: MatchPosition;
   disabled?: boolean;
 };
 

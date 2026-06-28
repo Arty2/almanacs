@@ -126,10 +126,15 @@
 
   // Resolve an event's effective Block (the day-hatch scope), with a matching
   // rule's block taking precedence over the calendar's own block — the same
-  // precedence rules use for style/color.
+  // precedence rules use for style/color. A rule's 'off' (No block) is an
+  // explicit override that forces the event non-blocking even over a
+  // Global/Local calendar; 'off' is otherwise equivalent to 'none'.
   function effectiveBlock(ev: DisplayEvent, feed: CalendarFeed): Block {
-    if (ev.ruleBlock && ev.ruleBlock !== 'none') return ev.ruleBlock;
-    return feed.block ?? 'none';
+    if (ev.ruleBlock && ev.ruleBlock !== 'none') {
+      return ev.ruleBlock === 'off' ? 'none' : ev.ruleBlock;
+    }
+    const feedBlock = feed.block ?? 'none';
+    return feedBlock === 'off' ? 'none' : feedBlock;
   }
 
   // Hatch density by effective style: prominent styles get the heavy hatch,
