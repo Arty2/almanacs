@@ -93,8 +93,12 @@ export function decorate(event: ParsedEvent, rules: FindReplaceRule[]): DisplayE
       fieldMatches(location, rule.find, pos);
     if (matched) {
       title = applyAnchored(title, rule.find, rule.replace, pos);
-      description = applyAnchored(description, rule.find, rule.replace, pos);
-      location = applyAnchored(location, rule.find, rule.replace, pos);
+      // An empty-Find insert (start/end) only prepends/appends to the title;
+      // a real Find still rewrites every field it anchors in.
+      if (rule.find) {
+        description = applyAnchored(description, rule.find, rule.replace, pos);
+        location = applyAnchored(location, rule.find, rule.replace, pos);
+      }
       if (styleVariant === 'none' && rule.style !== 'none') {
         styleVariant = rule.style;
       }

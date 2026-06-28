@@ -138,9 +138,15 @@ describe('match position', () => {
     expect(miss.displayTitle).toBe('Eve Party');
   });
 
-  it('an empty Find inserts text at the start / end', () => {
-    const start = decorate(ev({ title: 'Christmas' }), [makeRule({ find: '', replace: '🎉 ', position: 'start' })]);
+  it('an empty Find inserts text at the start / end of the title only', () => {
+    const start = decorate(
+      ev({ title: 'Christmas', description: 'desc', location: 'loc' }),
+      [makeRule({ find: '', replace: '🎉 ', position: 'start' })],
+    );
     expect(start.displayTitle).toBe('🎉 Christmas');
+    // Description and location are left untouched by an empty-Find insert.
+    expect(start.displayDescription).toBe('desc');
+    expect(start.displayLocation).toBe('loc');
     const end = decorate(ev({ title: 'Christmas' }), [makeRule({ find: '', replace: ' 🎉', position: 'end' })]);
     expect(end.displayTitle).toBe('Christmas 🎉');
   });
