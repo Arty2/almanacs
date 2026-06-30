@@ -1052,8 +1052,16 @@
       zoom.value = next;
       return;
     }
+    // Leaving 1W: the horizontal <main> isn't mounted yet (scrollEl undefined),
+    // so re-arm the open-centering effect — it scrolls to ui.tempMarkerMs (set in
+    // 1W) when present, else today — to run once the timeline remounts.
+    const leavingWeek = zoom.value === 'week';
     if (!scrollEl) {
       zoom.value = next;
+      if (leavingWeek) {
+        lastInteractionMs = 0;
+        didCenter = false;
+      }
       return;
     }
     const center = scrollEl.scrollLeft + scrollEl.clientWidth / 2;

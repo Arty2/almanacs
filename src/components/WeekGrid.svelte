@@ -20,8 +20,9 @@
   } from '../lib/format';
   import { effectiveBlock, hatchDensity, dayKeyOf, eventDayKeys } from '../lib/blocking';
   import { packLanes } from '../lib/layout';
-  import { MS_PER_DAY, formatTier } from '../lib/time';
+  import { MS_PER_DAY, formatTier, isoWeekNumber } from '../lib/time';
   import type { CalendarFeed, DisplayEvent } from '../lib/types';
+  import { untrack } from 'svelte';
 
   // `today` is accepted for parity with the timeline (and so the grid re-derives
   // when the device day rolls over); the day columns themselves are anchored to
@@ -43,8 +44,8 @@
   // Base metrics scaled by the font-size setting, mirroring the timeline's
   // fontScale pattern so the grid grows with larger text.
   const fontScale = $derived(config.fontSize / 14);
-  // Short hour rows (~half the previous height) so more of the day is visible.
-  const HOUR_H = $derived(Math.round(22 * fontScale));
+  // Hour rows ~20% taller than the prior compact height.
+  const HOUR_H = $derived(Math.round(22 * 1.2 * fontScale));
   // Narrow hour-label columns (one per shown timezone, left gutter).
   const GUTTER_W = $derived(Math.round(22 * fontScale));
   // Day columns floor low enough that a full week fits on a vertical phone.
@@ -52,16 +53,19 @@
   const ALLDAY_ROW_H = $derived(Math.round(20 * fontScale));
   // Top padding in the all-day strip, matching the inter-bar gap.
   const ALLDAY_PAD = 1;
-  // Gap above the hour grid so the 00:00 label isn't half-hidden by the header.
-  const BODY_TOP_PAD = $derived(Math.round(6 * fontScale));
+  // Gap above & below the hour grid so the 00:00 / 23:00 labels aren't clipped;
+  // the day-column separators continue through it as dashed lines.
+  const BODY_PAD = $derived(Math.round(7 * fontScale));
   const MIN_BLOCK_H = 14;
   const bodyH = $derived(24 * HOUR_H);
 
-  // Header tiers: Quarter+Year, Month, and a Date row styled like the 1M zoom.
-  const TIER_Q_H = $derived(Math.round(16 * fontScale));
-  const TIER_M_H = $derived(Math.round(16 * fontScale));
-  const TIER_D_H = $derived(Math.round(30 * fontScale));
-  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_D_H);
+  // Header tiers (Quarter+Year, Month, Week, Date) sized to match the timeline
+  // header — Quarter row ≈ the timeline's date-tier height, fs-12 bold.
+  const TIER_Q_H = $derived(Math.round(21 * fontScale));
+  const TIER_M_H = $derived(Math.round(18 * fontScale));
+  const TIER_W_H = $derived(Math.round(18 * fontScale));
+  const TIER_D_H = $derived(Math.round(28 * fontScale));
+  const headerH = $derived(TIER_Q_H + TIER_M_H + TIER_W_H + TIER_D_H);
 
   const tzTop = $derived(config.weekTzTop);
   const tzBottom = $derived(config.weekTzBottom);
@@ -167,6 +171,22 @@
         j++;
       }
       out.push({ from: i, span: j - i, label: formatMonth(d, config.locale, 'short'), key });
+      i = j;
+    }
+    return out;
+  });
+  // Week-number tier: group days by their ISO week (Monday-anchored), labelled
+  // "W NN" like the timeline's week tier.
+  const weekBands = $derived.by(() => {
+    const out: { from: number; span: number; label: string; key: string }[] = [];
+    const mondayOf = (d: Date): number => d.getTime() - ((d.getUTCDay() || 7) - 1) * MS_PER_DAY;
+    let i = 0;
+    while (i < days.length) {
+      const d0 = days[i]!.date;
+      const key = mondayOf(d0);
+      let j = i + 1;
+      while (j < days.length && mondayOf(days[j]!.date) === key) j++;
+      out.push({ from: i, span: j - i, label: 'W ' + isoWeekNumber(d0), key: String(key) });
       i = j;
     }
     return out;
@@ -297,18 +317,27 @@
   // Per-gutter-column metadata: a 2-letter ISO country code (always shown), the
   // hour offset from the primary zone (for the hour labels), the current day/night
   // state, the live current time in that zone, and a full-name tooltip.
+  // Wrap a minute-of-day into [0,1440) → its y on the primary axis.
+  function topForMin(min: number): number {
+    return ((((min % 1440) + 1440) % 1440) / 60) * HOUR_H;
+  }
   const tzCols = $derived.by(() => {
     const at = new Date(clock.now);
     const primOff = offsetMinutes(tzTop, at, config.dst) ?? 0;
     return tzZones.map((tz) => {
       const off = offsetMinutes(tz, at, config.dst) ?? primOff;
+      const offsetFromPrimary = off - primOff;
       return {
         tz,
         code: tzCountryCode(tz),
         title: formatTimezoneLabel(tz, config.dst),
-        offsetFromPrimary: off - primOff,
+        offsetFromPrimary,
         isDay: isDaylight(tz, at, morningMin, eveningMin),
+        isLocal: tz === localTz,
         nowTime: formatTime(at, config.timeFormat, tz),
+        // This zone's working-hours edges, mapped onto the primary axis.
+        morningTopP: topForMin(morningMin - offsetFromPrimary),
+        eveningTopP: topForMin(eveningMin - offsetFromPrimary),
       };
     });
   });
@@ -364,20 +393,62 @@
     ui.tempMarkerMs = ui.tempMarkerMs === ms ? null : ms;
   }
 
-  // One-shot open scroll: vertically to working hours (or the current hour if
-  // later), horizontally to today's column at the day-area's left edge. Guarded
-  // so it never fights the user's own scrolling afterwards.
+  // Open scroll: vertically to working hours (or the current hour if later),
+  // horizontally to today's (or the temp marker's) column at the day-area's left
+  // edge. Re-asserted until the user first interacts, because `dayW` is measured
+  // from the viewport one frame after mount — a one-shot would latch on the
+  // pre-measure MIN_DAY_W and land the target off-screen once the columns widen.
   let scrollBody: HTMLElement | undefined = $state();
-  let didScroll = false;
+  let userInteracted = $state(false);
   $effect(() => {
-    if (didScroll || !scrollBody || viewW <= 0) return;
-    const cur = zonedParts(new Date(clock.now), tzTop).minutes;
-    const targetMin = Math.max(morningMin, cur);
-    // Lead in by one hour so the target row isn't flush against the sticky header.
-    scrollBody.scrollTop = Math.max(0, (targetMin / 60) * HOUR_H - HOUR_H);
-    // Today's column sits at index -startOffset; put it at the day-area's edge.
-    scrollBody.scrollLeft = -startOffset * dayW;
-    didScroll = true;
+    const stop = (): void => {
+      userInteracted = true;
+    };
+    window.addEventListener('pointerdown', stop, { passive: true });
+    window.addEventListener('wheel', stop, { passive: true });
+    window.addEventListener('touchstart', stop, { passive: true });
+    window.addEventListener('keydown', stop);
+    return () => {
+      window.removeEventListener('pointerdown', stop);
+      window.removeEventListener('wheel', stop);
+      window.removeEventListener('touchstart', stop);
+      window.removeEventListener('keydown', stop);
+    };
+  });
+  $effect(() => {
+    // Re-run when the measured width (and so dayW) changes; ignore clock ticks.
+    void dayW;
+    void viewW;
+    if (!scrollBody || viewW <= 0) return;
+    untrack(() => {
+      if (userInteracted) return;
+      const cur = zonedParts(new Date(clock.now), tzTop).minutes;
+      const targetMin = Math.max(morningMin, cur);
+      // Open on the temp-marker day if one is set (e.g. carried over from
+      // another zoom), otherwise today; place it at the day-area's left edge.
+      const targetOff = markerOffset ?? 0;
+      if (targetOff - startOffset < 0 || targetOff - startOffset > RENDERED_DAYS - 1) {
+        startOffset = targetOff - INITIAL_PAST;
+      }
+      // Lead in by one hour so the target row isn't flush against the header.
+      const wantTop = Math.max(0, (targetMin / 60) * HOUR_H - HOUR_H);
+      const wantLeft = (targetOff - startOffset) * dayW;
+      // Re-apply across a few frames: on the mount/zoom-switch flush the day
+      // columns' full width hasn't laid out yet, so a single assignment gets
+      // clamped to the partial scrollWidth. Re-asserting until the value sticks
+      // (or the user scrolls) lands the target once the content is final.
+      let frames = 0;
+      const apply = (): void => {
+        if (userInteracted || !scrollBody) return;
+        scrollBody.scrollTop = wantTop;
+        scrollBody.scrollLeft = wantLeft;
+        if (Math.abs(scrollBody.scrollLeft - wantLeft) > 1 && frames++ < 20) {
+          requestAnimationFrame(apply);
+        }
+      };
+      apply();
+      toggleLast = markerOffset != null ? 'temp' : 'today';
+    });
   });
 
   // Continuous scroll: slide the rendered window when the viewport nears either
@@ -437,7 +508,7 @@
 
 <div
   class="week-grid"
-  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; height: calc(100dvh - var(--toolbar-h) - {search.open
+  style="--wg-header-h: {headerH}px; --tier-q-h: {TIER_Q_H}px; --tier-m-h: {TIER_M_H}px; --tier-w-h: {TIER_W_H}px; --wg-body-pad: {BODY_PAD}px; height: calc(100dvh - var(--toolbar-h) - {search.open
     ? 'var(--toolbar-h)'
     : '0px'});"
 >
@@ -468,6 +539,13 @@
             </div>
           {/each}
         </div>
+        <div class="wg-tier wg-tier-w">
+          {#each weekBands as b (b.key)}
+            <div class="wg-band" style="width: {b.span * dayW}px;">
+              <span class="wg-band-label" style="left: {gutterW}px;">{b.label}</span>
+            </div>
+          {/each}
+        </div>
         <div class="wg-tier wg-tier-d" style="grid-template-columns: {dayCols};">
           {#each days as d, i (i)}
             {@const blk = dayBlock(d.date)}
@@ -493,11 +571,7 @@
     <!-- All-day strip (sticky, below the headers); the corner shows each zone's
          current day/night glyph instead of an "all-day" title. -->
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
-      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
-        {#each tzCols as c (c.tz)}
-          <span class="wg-daynight" title={c.title}><Icon name={c.isDay ? 'sun' : 'moon'} size={12} /></span>
-        {/each}
-      </div>
+      <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
         {#each allDayLayout.rows as r (r.ev.uid)}
           <WeekEvent
@@ -516,7 +590,7 @@
     </div>
 
     <!-- Scrollable hour grid -->
-    <div class="wg-body" style="width: {contentW}px; height: {bodyH}px; margin-top: {BODY_TOP_PAD}px;">
+    <div class="wg-body" style="width: {contentW}px; height: {bodyH}px; margin: {BODY_PAD}px 0;">
       <!-- Timezone label columns (frozen left), one per shown zone -->
       <div class="wg-gutter-group" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
         {#each tzCols as c, ci (c.tz)}
@@ -526,17 +600,17 @@
                 >{hourLabel(h * 60 + c.offsetFromPrimary)}</span
               >
             {/each}
-            {#if ci === 0}
-              <!-- Morning / evening working-hours boundary markers -->
-              <span class="wg-limit" style="top: {morningTop}px;" aria-hidden="true">
-                <Icon name="sun" size={11} />
-              </span>
-              <span class="wg-limit" style="top: {eveningTop}px;" aria-hidden="true">
-                <Icon name="moon" size={11} />
-              </span>
+            <!-- This zone's morning / evening working-hours day/night markers -->
+            <span class="wg-limit" style="top: {c.morningTopP}px;" aria-hidden="true">
+              <Icon name="sun" size={11} />
+            </span>
+            <span class="wg-limit" style="top: {c.eveningTopP}px;" aria-hidden="true">
+              <Icon name="moon" size={11} />
+            </span>
+            <!-- Live current time, only in the local zone, aligned with the now-line. -->
+            {#if c.isLocal}
+              <span class="wg-now-time" data-mono style="top: {nowTop}px;">{c.nowTime}</span>
             {/if}
-            <!-- Live current time in this zone, aligned with the now-line. -->
-            <span class="wg-now-time" data-mono style="top: {nowTop}px;">{c.nowTime}</span>
           </div>
         {/each}
       </div>
@@ -554,9 +628,14 @@
               <i class="wg-block" data-density={blk} aria-hidden="true"></i>
             {/if}
             {#if !d.weekend}
-              <!-- Dashed working-hours edges (off-hours tint colour). -->
+              <!-- Primary-zone working-hours edges, in the off-hours tone. -->
               <i class="wg-edge" style="top: {morningTop}px;" aria-hidden="true"></i>
               <i class="wg-edge" style="top: {eveningTop}px;" aria-hidden="true"></i>
+              {#if numTz >= 2}
+                <!-- Secondary-zone working-hours edges, in the page colour. -->
+                <i class="wg-edge wg-edge-2" style="top: {tzCols[1]!.morningTopP}px;" aria-hidden="true"></i>
+                <i class="wg-edge wg-edge-2" style="top: {tzCols[1]!.eveningTopP}px;" aria-hidden="true"></i>
+              {/if}
             {/if}
             {#each timedByDay[i] ?? [] as b (b.ev.uid)}
               <WeekEvent
@@ -602,8 +681,6 @@
 <style>
   .week-grid {
     --wg-night: rgba(10, 10, 10, 0.05);
-    /* Off-hours tone for the dashed working-hours edges (theme-aware via --ink). */
-    --wg-edge: color-mix(in srgb, var(--ink) 22%, transparent);
     display: flex;
     flex-direction: column;
     /* height is set inline so it can subtract the search toolbar when open. */
@@ -662,8 +739,7 @@
     white-space: nowrap;
     overflow: hidden;
   }
-  .wg-tz:not(:first-child),
-  .wg-daynight:not(:first-child) {
+  .wg-tz:not(:first-child) {
     border-left: var(--border-w) solid var(--ink);
   }
 
@@ -676,13 +752,17 @@
     display: flex;
   }
   .wg-tier-q {
-    height: var(--tier-q-h, 16px);
+    height: var(--tier-q-h, 21px);
   }
   .wg-tier-m {
-    height: var(--tier-m-h, 16px);
+    height: var(--tier-m-h, 18px);
+  }
+  .wg-tier-w {
+    height: var(--tier-w-h, 18px);
   }
   .wg-tier-q,
-  .wg-tier-m {
+  .wg-tier-m,
+  .wg-tier-w {
     border-bottom: var(--border-w) solid var(--ink);
   }
   .wg-tier-d {
@@ -736,9 +816,9 @@
   .wg-datecell[data-weekend='true'] {
     background: var(--weekend-bg);
   }
-  /* A set day marker tints + outlines its date cell. */
+  /* A set day marker faintly tints its date cell — no outline (the body band is
+     the primary indicator). */
   .wg-datecell[data-temp='true'] {
-    box-shadow: inset 0 0 0 var(--border-w) var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
   /* Day-blocking hatch on the date cell, mirroring the month-zoom day-letter band. */
@@ -790,12 +870,6 @@
   .wg-allday-corner {
     z-index: 1;
   }
-  .wg-daynight {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ink-muted);
-  }
   .wg-allday-area {
     position: relative;
     flex: 0 0 auto;
@@ -822,7 +896,7 @@
     background: var(--paper);
   }
   .wg-gutter[data-div='true'] {
-    border-right: var(--border-w) solid var(--ink-faint);
+    border-right: var(--border-w) solid var(--ink);
   }
   .wg-hour {
     position: absolute;
@@ -873,6 +947,24 @@
     border-left: var(--border-w) solid var(--ink-faint);
     background-repeat: repeat;
   }
+  /* Extend each day-column separator into the top & bottom margin gaps as a
+     dashed line, so columns stay visually connected past the hour grid. */
+  .wg-daycol::before,
+  .wg-daycol::after {
+    content: '';
+    position: absolute;
+    left: calc(-1 * var(--border-w));
+    width: 0;
+    height: var(--wg-body-pad, 7px);
+    border-left: var(--border-w) dashed var(--ink-faint);
+    pointer-events: none;
+  }
+  .wg-daycol::before {
+    top: calc(-1 * var(--wg-body-pad, 7px));
+  }
+  .wg-daycol::after {
+    bottom: calc(-1 * var(--wg-body-pad, 7px));
+  }
   .wg-daycol[data-current='true'] {
     background-color: color-mix(in srgb, var(--accent) 5%, transparent);
   }
@@ -893,15 +985,19 @@
     background-image: repeating-linear-gradient(
       45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
   }
-  /* Dashed working-hours edges (morning / evening), in the off-hours tone. */
+  /* Dashed working-hours edges: primary zone in the off-hours background tone,
+     secondary zone in the page colour (visible where it crosses the tint). */
   .wg-edge {
     position: absolute;
     left: 0;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--wg-edge);
+    border-top: var(--border-w) dashed var(--wg-night);
     pointer-events: none;
     z-index: 0;
+  }
+  .wg-edge-2 {
+    border-top-color: var(--paper);
   }
 
   /* Temporary day marker: a translucent accent band over the marked column. */
@@ -932,7 +1028,7 @@
     position: absolute;
     right: 0;
     height: 0;
-    border-top: 2px dashed var(--accent);
+    border-top: var(--border-w) dashed var(--accent);
     pointer-events: none;
     z-index: 3;
   }

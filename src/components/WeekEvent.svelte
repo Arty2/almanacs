@@ -128,9 +128,8 @@
   .wg-event:focus-within {
     z-index: 3;
   }
-  .wg-event[data-mode='block'] {
-    /* Leave a hairline gap on the right so side-by-side sub-columns read as
-       separate blocks rather than a solid band. */
+  .wg-event {
+    /* Hairline gap on the right so adjacent blocks/bars read as separate. */
     margin-right: 1px;
   }
   button {
