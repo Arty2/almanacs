@@ -28,6 +28,11 @@
     // True when the block is too short to fit a second (time) line — set by
     // WeekGrid from the block's pixel height. Bars are always compact.
     compact?: boolean;
+    // True when an overnight event was clipped to midnight and carries into the
+    // next day — shows a continuation caret at the block's bottom edge.
+    continuesEnd?: boolean;
+    // Keyboard focus (arrow-key navigation) — draws a focus ring.
+    isFocused?: boolean;
     // Absolute placement (top/height/left/width) computed by WeekGrid.
     placement: string;
   };
@@ -41,6 +46,8 @@
     isCurrent = false,
     isPast = false,
     compact = false,
+    continuesEnd = false,
+    isFocused = false,
     placement,
   }: Props = $props();
 
@@ -126,6 +133,7 @@
   data-style={styleAttr}
   data-cal-color={colorAttr}
   data-selected={selection.uids.has(event.uid) ? 'true' : null}
+  data-focused={isFocused ? 'true' : null}
   aria-current={isCurrent ? 'true' : null}
   style={placement}
 >
@@ -145,6 +153,9 @@
       <span class="time" data-mono>{timeLabel}</span>
     {/if}
   </button>
+  {#if continuesEnd}
+    <span class="continues" aria-hidden="true">▾</span>
+  {/if}
 </article>
 
 <style>
@@ -187,6 +198,10 @@
     flex-direction: row;
     align-items: center;
   }
+  button:focus-visible {
+    outline: calc(var(--border-w) * 2) solid var(--accent);
+    outline-offset: 1px;
+  }
   .title {
     font-size: var(--fs-11);
     line-height: 1.2;
@@ -214,6 +229,17 @@
   .wg-event[aria-current='true'] .time {
     color: var(--accent);
   }
+  /* Caret at the bottom edge: this overnight event carries into the next day. */
+  .continues {
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: var(--fs-10);
+    line-height: 1;
+    color: var(--ink-muted);
+    pointer-events: none;
+  }
 
   /* Filled tint per calendar colour. The class+attribute selector (0,2,1)
      outranks global.css's tag+attribute rules, so the fill wins while those
@@ -238,5 +264,16 @@
   }
   .wg-event[data-match='true'] {
     outline: var(--border-w) solid var(--accent);
+  }
+  /* Keyboard-focused event: a clear accent ring (mirrors EventPill's focus). */
+  .wg-event[data-focused='true'] {
+    outline: calc(var(--border-w) * 2) solid var(--accent);
+    outline-offset: 1px;
+    z-index: 3;
+  }
+  /* A keyboard-focused element should also show the browser default off — the
+     ring above is the affordance. */
+  .wg-event[data-focused='true'] button:focus-visible {
+    outline: none;
   }
 </style>

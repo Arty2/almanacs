@@ -2,7 +2,15 @@
   import WeekEvent from './WeekEvent.svelte';
   import Icon from './Icon.svelte';
   import IconButton from './IconButton.svelte';
-  import { config, search, ui, displayEventsFor, isKiosk } from '../lib/state.svelte';
+  import {
+    config,
+    search,
+    ui,
+    zoom,
+    toggleSelected,
+    displayEventsFor,
+    isKiosk,
+  } from '../lib/state.svelte';
   import { getMatchUids, getCurrentMatchUid } from '../lib/search-state.svelte';
   import { clock } from '../lib/clock.svelte';
   import {
@@ -241,28 +249,30 @@
     ev: DisplayEvent;
     startMin: number;
     endMin: number;
+    continuesEnd: boolean;
     lane: number;
     laneCount: number;
   };
 
   // Timed events grouped into their start day's column, then packed into
   // side-by-side sub-columns by their [startMin, endMin) overlap. Overnight
-  // events are clipped to the start column's midnight (continuation noted as a
-  // future enhancement).
+  // events are clipped to the start column's midnight and flagged continuesEnd
+  // so the block can show a caret indicating it carries into the next day.
   const timedByDay = $derived.by<TimedBlock[][]>(() => {
-    const cols: { ev: DisplayEvent; startMin: number; endMin: number }[][] = Array.from(
-      { length: RENDERED_DAYS },
-      () => [],
-    );
+    const cols: { ev: DisplayEvent; startMin: number; endMin: number; continuesEnd: boolean }[][] =
+      Array.from({ length: RENDERED_DAYS }, () => []);
     for (const ev of visibleEvents) {
       if (ev.allDay) continue;
       const idx = colIndexOf(ev.start);
       if (idx < 0 || idx >= RENDERED_DAYS) continue;
       const startMin = zonedParts(ev.start, tzTop).minutes;
+      const endParts = zonedParts(ev.end, tzTop).minutes;
       const sameDay = colIndexOf(ev.end) === idx;
-      let endMin = sameDay ? zonedParts(ev.end, tzTop).minutes : 1440;
+      let endMin = sameDay ? endParts : 1440;
       if (endMin < startMin) endMin = 1440; // overnight / malformed → clip to midnight
-      cols[idx]!.push({ ev, startMin, endMin });
+      // Genuinely past this day's midnight (an end at exactly 00:00 doesn't count).
+      const continuesEnd = !sameDay && endParts > 0;
+      cols[idx]!.push({ ev, startMin, endMin, continuesEnd });
     }
     return cols.map((items) => {
       const { packed, laneCount } = packLanes(items);
@@ -270,6 +280,7 @@
         ev: item.ev,
         startMin: item.startMin,
         endMin: item.endMin,
+        continuesEnd: item.continuesEnd,
         lane,
         laneCount,
       }));
@@ -307,7 +318,30 @@
     return { rows, laneCount };
   });
 
-  const allDayHeight = $derived(Math.max(1, allDayLayout.laneCount) * ALLDAY_ROW_H + ALLDAY_PAD);
+  // Cap the all-day strip so a busy week can't grow it without bound and eat the
+  // hour grid: show a couple of rows, then a "+N" chip per day that reveals the
+  // rest. (Expansion lasts until the view is left.)
+  const MAX_ALLDAY_LANES = 3;
+  let allDayExpanded = $state(false);
+  const allDayCapped = $derived(!allDayExpanded && allDayLayout.laneCount > MAX_ALLDAY_LANES);
+  const shownAllDayRows = $derived(
+    allDayCapped ? allDayLayout.rows.filter((r) => r.lane < MAX_ALLDAY_LANES - 1) : allDayLayout.rows,
+  );
+  const allDayOverflow = $derived.by<{ col: number; n: number }[]>(() => {
+    if (!allDayCapped) return [];
+    const counts = new Array<number>(RENDERED_DAYS).fill(0);
+    for (const r of allDayLayout.rows) {
+      if (r.lane < MAX_ALLDAY_LANES - 1) continue;
+      for (let c = r.from; c < r.from + r.span && c < RENDERED_DAYS; c++) counts[c]!++;
+    }
+    const chips: { col: number; n: number }[] = [];
+    for (let c = 0; c < RENDERED_DAYS; c++) if (counts[c]! > 0) chips.push({ col: c, n: counts[c]! });
+    return chips;
+  });
+  const allDayOverflowTop = $derived((MAX_ALLDAY_LANES - 1) * ALLDAY_ROW_H + ALLDAY_PAD);
+  const allDayHeight = $derived(
+    (allDayCapped ? MAX_ALLDAY_LANES : Math.max(1, allDayLayout.laneCount)) * ALLDAY_ROW_H + ALLDAY_PAD,
+  );
 
   function allDayPlacement(r: { from: number; span: number; lane: number }): string {
     const left = (r.from / RENDERED_DAYS) * 100;
@@ -600,6 +634,129 @@
     ui.addEventOpen = true;
   }
 
+  // Centre the grid on the current search match: scroll horizontally to its day
+  // and vertically to its start time, mirroring the timeline centring matches.
+  $effect(() => {
+    const uid = currentMatchUid;
+    if (!uid || !search.open) return;
+    untrack(() => {
+      const ev = visibleEvents.find((e) => e.uid === uid);
+      if (!ev) return;
+      jumpToOffset(dayIndexOf(ev.start));
+      if (scrollBody) {
+        const min = ev.allDay ? 0 : zonedParts(ev.start, tzTop).minutes;
+        scrollBody.scrollTo({
+          top: Math.max(0, (min / 60) * HOUR_H - HOUR_H),
+          behavior: smoothBehavior(),
+        });
+      }
+    });
+  });
+
+  // Keyboard focus model (week zoom only): a focused event uid navigated by the
+  // arrow keys — Up/Down step through a day's events by time, Left/Right jump to
+  // the nearest event in the adjacent day. Enter opens, Space selects, Escape
+  // clears. A capture-phase listener intercepts before App's timeline handler so
+  // the two views don't both consume the arrows.
+  let focusedUid: string | null = $state(null);
+  function dayItems(col: number): { uid: string; startMin: number }[] {
+    return (timedByDay[col] ?? [])
+      .map((b) => ({ uid: b.ev.uid, startMin: b.startMin }))
+      .sort((a, b) => a.startMin - b.startMin);
+  }
+  function locateFocus(): { col: number; idx: number } | null {
+    if (focusedUid == null) return null;
+    for (let col = 0; col < RENDERED_DAYS; col++) {
+      const idx = dayItems(col).findIndex((it) => it.uid === focusedUid);
+      if (idx >= 0) return { col, idx };
+    }
+    return null;
+  }
+  function nearestDayWithEvents(from: number, dir: number): number {
+    for (let col = from; col >= 0 && col < RENDERED_DAYS; col += dir) {
+      if ((timedByDay[col] ?? []).length) return col;
+    }
+    return -1;
+  }
+  function focusAt(col: number, idx: number): void {
+    const items = dayItems(col);
+    if (!items.length) return;
+    const it = items[Math.max(0, Math.min(items.length - 1, idx))]!;
+    focusedUid = it.uid;
+    scrollFocusIntoView(col, it.startMin);
+  }
+  function ensureFocus(): boolean {
+    if (locateFocus()) return false;
+    const todayCol = -startOffset; // dayIndexOf(today) === 0 → this column
+    let col = nearestDayWithEvents(Math.max(0, todayCol), 1);
+    if (col < 0) col = nearestDayWithEvents(Math.min(RENDERED_DAYS - 1, todayCol), -1);
+    if (col < 0) return false;
+    focusAt(col, 0);
+    return true;
+  }
+  function moveWithinDay(delta: number): void {
+    if (ensureFocus()) return;
+    const loc = locateFocus();
+    if (loc) focusAt(loc.col, loc.idx + delta);
+  }
+  function moveDay(delta: number): void {
+    if (ensureFocus()) return;
+    const loc = locateFocus();
+    if (!loc) return;
+    const col = nearestDayWithEvents(loc.col + delta, delta);
+    if (col >= 0) focusAt(col, loc.idx);
+  }
+  function scrollFocusIntoView(col: number, startMin: number): void {
+    if (!scrollBody) return;
+    const left = col * dayW;
+    const viewLeft = scrollBody.scrollLeft;
+    const viewRight = viewLeft + (scrollBody.clientWidth - gutterW);
+    if (left < viewLeft || left + dayW > viewRight) {
+      scrollBody.scrollTo({ left: Math.max(0, left - dayW), behavior: smoothBehavior() });
+    }
+    const top = (startMin / 60) * HOUR_H;
+    if (top < scrollBody.scrollTop || top > scrollBody.scrollTop + scrollBody.clientHeight - HOUR_H) {
+      scrollBody.scrollTo({ top: Math.max(0, top - HOUR_H), behavior: smoothBehavior() });
+    }
+  }
+  function openFocused(): boolean {
+    if (focusedUid == null || !locateFocus()) return false;
+    const ev = visibleEvents.find((e) => e.uid === focusedUid);
+    if (!ev) return false;
+    ui.modalEvent = ev;
+    return true;
+  }
+  function selectFocused(): boolean {
+    if (focusedUid == null || !locateFocus()) return false;
+    toggleSelected(focusedUid);
+    return true;
+  }
+  $effect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (zoom.value !== 'week') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      let handled = true;
+      switch (e.key) {
+        case 'ArrowUp': moveWithinDay(-1); break;
+        case 'ArrowDown': moveWithinDay(1); break;
+        case 'ArrowLeft': moveDay(-1); break;
+        case 'ArrowRight': moveDay(1); break;
+        case 'Enter': handled = openFocused(); break;
+        case ' ': handled = selectFocused(); break;
+        case 'Escape': handled = focusedUid != null; focusedUid = null; break;
+        default: handled = false;
+      }
+      if (handled) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+
   const dayCols = $derived(`repeat(${RENDERED_DAYS}, ${dayW}px)`);
   const tzGridCols = $derived(`repeat(${numTz}, ${GUTTER_W}px)`);
 </script>
@@ -625,7 +782,7 @@
     <div class="wg-header" style="width: {contentW}px;">
       <div class="wg-corner" style="width: {gutterW}px; grid-template-columns: {tzGridCols};">
         {#each tzCols as c (c.tz)}
-          <span class="wg-tz" title={c.title}>{c.code}</span>
+          <span class="wg-tz" title={c.title} aria-label={c.title}>{c.code}</span>
         {/each}
       </div>
       <div class="wg-header-tiers" style="width: {daysW}px;">
@@ -677,7 +834,7 @@
     <div class="wg-allday" style="width: {contentW}px; top: var(--wg-header-h);">
       <div class="wg-corner wg-allday-corner" style="width: {gutterW}px;"></div>
       <div class="wg-allday-area" style="width: {daysW}px; height: {allDayHeight}px;">
-        {#each allDayLayout.rows as r (r.ev.uid)}
+        {#each shownAllDayRows as r (r.ev.uid)}
           <WeekEvent
             event={r.ev}
             tz={tzTop}
@@ -689,6 +846,15 @@
             isPast={r.ev.end.getTime() < nowMs}
             placement={allDayPlacement(r)}
           />
+        {/each}
+        {#each allDayOverflow as o (o.col)}
+          <button
+            type="button"
+            class="wg-allday-more"
+            style="left: {(o.col / RENDERED_DAYS) * 100}%; width: {(1 / RENDERED_DAYS) * 100}%; top: {allDayOverflowTop}px; height: {ALLDAY_ROW_H - 1}px;"
+            title="Show all all-day events"
+            onclick={() => (allDayExpanded = true)}
+          >+{o.n}</button>
         {/each}
       </div>
     </div>
@@ -766,6 +932,8 @@
                 isCurrent={currentMatchUid === b.ev.uid}
                 isPast={b.ev.end.getTime() < nowMs}
                 compact={blockHeightPx(b) < TIME_MIN_H}
+                continuesEnd={b.continuesEnd}
+                isFocused={focusedUid === b.ev.uid}
                 placement={blockPlacement(b)}
               />
             {/each}
@@ -806,6 +974,12 @@
 <style>
   .week-grid {
     --wg-night: rgba(10, 10, 10, 0.05);
+    /* Day-blocking hatch, shared by the date-header cells and the day columns:
+       a dense 45° stripe for prominent blocks, a sparse one for observances. */
+    --wg-hatch-thick: repeating-linear-gradient(
+      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+    --wg-hatch-thin: repeating-linear-gradient(
+      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
     display: flex;
     flex-direction: column;
     /* height is set inline so it can subtract the search toolbar when open. */
@@ -942,6 +1116,10 @@
     font: inherit;
     cursor: pointer;
   }
+  .wg-datecell:focus-visible {
+    outline: calc(var(--border-w) * 2) solid var(--accent);
+    outline-offset: -2px;
+  }
   .wg-datecell[data-weekend='true'] {
     background: var(--weekend-bg);
   }
@@ -962,12 +1140,10 @@
     z-index: 0;
   }
   .wg-datecell[data-holiday='true']::before {
-    background-image: repeating-linear-gradient(
-      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+    background-image: var(--wg-hatch-thick);
   }
   .wg-datecell[data-observance='true']::before {
-    background-image: repeating-linear-gradient(
-      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
+    background-image: var(--wg-hatch-thin);
   }
   .wg-datecell > * {
     position: relative;
@@ -1003,6 +1179,28 @@
     position: relative;
     flex: 0 0 auto;
     min-height: 100%;
+  }
+  /* "+N" overflow chip for a day with more all-day events than the cap shows. */
+  .wg-allday-more {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin-right: 1px;
+    border: var(--border-w) solid var(--ink-faint);
+    border-radius: var(--btn-radius);
+    background: var(--paper-2);
+    color: var(--ink-muted);
+    font-size: var(--fs-10);
+    line-height: 1;
+    cursor: pointer;
+  }
+  .wg-allday-more:hover,
+  .wg-allday-more:focus-visible {
+    color: var(--ink);
+    border-color: var(--ink);
   }
 
   .wg-body {
@@ -1120,12 +1318,10 @@
     z-index: 0;
   }
   .wg-block[data-density='thick'] {
-    background-image: repeating-linear-gradient(
-      45deg, transparent 0, transparent 4px, var(--holiday-stripe) 4px, var(--holiday-stripe) 5px);
+    background-image: var(--wg-hatch-thick);
   }
   .wg-block[data-density='thin'] {
-    background-image: repeating-linear-gradient(
-      45deg, transparent 0, transparent 9px, var(--holiday-stripe) 9px, var(--holiday-stripe) 10px);
+    background-image: var(--wg-hatch-thin);
   }
   /* Dashed working-hours edges: primary zone in the off-hours background tone,
      secondary zone in the page colour (visible where it crosses the tint). */
