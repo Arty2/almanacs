@@ -1228,7 +1228,7 @@
         d={markerPath}
         fill="none"
         stroke="var(--accent)"
-        stroke-width="1"
+        stroke-width="1.5"
         stroke-dasharray="4 4"
       />
     </svg>

@@ -1447,7 +1447,7 @@
     position: absolute;
     right: 0;
     height: 0;
-    border-top: var(--border-w) dashed var(--accent);
+    border-top: 1.5px dashed var(--accent);
     pointer-events: none;
     z-index: 3;
   }
