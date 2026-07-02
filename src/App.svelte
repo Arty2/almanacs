@@ -132,12 +132,12 @@
   if (typeof location !== 'undefined') {
     const shareParam = readShareParam(location.search);
     if (shareParam) {
-      const decoded = decodeShareState(shareParam);
-      if (decoded) {
-        ui.shareImport = decoded;
-      } else {
-        stripShareParam();
-      }
+      // Decoding is async (DecompressionStream); the import prompt appears
+      // once the payload resolves.
+      void decodeShareState(shareParam).then((decoded) => {
+        if (decoded) ui.shareImport = decoded;
+        else stripShareParam();
+      });
     }
     // A #d=YYYY-MM-DD fragment restores the viewed position on load; otherwise
     // the timeline opens on today.

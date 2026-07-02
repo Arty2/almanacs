@@ -453,7 +453,18 @@
     }
   }
 
-  const shareUrl = $derived(buildShareUrl(config, zoom.value));
+  // buildShareUrl is async (compression), so mirror it into state from an
+  // effect. It reads config/zoom synchronously before its first await, which
+  // is what registers them as dependencies; the sequence guard drops stale
+  // resolutions if edits outpace encoding.
+  let shareUrl = $state('');
+  let shareUrlSeq = 0;
+  $effect(() => {
+    const seq = ++shareUrlSeq;
+    void buildShareUrl(config, zoom.value).then((url) => {
+      if (seq === shareUrlSeq) shareUrl = url;
+    });
+  });
   const shareDisabled = $derived(shareUrl.length > SHARE_URL_LIMIT);
   const shareLabel = $derived(
     shareDisabled
@@ -462,7 +473,7 @@
   );
 
   async function shareLink(): Promise<void> {
-    if (shareDisabled) return;
+    if (shareDisabled || !shareUrl) return;
     importError = null;
     try {
       await navigator.clipboard.writeText(shareUrl);
