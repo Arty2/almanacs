@@ -364,8 +364,8 @@
       {/if}
       <div class="field-pair">
         <div class="field">
-          <label for="add-category">Category</label>
-          <select id="add-category" bind:value={category}>
+          <label for="add-type">Type</label>
+          <select id="add-type" bind:value={category}>
             {#each FEED_CATEGORIES as c (c)}
               <option value={c}>{categoryLabels[c]}</option>
             {/each}
@@ -471,8 +471,8 @@
   .field-bare {
     grid-template-columns: 1fr;
   }
-  /* Two labelled fields side by side (Start/End, Category/Travel). The left
-     field keeps the shared 90px label column so its control lines up with the
+  /* Two labelled fields side by side (Start/End, Type/Travel). The left field
+     keeps the shared 90px label column so its control lines up with the
      single-field rows; the right label sizes to its text. */
   .field-pair {
     display: grid;
@@ -481,6 +481,13 @@
   }
   .field-pair .field:last-child {
     grid-template-columns: auto 1fr;
+  }
+  @media (max-width: 480px) {
+    /* Match the single-field stacking: both halves put the label above the
+       control, so e.g. Travel stacks exactly like Type next to it. */
+    .field-pair .field:last-child {
+      grid-template-columns: 1fr;
+    }
   }
   .segmented {
     display: flex;
